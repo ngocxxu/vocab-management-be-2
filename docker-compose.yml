@@ -1,21 +1,40 @@
-# THIS DOCKERFILE IS INTENDED FOR DEVELOPMENT ENVIRONMENTS
-# DO NOT USE THIS FOR PRODUCTION USAGES.
-
-version: '3'
+version: '3.8'
 
 services:
-  postgresql:
-    image: docker.io/bitnami/postgresql:16
-    ports:
-      - '5432:5432'
-    volumes:
-      - 'postgresql_data:/bitnami/postgresql'
+  postgres:
+    container_name: postgres_container
+    image: postgres
     environment:
-      - ALLOW_EMPTY_PASSWORD=yes
-      - POSTGRESQL_DATABASE=nestjs
-      - POSTGRESQL_USERNAME=nestjs
-      - POSTGRESQL_PASSWORD=password
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      PGDATA: /data/postgres
+    volumes:
+      - postgres:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - local_postgres
+    restart: unless-stopped
+  
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@gmail.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    networks:
+      - local_postgres
+    restart: unless-stopped
+
+networks:
+  local_postgres:
+    driver: bridge
 
 volumes:
-  postgresql_data:
-    driver: local
+    postgres:
+    pgadmin:

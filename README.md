@@ -35,7 +35,7 @@ The next thing will be to install all the dependencies of the project.
 
 ```sh
 cd ./my-project
-npm install
+pnpm install
 ```
 
 Once the dependencies are installed, you can now configure your project by creating a new `.env` file containing the environment variables used for development.
@@ -60,7 +60,7 @@ You are now ready to launch the NestJS application using the command below.
 npx prisma migrate dev
 
 # Launch the development server with TSNode
-npm run dev
+pnpm run dev
 ```
 
 You can now head to `http://localhost:3000/docs` and see your API Swagger docs. The example passenger API is located at the `http://localhost:3000/api/v1/passengers` endpoint.
@@ -104,19 +104,19 @@ The NPM commands below are already included with this template and can be used t
 
 ```sh
 # Start the application using the transpiled NodeJS
-npm run start
+pnpm run start
 
 # Run the application using "ts-node"
-npm run dev
+pnpm run dev
 
 # Transpile the TypeScript files
-npm run build
+pnpm run build
 
 # Run the project' functional tests
-npm run test
+pnpm run test
 
 # Lint the project files using TSLint
-npm run lint
+pnpm run lint
 ```
 
 ## 5. Healtcheck support
