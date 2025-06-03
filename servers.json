@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "postgres",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "store_db",
+      "Username": "admin",
+      "SSLMode": "prefer",
+      "Comment": "Auto-connected PostgreSQL server for aoh"
+    }
+  }
+}
