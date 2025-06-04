@@ -68,7 +68,7 @@ You can now head to `http://localhost:3000/docs` and see your API Swagger docs. 
 For restricted routes, for testing you can use the below JWT
 
 ```
-eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJERUZBVUxUX0lTU1VFUiIsImlhdCI6MTYzMTEwNDMzNCwicm9sZSI6InJlc3RyaWN0ZWQifQ.o2HcQBBpx-EJMcUFiqmAiD_jZ5J92gRDOyhybT9FakE
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicmVzdHJpY3RlZCIsImlhdCI6MTc0OTAyOTc3NywiaXNzIjoiSXNzdWVyQXBwbGljYXRpb24ifQ.DKTHus3s04spiyUttDFMXAsUmDnoK4-mPkWyLR2BAF0
 ```
 
 > The sample JWT above does not have an expiry, remember to use a valid JWT and enforce the required claims in production
