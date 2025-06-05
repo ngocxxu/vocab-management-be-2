@@ -1,13 +1,12 @@
-
 # NestJS 10 API project template
 
 [![License](https://img.shields.io/github/license/saluki/nestjs-template.svg)](https://github.com/saluki/nestjs-template/blob/master/LICENSE)
 
-Scaffold quickly your next [NestJS 10](https://nestjs.com/) API project with 
+Scaffold quickly your next [NestJS 10](https://nestjs.com/) API project with
 ❤️ using this template
 
 - Crafted for Docker environments (Dockerfile support and environment variables)
-- REST API with [Prisma](https://www.prisma.io/) support 
+- REST API with [Prisma](https://www.prisma.io/) support
 - Swagger documentation, [Joi](https://github.com/hapijs/joi) validation, Winston logger, ...
 - Folder structure, code samples and best practices
 - Fast HTTP server with [Fastify](https://fastify.dev/)
@@ -27,7 +26,7 @@ Before starting, make sure you have at least those components on your workstatio
 
 Start by cloning this project on your workstation or click on ["Use this template"](https://github.com/new?template_name=nestjs-template&template_owner=Saluki) in Github.
 
-``` sh
+```sh
 git clone https://github.com/saluki/nestjs-template my-project
 ```
 
@@ -49,7 +48,7 @@ For a standard development configuration, you can leave the default values for `
 
 Next comes to the Prisma configuration: change the DATABASE_URL according to your own database setup.
 
-Last but not least, define a `JWT_SECRET` to sign the JWT tokens or leave the default value in a development environment. Update the `JWT_ISSUER` to the correct value as set in the JWT. 
+Last but not least, define a `JWT_SECRET` to sign the JWT tokens or leave the default value in a development environment. Update the `JWT_ISSUER` to the correct value as set in the JWT.
 
 ### 1.3 Launch and discover
 
@@ -136,3 +135,64 @@ The goal of this project is to provide a clean and up-to-date "starter pack" for
 ## 7. Contributing
 
 Feel free to suggest an improvement, report a bug, or ask something: [https://github.com/saluki/nestjs-template/issues](https://github.com/saluki/nestjs-template/issues)
+
+## 8. Prisma
+
+This project uses Prisma as an ORM.
+
+### 8.1 Prisma migration
+
+The Prisma migration command is used to create the database schema.
+
+```sh
+npx prisma migrate dev --name add_product_attributes
+```
+
+### 8.2 Prisma generate
+
+The Prisma generate command is used to generate the Prisma client.
+
+```sh
+npx prisma generate
+```
+
+### 8.3 Prisma Studio
+
+The Prisma Studio is a GUI that allows you to view the database schema.
+
+```sh
+npx prisma studio
+```
+
+### 8.4 Prisma diff
+
+The Prisma diff command is used to compare the database schema with the Prisma schema.
+
+```sh
+npx prisma migrate diff
+```
+
+## 9. Flow control
+### 9.1 Request & Response flow
+The request & response flow is the flow of the request from the client to the server.
+```sh
+sequenceDiagram
+    Client->>Controller: HTTP Request
+    Controller->>Pipe: Validate Input
+    Pipe->>Controller: Validated Data
+    Controller->>Service: Process Data
+    Service->>Prisma: Database Operation
+    Prisma->>Service: Database Result
+    Service->>Controller: Business Logic Result
+    Controller->>Client: HTTP Response
+```
+### 9.2 Order of execution
+The order of execution is the order in which the code is executed.
+```sh
+graph TD
+    A[1. Prisma Schema] --> B[2. Generate Prisma Client]
+    B --> C[3. Create Model Files]
+    C --> D[4. Create Service]
+    D --> E[5. Create Controller]
+    E --> F[6. Update Module]
+```

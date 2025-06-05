@@ -15,3 +15,41 @@ model Passenger {
   firstName String @unique
   lastName  String
 }
+
+model Product {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
+  description String?
+  price       Float
+  stock       Int               @default(0)
+  mainImage   String            @default("https://picsum.photos/400/500")
+  images      ProductImage[]
+  attributes  ProductAttribute?
+  categoryId  Int?
+  category    Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model ProductAttribute {
+  id        Int     @id @default(autoincrement())
+  material  String
+  brand     String
+  origin    String?
+  sizes     Json? // For bracelet: ["S", "M", "L"]
+  productId Int     @unique // one-to-one relation với Product
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  url       String
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String
+  products Product[]
+}
