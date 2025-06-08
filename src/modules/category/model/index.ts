@@ -1,2 +1,2 @@
 export { CategoryInput } from './category.input';
-export { CategoryData } from './category.data';
+export { CategoryDto } from './category.data';

@@ -1,7 +1,7 @@
 import { PickType } from '@nestjs/swagger';
-import { ProductData } from './product.data';
+import { ProductDto } from './product.data';
 
-export class ProductInput extends PickType(ProductData, [
+export class ProductInput extends PickType(ProductDto, [
     'name',
     'description',
     'price',

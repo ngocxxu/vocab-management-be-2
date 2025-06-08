@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { CategoryData, CategoryInput } from '../model';
+import { CategoryDto, CategoryInput } from '../model';
 
 @Injectable()
 export class CategoryService {
@@ -22,7 +22,7 @@ export class CategoryService {
     /**
      * Find all categories in the database
      */
-    public async find(): Promise<CategoryData[]> {
+    public async find(): Promise<CategoryDto[]> {
         try {
             const categories = await this.prismaService.category.findMany({
                 include: {
@@ -30,7 +30,7 @@ export class CategoryService {
                 },
             });
 
-            return categories.map((category) => new CategoryData({ ...category }));
+            return categories.map((category) => new CategoryDto({ ...category }));
         } catch (error) {
             PrismaErrorHandler.handle(error, 'find', this.categoryErrorMapping);
         }
@@ -39,7 +39,7 @@ export class CategoryService {
     /**
      * Find a single category by ID
      */
-    public async findOne(id: number): Promise<CategoryData> {
+    public async findOne(id: number): Promise<CategoryDto> {
         try {
             const category = await this.prismaService.category.findUnique({
                 where: { id },
@@ -52,7 +52,7 @@ export class CategoryService {
                 throw new NotFoundException(`Category with ID ${id} not found`);
             }
 
-            return new CategoryData({ ...category });
+            return new CategoryDto({ ...category });
         } catch (error) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -64,7 +64,7 @@ export class CategoryService {
     /**
      * Create a new category record
      */
-    public async create(input: CategoryInput): Promise<CategoryData> {
+    public async create(input: CategoryInput): Promise<CategoryDto> {
         try {
             const category = await this.prismaService.category.create({
                 data: {
@@ -82,7 +82,7 @@ export class CategoryService {
                 },
             });
 
-            return new CategoryData({ ...category });
+            return new CategoryDto({ ...category });
         } catch (error) {
             PrismaErrorHandler.handle(error, 'create', this.categoryErrorMapping);
         }
@@ -90,7 +90,7 @@ export class CategoryService {
     /**
      * Update a category record
      */
-    public async update(id: number, input: CategoryInput): Promise<CategoryData> {
+    public async update(id: number, input: CategoryInput): Promise<CategoryDto> {
         try {
             const category = await this.prismaService.category.update({
                 where: { id },
@@ -107,7 +107,7 @@ export class CategoryService {
                 },
             });
 
-            return new CategoryData({ ...category });
+            return new CategoryDto({ ...category });
         } catch (error) {
             PrismaErrorHandler.handle(error, 'update', this.categoryErrorMapping);
         }
@@ -116,7 +116,7 @@ export class CategoryService {
     /**
      * Delete a category from the database
      */
-    public async delete(id: number): Promise<CategoryData> {
+    public async delete(id: number): Promise<CategoryDto> {
         try {
             const category = await this.prismaService.category.delete({
                 where: { id },
@@ -125,7 +125,7 @@ export class CategoryService {
                 },
             });
 
-            return new CategoryData({ ...category });
+            return new CategoryDto({ ...category });
         } catch (error) {
             PrismaErrorHandler.handle(error, 'delete', this.categoryErrorMapping);
         }

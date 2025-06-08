@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { ProductData, ProductInput } from '../model';
+import { ProductDto, ProductInput } from '../model';
 
 @Injectable()
 export class ProductService {
@@ -26,7 +26,7 @@ export class ProductService {
      *
      * @returns A product list
      */
-    public async find(): Promise<ProductData[]> {
+    public async find(): Promise<ProductDto[]> {
         try {
             const products = await this.prismaService.product.findMany({
                 include: {
@@ -38,7 +38,7 @@ export class ProductService {
 
             return products.map(
                 (product) =>
-                    new ProductData({ ...product, attributes: product.attributes || undefined }),
+                    new ProductDto({ ...product, attributes: product.attributes || undefined }),
             );
         } catch (error) {
             PrismaErrorHandler.handle(error, 'find', this.productErrorMapping);
@@ -52,7 +52,7 @@ export class ProductService {
      * @returns The product if found
      * @throws NotFoundException if product doesn't exist
      */
-    public async findOne(id: number): Promise<ProductData> {
+    public async findOne(id: number): Promise<ProductDto> {
         try {
             const product = await this.prismaService.product.findUnique({
                 where: { id },
@@ -67,7 +67,7 @@ export class ProductService {
                 throw new NotFoundException(`Product with ID ${id} not found`);
             }
 
-            return new ProductData({
+            return new ProductDto({
                 ...product,
                 attributes: product.attributes || undefined,
             });
@@ -85,7 +85,7 @@ export class ProductService {
      * @param data Product details
      * @returns A product created in the database
      */
-    public async create(data: ProductInput): Promise<ProductData> {
+    public async create(data: ProductInput): Promise<ProductDto> {
         try {
             const product = await this.prismaService.product.create({
                 data: {
@@ -121,7 +121,7 @@ export class ProductService {
                 },
             });
 
-            return new ProductData({
+            return new ProductDto({
                 ...product,
                 attributes: product.attributes ?? undefined,
             });
@@ -138,7 +138,7 @@ export class ProductService {
      * @returns The updated product
      * @throws NotFoundException if product doesn't exist
      */
-    public async update(id: number, data: ProductInput): Promise<ProductData> {
+    public async update(id: number, data: ProductInput): Promise<ProductDto> {
         try {
             const product = await this.prismaService.product.update({
                 where: { id },
@@ -183,7 +183,7 @@ export class ProductService {
                 },
             });
 
-            return new ProductData({
+            return new ProductDto({
                 ...product,
                 attributes: product.attributes || undefined,
             });
@@ -199,7 +199,7 @@ export class ProductService {
      * @returns The deleted product
      * @throws NotFoundException if product doesn't exist
      */
-    public async delete(id: number): Promise<ProductData> {
+    public async delete(id: number): Promise<ProductDto> {
         try {
             const product = await this.prismaService.product.delete({
                 where: { id },
@@ -210,7 +210,7 @@ export class ProductService {
                 },
             });
 
-            return new ProductData({
+            return new ProductDto({
                 ...product,
                 attributes: product.attributes || undefined,
             });

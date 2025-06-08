@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Product, ProductImage, ProductAttribute } from '@prisma/client';
 
-export class ProductData {
+export class ProductDto {
     @ApiProperty({ description: 'Product unique ID', example: 1 })
     public readonly id: number;
 

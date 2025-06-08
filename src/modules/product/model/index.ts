@@ -1,2 +1,2 @@
 export { ProductInput } from './product.input';
-export { ProductData } from './product.data';
+export { ProductDto } from './product.data';
