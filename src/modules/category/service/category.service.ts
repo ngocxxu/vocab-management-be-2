@@ -69,6 +69,7 @@ export class CategoryService {
             const category = await this.prismaService.category.create({
                 data: {
                     name: input.name,
+                    slug: input.name.toLowerCase().replace(/\s+/g, '-'),
                     ...(input.productIds &&
                         input.productIds.length > 0 && {
                             products: {
@@ -86,7 +87,6 @@ export class CategoryService {
             PrismaErrorHandler.handle(error, 'create', this.categoryErrorMapping);
         }
     }
-
     /**
      * Update a category record
      */

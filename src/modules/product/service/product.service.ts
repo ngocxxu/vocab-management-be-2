@@ -90,6 +90,7 @@ export class ProductService {
             const product = await this.prismaService.product.create({
                 data: {
                     name: data.name,
+                    slug: data.name.toLowerCase().replace(/\s+/g, '-'),
                     description: data.description,
                     price: data.price,
                     stock: data.stock,
