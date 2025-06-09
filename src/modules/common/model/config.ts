@@ -1,5 +1,4 @@
 export interface Config {
-
     readonly API_PORT: number;
 
     readonly API_PREFIX: string;
@@ -12,6 +11,11 @@ export interface Config {
 
     readonly HEALTH_TOKEN: string;
 
-    readonly PASSENGERS_ALLOWED: string;
+    readonly DATABASE_URL: string;
 
+    readonly SUPABASE_URL: string;
+
+    readonly SUPABASE_KEY: string;
+
+    readonly PASSENGERS_ALLOWED: string;
 }
