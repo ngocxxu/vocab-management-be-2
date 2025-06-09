@@ -7,7 +7,7 @@ export class UserDto {
     @ApiProperty({ description: 'User unique ID', example: 'uuid-string' })
     public readonly id: string;
 
-    @ApiProperty({ description: 'User email', example: 'user@example.com' })
+    @ApiProperty({ description: 'User email', example: 'user@gmail.com' })
     public readonly email: string;
 
     @ApiProperty({ description: 'User phone number', example: '+1234567890', required: false })

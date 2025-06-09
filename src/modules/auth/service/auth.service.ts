@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
-import { createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
+import { UserRole } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { AuthError, createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
 import { PrismaService } from '../../common';
-import { OAuthResponseDto, SessionDto, UserDto } from '../model/auth.data';
+import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { OAuthResponseDto, SessionDto, UserDto } from '../model';
 
 @Injectable()
 export class AuthService {
@@ -72,8 +74,8 @@ export class AuthService {
                 ...user,
             });
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('SignUp failed:', error);
             throw new BadRequestException('Registration failed');
@@ -99,8 +101,8 @@ export class AuthService {
 
             return new SessionDto(data.session);
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('SignIn failed:', error);
             throw new UnauthorizedException('Authentication failed');
@@ -126,8 +128,8 @@ export class AuthService {
 
             return new OAuthResponseDto(data);
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('OAuth SignIn failed:', error);
             throw new BadRequestException('OAuth authentication failed');
@@ -147,8 +149,8 @@ export class AuthService {
 
             return data;
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('VerifyToken failed:', error);
             throw new UnauthorizedException('Invalid access token');
@@ -173,14 +175,13 @@ export class AuthService {
 
             return new SessionDto(data.session);
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('RefreshSession failed:', error);
             throw new UnauthorizedException('Session refresh failed');
         }
     }
-
     /**
      * Sign out current user
      */
@@ -194,8 +195,8 @@ export class AuthService {
 
             return { message: 'Signed out successfully' };
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('SignOut failed:', error);
             throw new BadRequestException('Sign out failed');
@@ -217,8 +218,8 @@ export class AuthService {
 
             return { message: 'Password reset email sent' };
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('ResetPassword failed:', error);
             throw new BadRequestException('Password reset failed');
@@ -249,8 +250,8 @@ export class AuthService {
 
             return new SessionDto(data.session);
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('VerifyOtp failed:', error);
             throw new BadRequestException('OTP verification failed');
@@ -273,8 +274,8 @@ export class AuthService {
 
             return { message: 'Password reset email sent' };
         } catch (error) {
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
-                throw error;
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
             }
             this.logger.error('ResendConfirmation failed:', error);
             throw new BadRequestException('Resend confirmation failed');
@@ -285,17 +286,17 @@ export class AuthService {
      * Handle authentication errors
      */
     private handleAuthError(error: unknown, operation: string): void {
-        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error instanceof AuthError) {
             const errorMessage =
-                this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] ??
-                error.message;
+                this.authErrorMapping[error.code as keyof typeof this.authErrorMapping] ??
+                error.code;
             this.logger.error(`${operation} error:`, error);
 
             if (
-                error.message.includes('invalid_credentials') ||
-                error.message.includes('user_not_found') ||
-                error.message.includes('token_expired') ||
-                error.message.includes('invalid_token')
+                error.code?.includes('invalid_credentials') ||
+                error.code?.includes('user_not_found') ||
+                error.code?.includes('token_expired') ||
+                error.code?.includes('invalid_token')
             ) {
                 throw new UnauthorizedException(errorMessage);
             }

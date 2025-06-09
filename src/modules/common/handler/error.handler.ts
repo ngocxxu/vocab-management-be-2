@@ -33,20 +33,23 @@ export class PrismaErrorHandler {
      */
     public static handle(
         error: unknown,
-        context: ErrorContext,
+        context?: ErrorContext,
         customMapping?: PrismaErrorMapping,
     ): never {
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
             const errorMapping = { ...this.defaultErrorMapping, ...customMapping };
-            const errorConfig = errorMapping[error.code];
+            const errorCode = error.code as keyof typeof errorMapping;
+            const errorConfig = errorMapping[errorCode];
 
             if (errorConfig) {
                 let message: string;
 
                 if (typeof errorConfig === 'string') {
                     message = errorConfig;
+                } else if (context) {
+                    message = errorConfig[context] ?? 'An error occurred';
                 } else {
-                    message = errorConfig[context] || 'An error occurred';
+                    message = 'An error occurred';
                 }
 
                 switch (error.code) {
@@ -70,5 +73,4 @@ export class PrismaErrorHandler {
         }
 
         throw new Error('An unexpected error occurred');
-    }
-}
+    }}

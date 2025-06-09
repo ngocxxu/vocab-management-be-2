@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Body,
     Controller,
     Get,
@@ -6,33 +7,31 @@ import {
     HttpStatus,
     Inject,
     Post,
-    BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { UserResponse } from '@supabase/supabase-js';
 import { LoggerService } from '../../common';
-import { Service } from '../../tokens';
 import {
-    SignUpPipe,
-    SignInPipe,
     OAuthPipe,
     RefreshTokenPipe,
-    ResetPasswordPipe,
-    VerifyOtpPipe,
     ResendConfirmationPipe,
+    ResetPasswordPipe,
+    SignInPipe,
+    SignUpPipe,
+    VerifyOtpPipe,
 } from '../flow';
 import {
-    SignUpInput,
-    SignInInput,
     OAuthInput,
-    RefreshTokenInput,
-    ResetPasswordInput,
-    VerifyOtpInput,
-    ResendConfirmationInput,
     OAuthResponseDto,
+    RefreshTokenInput,
+    ResendConfirmationInput,
+    ResetPasswordInput,
     SessionDto,
+    SignInInput,
+    SignUpInput,
     UserDto,
+    VerifyOtpInput,
 } from '../model';
 import { AuthService } from '../service';
 
@@ -40,7 +39,7 @@ import { AuthService } from '../service';
 @ApiTags('authentication')
 export class AuthController {
     public constructor(
-        @Inject(Service.CONFIG)
+        @Inject()
         private readonly logger: LoggerService,
         private readonly authService: AuthService,
     ) {}

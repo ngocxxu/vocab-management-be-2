@@ -9,7 +9,7 @@ import {
     VerifyOtpInput,
     ResendConfirmationInput,
     SignUpInput,
-} from '../model/auth.input';
+} from '../model';
 
 export class SignUpPipe extends JoiValidationPipe {
     public buildSchema(): Joi.Schema {

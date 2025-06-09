@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
 export class SignUpInput {
-    @ApiProperty({ description: 'User email address', example: 'user@example.com' })
+    @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     public readonly email: string;
 
     @ApiProperty({ description: 'User password', example: 'password123', minLength: 6 })
@@ -34,7 +34,7 @@ export class SignUpInput {
 }
 
 export class SignInInput {
-    @ApiProperty({ description: 'User email address', example: 'user@example.com' })
+    @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     public readonly email: string;
 
     @ApiProperty({ description: 'User password', example: 'password123' })
@@ -56,12 +56,12 @@ export class RefreshTokenInput {
 }
 
 export class ResetPasswordInput {
-    @ApiProperty({ description: 'User email address', example: 'user@example.com' })
+    @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     public readonly email: string;
 }
 
 export class VerifyOtpInput {
-    @ApiProperty({ description: 'User email address', example: 'user@example.com' })
+    @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     public readonly email: string;
 
     @ApiProperty({ description: 'OTP token', example: '123456' })
@@ -76,6 +76,6 @@ export class VerifyOtpInput {
 }
 
 export class ResendConfirmationInput {
-    @ApiProperty({ description: 'User email address', example: 'user@example.com' })
+    @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     public readonly email: string;
 }
