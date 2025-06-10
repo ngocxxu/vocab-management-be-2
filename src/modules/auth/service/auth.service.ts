@@ -4,7 +4,8 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { AuthError, createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { OAuthResponseDto, SessionDto, UserDto } from '../model';
+import { UserDto } from '../../user/model';
+import { OAuthResponseDto, SessionDto } from '../model';
 
 @Injectable()
 export class AuthService {

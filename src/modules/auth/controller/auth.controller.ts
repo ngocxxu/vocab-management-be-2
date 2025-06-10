@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 
 import { UserResponse } from '@supabase/supabase-js';
 import { LoggerService } from '../../common';
+import { UserDto } from '../../user/model';
 import {
     OAuthPipe,
     RefreshTokenPipe,
@@ -30,7 +31,6 @@ import {
     SessionDto,
     SignInInput,
     SignUpInput,
-    UserDto,
     VerifyOtpInput,
 } from '../model';
 import { AuthService } from '../service';
