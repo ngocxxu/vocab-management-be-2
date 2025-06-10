@@ -7,4 +7,4 @@ export {
     VerifyOtpInput,
     ResendConfirmationInput,
 } from './auth.input';
-export { OAuthResponseDto, SessionDto, UserDto } from './auth.data';
+export { OAuthResponseDto, SessionDto } from './auth.data';

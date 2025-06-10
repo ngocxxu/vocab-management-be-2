@@ -6,7 +6,6 @@ import {
     HttpStatus,
     Inject,
     Param,
-    ParseIntPipe,
     Post,
     Put,
     UseGuards,
@@ -14,7 +13,6 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { LoggerService, RestrictedGuard } from '../../common';
-import { Service } from '../../tokens';
 
 import { UserPipe } from '../flow';
 import { UserDto, UserInput } from '../model';
@@ -25,7 +23,7 @@ import { UserService } from '../service';
 @ApiBearerAuth()
 export class UserController {
     public constructor(
-        @Inject(Service.CONFIG)
+        @Inject()
         private readonly logger: LoggerService,
         private readonly userService: UserService,
     ) {}
@@ -37,7 +35,7 @@ export class UserController {
         return this.userService.find();
     }
 
-    @Get(':id')
+    @Get(':supabaseUserId')
     @ApiOperation({ summary: 'Find user by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
@@ -56,23 +54,20 @@ export class UserController {
         return user;
     }
 
-    @Put(':id')
+    @Put()
     @UseGuards(RestrictedGuard)
     @ApiOperation({ summary: 'Update user' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
-    public async update(
-        @Param('id', ParseIntPipe) id: number,
-        @Body(UserPipe) updateUserData: UserInput,
-    ): Promise<UserDto> {
+    public async update(@Body(UserPipe) updateUserData: UserInput): Promise<UserDto> {
         const user = await this.userService.update(updateUserData);
         this.logger.info(`Updated user with ID ${updateUserData.supabaseUserId}`);
 
         return user;
     }
 
-    @Delete(':id')
-    @UseGuards(RestrictedGuard)
+    @Delete(':supabaseUserId')
+    // @UseGuards(RestrictedGuard)
     @ApiOperation({ summary: 'Delete user' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
