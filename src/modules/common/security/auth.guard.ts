@@ -1,8 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { SupabaseClient, User } from '@supabase/supabase-js';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { FastifyRequest } from 'fastify';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
+import { PrismaErrorHandler } from '../handler/error.handler';
+import { LoggerService } from '../provider';
 
 interface RequestWithUser extends FastifyRequest {
     user: User;
@@ -11,7 +14,15 @@ interface RequestWithUser extends FastifyRequest {
 @Injectable()
 export class AuthGuard implements CanActivate {
     private readonly supabase: SupabaseClient;
-    public constructor(private readonly reflector: Reflector) {}
+    public constructor(
+        private readonly reflector: Reflector,
+        private readonly logger: LoggerService,
+    ) {
+        this.supabase = createClient(
+            process.env.SUPABASE_URL ?? '',
+            process.env.SUPABASE_KEY ?? '',
+        );
+    }
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
         const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -49,9 +60,10 @@ export class AuthGuard implements CanActivate {
             request.user = user;
             return true;
         } catch (err) {
-            if (err instanceof UnauthorizedException) {
-                throw err;
+            if (err instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(err);
             }
+            this.logger.error(err instanceof Error ? err.message : String(err));
             throw new UnauthorizedException('Token verification failed');
         }
     }
@@ -59,7 +71,6 @@ export class AuthGuard implements CanActivate {
         if (!header?.startsWith('Bearer ')) {
             return null;
         }
-
         const [, token] = header.split(' ');
         return token || null;
     }

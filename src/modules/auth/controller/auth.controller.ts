@@ -46,6 +46,7 @@ export class AuthController {
     ) {}
 
     @Post('signup')
+    @Public()
     @ApiOperation({ summary: 'Register user with email and password' })
     @ApiResponse({
         status: HttpStatus.CREATED,
@@ -93,6 +94,7 @@ export class AuthController {
     }
 
     @Post('oauth')
+    @Public()
     @ApiOperation({ summary: 'Sign in with OAuth provider' })
     @ApiResponse({
         status: HttpStatus.OK,

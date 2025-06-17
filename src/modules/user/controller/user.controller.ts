@@ -32,7 +32,7 @@ export class UserController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN])
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find users' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: UserDto })
     public async find(): Promise<UserDto[]> {
@@ -40,6 +40,8 @@ export class UserController {
     }
 
     @Get(':supabaseUserId')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find user by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
@@ -48,6 +50,8 @@ export class UserController {
     }
 
     @Post()
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN])
     @UseGuards(RestrictedGuard)
     @ApiOperation({ summary: 'Create user' })
     @ApiResponse({ status: HttpStatus.CREATED, type: UserDto })
@@ -59,6 +63,8 @@ export class UserController {
     }
 
     @Put()
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN])
     @UseGuards(RestrictedGuard)
     @ApiOperation({ summary: 'Update user' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
@@ -71,7 +77,8 @@ export class UserController {
     }
 
     @Delete(':supabaseUserId')
-    // @UseGuards(RestrictedGuard)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Delete user' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
