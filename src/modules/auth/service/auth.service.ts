@@ -47,6 +47,11 @@ export class AuthService {
             const { data, error } = await this.supabase.auth.signUp({
                 email,
                 password,
+                options: {
+                    data: {
+                        role: role ?? UserRole.CUSTOMER,
+                    },
+                },
             });
 
             if (error) {

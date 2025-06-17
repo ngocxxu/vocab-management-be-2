@@ -12,8 +12,10 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { LoggerService, RestrictedGuard } from '../../common';
+import { UserRole } from '@prisma/client';
+import { LoggerService, RestrictedGuard, RolesGuard } from '../../common';
 
+import { Roles } from '../../common/decorator/roles.decorator';
 import { UserPipe } from '../flow';
 import { UserDto, UserInput } from '../model';
 import { UserService } from '../service';
@@ -29,6 +31,8 @@ export class UserController {
     ) {}
 
     @Get()
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Find users' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: UserDto })
     public async find(): Promise<UserDto[]> {

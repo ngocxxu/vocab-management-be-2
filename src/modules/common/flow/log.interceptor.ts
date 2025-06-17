@@ -5,6 +5,14 @@ import { catchError, map } from 'rxjs/operators';
 
 import { LoggerService } from '../provider';
 
+// Flow
+// 1. Interceptop start (before controller)
+//    ↓
+// 2. next.handle() → Controller execute
+//    ↓
+// 3. Controller return result or throw error
+//    ↓
+// 4. RxJS pipe handle result (after controller)
 @Injectable()
 export class LogInterceptor implements NestInterceptor {
 

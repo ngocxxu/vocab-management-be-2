@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 
 import { UserResponse } from '@supabase/supabase-js';
 import { LoggerService } from '../../common';
+import { Public } from '../../common/decorator/public.decorator';
 import { UserDto } from '../../user/model';
 import {
     OAuthPipe,
@@ -72,6 +73,7 @@ export class AuthController {
     }
 
     @Post('signin')
+    @Public()
     @ApiOperation({ summary: 'Sign in user with email and password' })
     @ApiResponse({
         status: HttpStatus.OK,

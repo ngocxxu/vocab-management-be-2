@@ -1,0 +1,66 @@
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { SupabaseClient, User } from '@supabase/supabase-js';
+import { FastifyRequest } from 'fastify';
+import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
+
+interface RequestWithUser extends FastifyRequest {
+    user: User;
+}
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+    private readonly supabase: SupabaseClient;
+    public constructor(private readonly reflector: Reflector) {}
+
+    public async canActivate(context: ExecutionContext): Promise<boolean> {
+        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+            context.getHandler(),
+            context.getClass(),
+        ]);
+        if (isPublic) {
+            return true;
+        }
+
+        const request = context.switchToHttp().getRequest<RequestWithUser>();
+        const header = request.headers.authorization;
+
+        if (!header) {
+            return false;
+        }
+
+        const token = this.extractTokenFromHeader(header);
+
+        if (!token) {
+            throw new UnauthorizedException('Token not found');
+        }
+
+        try {
+            // Verify token with Supabase
+            const {
+                data: { user },
+                error,
+            } = await this.supabase.auth.getUser(token);
+
+            if (error || !user) {
+                throw new UnauthorizedException('Invalid or expired token');
+            }
+
+            request.user = user;
+            return true;
+        } catch (err) {
+            if (err instanceof UnauthorizedException) {
+                throw err;
+            }
+            throw new UnauthorizedException('Token verification failed');
+        }
+    }
+    private extractTokenFromHeader(header: string): string | null {
+        if (!header?.startsWith('Bearer ')) {
+            return null;
+        }
+
+        const [, token] = header.split(' ');
+        return token || null;
+    }
+}
