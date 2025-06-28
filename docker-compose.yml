@@ -3,7 +3,7 @@ services:
     container_name: postgres_container
     image: postgres:17.0
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-store_db}
+      POSTGRES_DB: ${POSTGRES_DB:-vocab_db}
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
     volumes:

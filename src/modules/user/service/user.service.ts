@@ -33,16 +33,8 @@ export class UserService {
      */
     public async find(): Promise<UserDto[]> {
         try {
-            const users = await this.prismaService.user.findMany({
-                include: {
-                    addresses: true,
-                    orders: true,
-                    cartItems: true,
-                    reviews: true,
-                    wishlistItems: true,
-                    notifications: true,
-                },
-            });
+            const users = await this.prismaService.user.findMany(
+            );
 
             return users.map((user) => new UserDto({ ...user }));
         } catch (error) {
@@ -57,14 +49,7 @@ export class UserService {
         try {
             const user = await this.prismaService.user.findUnique({
                 where: { supabaseUserId },
-                include: {
-                    addresses: true,
-                    orders: true,
-                    cartItems: true,
-                    reviews: true,
-                    wishlistItems: true,
-                    notifications: true,
-                },
+                
             });
 
             if (!user) {
