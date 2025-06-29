@@ -10,23 +10,268 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User Management
-model User {
-  id             String   @id @default(uuid())
-  email          String   @unique
-  firstName      String?
-  lastName       String?
-  phone          String?
-  avatar         String?
-  role           UserRole @default(CUSTOMER)
-  isActive       Boolean  @default(true)
-  supabaseUserId String?  @unique // For Supabase integration
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
 enum UserRole {
   ADMIN
   STAFF
   CUSTOMER
+}
+
+enum NotificationType {
+  VOCAB
+  VOCAB_TRAINER
+  VOCAB_SUBJECT
+  SYSTEM
+}
+
+enum NotificationAction {
+  CREATE
+  UPDATE
+  DELETE
+  MULTI_CREATE
+  MULTI_DELETE
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TrainerStatus {
+  PENDING
+  IN_PROCESS
+  COMPLETED
+  CANCELLED
+  FAILED
+  PASSED
+}
+
+model Vocab {
+  id                 String             @id @default(cuid())
+  textSource         String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  trainerAssignments VocabTrainerWord[]
+  TextTarget         TextTarget[]
+
+  // Indexes
+  @@index([textSource]) // For text search
+  @@index([createdAt]) // For sorting by creation date
+  @@index([updatedAt]) // For sorting by update date
+}
+
+model Language {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Indexes
+  @@index([name]) // For searching by language name
+}
+
+model VocabTrainer {
+  id                 String        @id @default(cuid())
+  name               String
+  status             TrainerStatus
+  duration           Int           @default(0)
+  countTime          Int           @default(0)
+  setCountTime       Int           @default(0)
+  reminderDisabled   Boolean       @default(false)
+  reminderRepeat     Int           @default(2)
+  reminderLastRemind DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  // Relations
+  vocabAssignments VocabTrainerWord[]
+  results          VocabTrainerResult[]
+
+  // Indexes
+  @@index([status]) // For filtering by status
+  @@index([status, createdAt]) // For status + date filtering
+  @@index([reminderDisabled, reminderLastRemind]) // For reminder queries
+  @@index([createdAt]) // For sorting by creation date
+  @@index([name]) // For searching by trainer name
+}
+
+model VocabTrainerWord {
+  id             String       @id @default(cuid())
+  vocabTrainerId String
+  vocabTrainer   VocabTrainer @relation(fields: [vocabTrainerId], references: [id], onDelete: Cascade)
+  vocabId        String
+  vocab          Vocab        @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Indexes
+  @@index([vocabTrainerId]) // For querying trainer's words
+  @@index([vocabId]) // For querying word's trainers
+  @@index([vocabTrainerId, createdAt]) // For pagination within trainer
+  @@index([createdAt]) // For general sorting
+  @@unique([vocabTrainerId, vocabId])
+}
+
+model VocabTrainerResult {
+  id             String        @id @default(cuid())
+  vocabTrainerId String
+  vocabTrainer   VocabTrainer  @relation(fields: [vocabTrainerId], references: [id], onDelete: Cascade)
+  status         TrainerStatus
+  userSelected   String
+  systemSelected String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Indexes
+  @@index([vocabTrainerId]) // For querying trainer results
+  @@index([vocabTrainerId, status]) // For filtering results by status
+  @@index([vocabTrainerId, createdAt]) // For pagination within trainer
+  @@index([status]) // For global status filtering
+  @@index([createdAt]) // For sorting by date
+}
+
+model TextTarget {
+  id                 String              @id @default(cuid())
+  vocabId            String
+  vocab              Vocab               @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+  wordTypeId         String
+  wordType           WordType            @relation(fields: [wordTypeId], references: [id], onDelete: Cascade)
+  textTarget         String
+  grammar            String
+  explanationSource  String
+  explanationTarget  String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  examples           VocabExample[]
+  subjectAssignments TextTargetSubject[]
+
+  // Indexes
+  @@index([vocabId]) // For querying vocab's targets
+  @@index([wordTypeId]) // For filtering by word type
+  @@index([textTarget]) // For text search
+  @@index([wordTypeId, textTarget]) // For combined filtering
+  @@index([createdAt]) // For sorting
+  @@unique([vocabId, wordTypeId])
+}
+
+model VocabExample {
+  id           String     @id @default(cuid())
+  textTargetId String
+  textTarget   TextTarget @relation(fields: [textTargetId], references: [id], onDelete: Cascade)
+  source       String
+  target       String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Indexes
+  @@index([textTargetId]) // For querying target's examples
+  @@index([textTargetId, createdAt]) // For pagination within target
+  @@index([source]) // For searching source text
+  @@index([target]) // For searching target text
+}
+
+model WordType {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  textTargets TextTarget[]
+
+  // Indexes
+  @@index([name]) // For searching by name (already unique but for performance)
+}
+
+model Subject {
+  id                    String              @id @default(cuid())
+  name                  String              @unique
+  order                 Int
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  textTargetAssignments TextTargetSubject[]
+
+  // Indexes
+  @@index([order]) // For ordering subjects
+  @@index([name]) // For searching by name
+}
+
+model TextTargetSubject {
+  id           String     @id @default(cuid())
+  textTargetId String
+  textTarget   TextTarget @relation(fields: [textTargetId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Indexes
+  @@index([textTargetId]) // For querying target's subjects
+  @@index([subjectId]) // For querying subject's targets
+  @@index([subjectId, textTargetId]) // For reverse lookup
+  @@unique([textTargetId, subjectId])
+}
+
+model Notification {
+  id                    String                  @id @default(cuid())
+  type                  NotificationType
+  action                NotificationAction
+  priority              PriorityLevel
+  data                  Json
+  isActive              Boolean                 @default(true)
+  expiresAt             DateTime
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  recipientAsssignments NotificationRecipient[]
+
+  // Indexes
+  @@index([type, isActive]) // For filtering by type and active status
+  @@index([priority, isActive]) // For filtering by priority
+  @@index([isActive, expiresAt]) // For cleanup and active notifications
+  @@index([isActive, createdAt]) // For recent active notifications
+  @@index([createdAt]) // For sorting by date
+}
+
+model NotificationRecipient {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRead         Boolean      @default(false)
+  isDeleted      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Indexes - optimized for common queries
+  @@index([userId, isRead, isDeleted]) // For user's unread notifications
+  @@index([userId, isDeleted, createdAt]) // For user's notification history
+  @@index([notificationId, isRead]) // For notification read status
+  @@index([userId]) // Basic user lookup
+  @@index([notificationId]) // Basic notification lookup
+  @@index([isRead]) // Global read status
+  @@index([isDeleted]) // Global delete status
+  @@unique([notificationId, userId])
+}
+
+model User {
+  id                      String                  @id @default(cuid())
+  email                   String                  @unique
+  firstName               String?
+  lastName                String?
+  phone                   String?
+  avatar                  String?
+  role                    UserRole                @default(CUSTOMER)
+  isActive                Boolean                 @default(true)
+  supabaseUserId          String?                 @unique // For Supabase integration
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  notificationAssignments NotificationRecipient[]
+
+  // Indexes
+  @@index([role, isActive]) // For filtering users by role and status
+  @@index([isActive, createdAt]) // For active users sorted by join date
+  @@index([email, isActive]) // For login and active status check
+  @@index([firstName, lastName]) // For name-based searches
+  @@index([phone]) // For phone number lookup
 }
