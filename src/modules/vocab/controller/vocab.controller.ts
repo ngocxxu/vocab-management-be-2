@@ -46,7 +46,7 @@ export class VocabController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN])
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create vocab' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
     public async create(@Body() input: VocabInput): Promise<VocabDto> {
@@ -58,7 +58,7 @@ export class VocabController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN])
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Update vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
@@ -73,7 +73,7 @@ export class VocabController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN])
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Delete vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
