@@ -49,15 +49,23 @@ enum TrainerStatus {
 model Vocab {
   id                 String             @id @default(cuid())
   textSource         String
+  sourceLanguageId   String
+  sourceLanguage     Language           @relation("VocabSourceLanguage", fields: [sourceLanguageId], references: [id], onDelete: Cascade)
+  targetLanguageId   String
+  targetLanguage     Language           @relation("VocabTargetLanguage", fields: [targetLanguageId], references: [id], onDelete: Cascade)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   trainerAssignments VocabTrainerWord[]
   TextTarget         TextTarget[]
 
+  @@unique([textSource, sourceLanguageId, targetLanguageId]) // For unique vocab entries
   // Indexes
   @@index([textSource]) // For text search
   @@index([createdAt]) // For sorting by creation date
   @@index([updatedAt]) // For sorting by update date
+  @@index([sourceLanguageId]) // For filtering by source language
+  @@index([targetLanguageId]) // For filtering by target language
+  @@index([sourceLanguageId, targetLanguageId]) // For filtering by source and target language
 }
 
 model Language {
@@ -66,6 +74,10 @@ model Language {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations
+  sourceVocabs Vocab[] @relation("VocabSourceLanguage")
+  targetVocabs Vocab[] @relation("VocabTargetLanguage")
 
   // Indexes
   @@index([name]) // For searching by language name
@@ -105,12 +117,12 @@ model VocabTrainerWord {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  @@unique([vocabTrainerId, vocabId])
   // Indexes
   @@index([vocabTrainerId]) // For querying trainer's words
   @@index([vocabId]) // For querying word's trainers
   @@index([vocabTrainerId, createdAt]) // For pagination within trainer
   @@index([createdAt]) // For general sorting
-  @@unique([vocabTrainerId, vocabId])
 }
 
 model VocabTrainerResult {
@@ -146,13 +158,13 @@ model TextTarget {
   examples           VocabExample[]
   subjectAssignments TextTargetSubject[]
 
+  @@unique([vocabId, wordTypeId])
   // Indexes
   @@index([vocabId]) // For querying vocab's targets
   @@index([wordTypeId]) // For filtering by word type
   @@index([textTarget]) // For text search
   @@index([wordTypeId, textTarget]) // For combined filtering
   @@index([createdAt]) // For sorting
-  @@unique([vocabId, wordTypeId])
 }
 
 model VocabExample {
@@ -205,11 +217,11 @@ model TextTargetSubject {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  @@unique([textTargetId, subjectId])
   // Indexes
   @@index([textTargetId]) // For querying target's subjects
   @@index([subjectId]) // For querying subject's targets
   @@index([subjectId, textTargetId]) // For reverse lookup
-  @@unique([textTargetId, subjectId])
 }
 
 model Notification {
@@ -243,6 +255,7 @@ model NotificationRecipient {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  @@unique([notificationId, userId])
   // Indexes - optimized for common queries
   @@index([userId, isRead, isDeleted]) // For user's unread notifications
   @@index([userId, isDeleted, createdAt]) // For user's notification history
@@ -251,7 +264,6 @@ model NotificationRecipient {
   @@index([notificationId]) // Basic notification lookup
   @@index([isRead]) // Global read status
   @@index([isDeleted]) // Global delete status
-  @@unique([notificationId, userId])
 }
 
 model User {
