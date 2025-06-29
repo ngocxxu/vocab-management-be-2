@@ -49,7 +49,6 @@ export class UserService {
         try {
             const user = await this.prismaService.user.findUnique({
                 where: { supabaseUserId },
-                
             });
 
             if (!user) {
