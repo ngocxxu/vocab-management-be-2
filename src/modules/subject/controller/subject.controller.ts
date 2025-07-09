@@ -14,6 +14,7 @@ import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { SubjectDto, SubjectInput } from '../model';
+import { CreateSubjectInput } from '../model/create-subject.input';
 import { SubjectService } from '../service';
 
 @Controller('subjects')
@@ -49,7 +50,7 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create subject' })
     @ApiResponse({ status: HttpStatus.CREATED, type: SubjectDto })
-    public async create(@Body() input: SubjectInput): Promise<SubjectDto> {
+    public async create(@Body() input: CreateSubjectInput): Promise<SubjectDto> {
         const subject = await this.subjectService.create(input);
         this.logger.info(`Created new subject with ID ${subject.id}`);
         return subject;

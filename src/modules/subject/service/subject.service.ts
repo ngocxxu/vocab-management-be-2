@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { SubjectDto, SubjectInput } from '../model';
+import { CreateSubjectInput } from '../model/create-subject.input';
 
 @Injectable()
 export class SubjectService {
@@ -73,14 +74,24 @@ export class SubjectService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createSubjectData: SubjectInput): Promise<SubjectDto> {
+    public async create(createSubjectData: CreateSubjectInput): Promise<SubjectDto> {
         try {
-            const { name, order }: SubjectInput = createSubjectData;
+            const { name } = createSubjectData;
+
+            // Take the subject with the highest order
+            const lastSubject = await this.prismaService.subject.findFirst({
+                orderBy: {
+                    order: 'desc',
+                },
+            });
+
+            // Auto-increment order for new subjects
+            const newOrder = lastSubject ? lastSubject.order + 1 : 1;
 
             const subject = await this.prismaService.subject.create({
                 data: {
                     name,
-                    order,
+                    order: newOrder,
                 },
             });
 
@@ -99,9 +110,9 @@ export class SubjectService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async update(id: string, updateSubjectData: Partial<SubjectInput>): Promise<SubjectDto> {
+    public async update(id: string, updateSubjectData: SubjectInput): Promise<SubjectDto> {
         try {
-            const { name, order }: Partial<SubjectInput> = updateSubjectData;
+            const { name, order } = updateSubjectData;
 
             // Check if subject exists
             const existingSubject = await this.prismaService.subject.findUnique({
@@ -112,15 +123,51 @@ export class SubjectService {
                 throw new NotFoundException(`Subject with ID ${id} not found`);
             }
 
-            // Prepare update data
-            const updateData = {
-                ...(name !== undefined && { name }),
-                ...(order !== undefined && { order }),
-            };
+            // If order is updated, need to adjust the order of other subjects
+            if (order !== undefined && order !== existingSubject.order) {
+                await this.prismaService.$transaction(async (prisma) => {
+                    const oldOrder = existingSubject.order;
+                    const newOrder = order;
 
+                    if (newOrder > oldOrder) {
+                        // Move down: decrease order of subjects in between
+                        await prisma.subject.updateMany({
+                            where: {
+                                order: {
+                                    gt: oldOrder,
+                                    lte: newOrder,
+                                },
+                                id: { not: id },
+                            },
+                            data: {
+                                order: { decrement: 1 },
+                            },
+                        });
+                    } else {
+                        // Move up: increase order of subjects in between
+                        await prisma.subject.updateMany({
+                            where: {
+                                order: {
+                                    gte: newOrder,
+                                    lt: oldOrder,
+                                },
+                                id: { not: id },
+                            },
+                            data: {
+                                order: { increment: 1 },
+                            },
+                        });
+                    }
+                });
+            }
+
+            // Update subject
             const subject = await this.prismaService.subject.update({
                 where: { id },
-                data: updateData,
+                data: {
+                    ...(name !== undefined && { name }),
+                    ...(order !== undefined && { order }),
+                },
             });
 
             return new SubjectDto(subject);
@@ -140,12 +187,40 @@ export class SubjectService {
      */
     public async delete(id: string): Promise<SubjectDto> {
         try {
-            const subject = await this.prismaService.subject.delete({
-                where: { id },
+            const deletedSubject = await this.prismaService.$transaction(async (prisma) => {
+                const subjectToDelete = await prisma.subject.findUnique({
+                    where: { id },
+                });
+
+                if (!subjectToDelete) {
+                    throw new NotFoundException(`Subject with ID ${id} not found`);
+                }
+
+                // Delete subject
+                const deleted = await prisma.subject.delete({
+                    where: { id },
+                });
+
+                // Update order of subjects with order greater than the deleted subject
+                await prisma.subject.updateMany({
+                    where: {
+                        order: {
+                            gt: subjectToDelete.order,
+                        },
+                    },
+                    data: {
+                        order: { decrement: 1 },
+                    },
+                });
+
+                return deleted;
             });
 
-            return new SubjectDto(subject);
+            return new SubjectDto(deletedSubject);
         } catch (error: unknown) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
             PrismaErrorHandler.handle(error, 'delete', this.subjectErrorMapping);
         }
     }
