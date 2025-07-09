@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Noun (Danh từ)",
+    "description": "A word used to identify people, places, things, or ideas. Examples: book, teacher, happiness, London"
+  },
+  {
+    "name": "Verb (Động từ)",
+    "description": "A word that expresses an action, occurrence, or state of being. Examples: run, think, is, become"
+  },
+  {
+    "name": "Adverbs (Trạng từ / Phó từ)",
+    "description": "A word that modifies or describes a verb, adjective, or another adverb. Examples: quickly, very, yesterday, here"
+  },
+  {
+    "name": "Adjective (Tính từ)",
+    "description": "A word that describes or modifies a noun or pronoun. Examples: beautiful, tall, blue, intelligent"
+  },
+  {
+    "name": "Phrase (Cụm từ)",
+    "description": "A group of words that functions as a single unit in a sentence. Examples: in the morning, piece of cake, break down"
+  },
+  {
+    "name": "Pronouns (Đại từ)",
+    "description": "A word that takes the place of a noun or noun phrase. Examples: he, she, it, they, who, which"
+  },
+  {
+    "name": "Interjection (Thán từ)",
+    "description": "A word or phrase that expresses strong emotion or sudden feeling. Examples: Oh!, Wow!, Ouch!, Alas!"
+  },
+  {
+    "name": "Conjunction (Liên từ)",
+    "description": "A word that connects words, phrases, clauses, or sentences. Examples: and, but, or, because, although"
+  },
+  {
+    "name": "Preposition (Giới từ)",
+    "description": "A word that shows the relationship between a noun/pronoun and other words in a sentence. Examples: in, on, at, by, for, with"
+  },
+  {
+    "name": "Auxiliary words (Trợ từ)",
+    "description": "Helper words used with main verbs to form tenses, questions, or negatives. Examples: is, have, will, can, must, do"
+  }
+]
