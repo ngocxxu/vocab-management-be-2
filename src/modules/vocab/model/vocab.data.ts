@@ -10,13 +10,13 @@ export class VocabDto {
     @ApiProperty({ description: 'Source text of the vocabulary', example: 'Hello' })
     public readonly textSource: string;
 
-    @ApiProperty({ description: 'ID of the source language' })
+    @ApiProperty({ description: 'ID of the source language', example: 'vi' })
     public readonly sourceLanguageId: string;
 
     @ApiProperty({ description: 'Source language details', required: false })
     public readonly sourceLanguage?: LanguageDto;
 
-    @ApiProperty({ description: 'ID of the target language' })
+    @ApiProperty({ description: 'ID of the target language', example: 'en' })
     public readonly targetLanguageId: string;
 
     @ApiProperty({ description: 'Target language details', required: false })

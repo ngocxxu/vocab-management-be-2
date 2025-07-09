@@ -12,6 +12,22 @@ export class VocabInput extends PickType(VocabDto, [
         description: 'List of text targets for this vocabulary',
         type: 'array',
         items: { type: 'object' },
+        example: [
+            {
+                wordTypeId: 'cmcw657mf0000hczy22gs0lmg',
+                textTarget: 'Hello',
+                grammar: 'interjection',
+                explanationSource: 'Lời chào thân thiện',
+                explanationTarget: 'A friendly greeting',
+                subjectIds: ['cmcvuc64d00002dtxq5tkcl27'],
+                examples: [
+                    {
+                        source: 'Xin chào bạn!',
+                        target: 'Hello friend!',
+                    },
+                ],
+            },
+        ],
     })
     public readonly textTargets: CreateTextTargetInput[];
 }
