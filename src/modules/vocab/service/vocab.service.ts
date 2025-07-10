@@ -31,7 +31,7 @@ export class VocabService {
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
-                    TextTarget: {
+                    textTargets: {
                         include: {
                             wordType: true,
                             examples: true,
@@ -68,7 +68,7 @@ export class VocabService {
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
-                    TextTarget: {
+                    textTargets: {
                         include: {
                             wordType: true,
                             examples: true,
@@ -105,7 +105,7 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-            public async create(createVocabData: VocabInput): Promise<VocabDto> {
+    public async create(createVocabData: VocabInput): Promise<VocabDto> {
         try {
             const { textSource, sourceLanguageCode, targetLanguageCode, textTargets }: VocabInput =
                 createVocabData;
@@ -120,7 +120,7 @@ export class VocabService {
                     textSource,
                     sourceLanguageCode,
                     targetLanguageCode,
-                    TextTarget: {
+                    textTargets: {
                         create: textTargets.map((target) => ({
                             wordTypeId: target.wordTypeId,
                             textTarget: target.textTarget,
@@ -148,7 +148,7 @@ export class VocabService {
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
-                    TextTarget: {
+                    textTargets: {
                         include: {
                             wordType: true,
                             examples: true,
@@ -214,7 +214,7 @@ export class VocabService {
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
-                    TextTarget: {
+                    textTargets: {
                         include: {
                             wordType: true,
                             examples: true,
@@ -252,7 +252,7 @@ export class VocabService {
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
-                    TextTarget: {
+                    textTargets: {
                         include: {
                             wordType: true,
                             examples: true,
