@@ -5,8 +5,8 @@ import { VocabDto } from './vocab.data';
 
 export class VocabInput extends PickType(VocabDto, [
     'textSource',
-    'sourceLanguageId',
-    'targetLanguageId',
+    'sourceLanguageCode',
+    'targetLanguageCode',
 ] as const) {
     @ApiProperty({
         description: 'List of text targets for this vocabulary',

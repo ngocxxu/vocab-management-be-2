@@ -49,23 +49,23 @@ enum TrainerStatus {
 model Vocab {
   id                 String             @id @default(cuid())
   textSource         String
-  sourceLanguageId   String
-  sourceLanguage     Language           @relation("VocabSourceLanguage", fields: [sourceLanguageId], references: [id], onDelete: Cascade)
-  targetLanguageId   String
-  targetLanguage     Language           @relation("VocabTargetLanguage", fields: [targetLanguageId], references: [id], onDelete: Cascade)
+  sourceLanguageCode String
+  sourceLanguage     Language           @relation("VocabSourceLanguage", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
+  targetLanguageCode String
+  targetLanguage     Language           @relation("VocabTargetLanguage", fields: [targetLanguageCode], references: [code], onDelete: Cascade)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   trainerAssignments VocabTrainerWord[]
   TextTarget         TextTarget[]
 
-  @@unique([textSource, sourceLanguageId, targetLanguageId]) // For unique vocab entries
+  @@unique([textSource, sourceLanguageCode, targetLanguageCode]) // For unique vocab entries
   // Indexes
   @@index([textSource]) // For text search
   @@index([createdAt]) // For sorting by creation date
   @@index([updatedAt]) // For sorting by update date
-  @@index([sourceLanguageId]) // For filtering by source language
-  @@index([targetLanguageId]) // For filtering by target language
-  @@index([sourceLanguageId, targetLanguageId]) // For filtering by source and target language
+  @@index([sourceLanguageCode]) // For filtering by source language
+  @@index([targetLanguageCode]) // For filtering by target language
+  @@index([sourceLanguageCode, targetLanguageCode]) // For filtering by source and target language
 }
 
 model Language {
@@ -81,6 +81,7 @@ model Language {
 
   // Indexes
   @@index([name]) // For searching by language name
+  @@index([code]) // For searching by language code
 }
 
 model VocabTrainer {

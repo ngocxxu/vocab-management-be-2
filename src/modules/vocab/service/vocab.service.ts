@@ -105,21 +105,21 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createVocabData: VocabInput): Promise<VocabDto> {
+            public async create(createVocabData: VocabInput): Promise<VocabDto> {
         try {
-            const { textSource, sourceLanguageId, targetLanguageId, textTargets }: VocabInput =
+            const { textSource, sourceLanguageCode, targetLanguageCode, textTargets }: VocabInput =
                 createVocabData;
 
             // Validate that source and target languages are different
-            if (sourceLanguageId === targetLanguageId) {
+            if (sourceLanguageCode === targetLanguageCode) {
                 throw new Error('Source and target languages must be different');
             }
 
             const vocab = await this.prismaService.vocab.create({
                 data: {
                     textSource,
-                    sourceLanguageId,
-                    targetLanguageId,
+                    sourceLanguageCode,
+                    targetLanguageCode,
                     TextTarget: {
                         create: textTargets.map((target) => ({
                             wordTypeId: target.wordTypeId,
@@ -181,7 +181,7 @@ export class VocabService {
      */
     public async update(id: string, updateVocabData: Partial<VocabInput>): Promise<VocabDto> {
         try {
-            const { textSource, sourceLanguageId, targetLanguageId }: Partial<VocabInput> =
+            const { textSource, sourceLanguageCode, targetLanguageCode }: Partial<VocabInput> =
                 updateVocabData;
 
             // Check if vocabulary exists
@@ -194,18 +194,18 @@ export class VocabService {
             }
 
             // Validate that source and target languages are different if both are provided
-            const finalSourceLangId: string = sourceLanguageId ?? existingVocab.sourceLanguageId;
-            const finalTargetLangId: string = targetLanguageId ?? existingVocab.targetLanguageId;
+            const finalSourceLangCode: string = sourceLanguageCode ?? existingVocab.sourceLanguageCode;
+            const finalTargetLangCode: string = targetLanguageCode ?? existingVocab.targetLanguageCode;
 
-            if (finalSourceLangId === finalTargetLangId) {
+            if (finalSourceLangCode === finalTargetLangCode) {
                 throw new Error('Source and target languages must be different');
             }
 
             // Prepare update data
             const updateData = {
                 ...(textSource !== undefined && { textSource }),
-                ...(sourceLanguageId !== undefined && { sourceLanguageId }),
-                ...(targetLanguageId !== undefined && { targetLanguageId }),
+                ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
+                ...(targetLanguageCode !== undefined && { targetLanguageCode }),
             };
 
             const vocab = await this.prismaService.vocab.update({
