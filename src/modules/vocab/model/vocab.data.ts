@@ -1,7 +1,7 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty } from '@nestjs/swagger';
 import { Language, TextTarget, Vocab } from '@prisma/client';
-import { LanguageDto, TextTargetDto } from '../../shared/model';
+import { LanguageDto, TextTargetDto } from '../flow';
 
 export class VocabDto {
     @ApiProperty({ description: 'Unique identifier for the vocabulary' })
