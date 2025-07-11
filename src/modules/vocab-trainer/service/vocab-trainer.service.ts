@@ -65,23 +65,52 @@ export class VocabTrainerService {
      */
     public async create(input: VocabTrainerInput): Promise<VocabTrainerDto> {
         try {
+            const { vocabAssignmentIds = [], ...trainerData } = input;
             const trainer = await this.prismaService.vocabTrainer.create({
                 data: {
-                    name: input.name,
-                    status: input.status ?? TrainerStatus.PENDING,
-                    duration: input.duration ?? 0,
-                    countTime: input.countTime ?? 0,
-                    setCountTime: input.setCountTime ?? 0,
-                    reminderDisabled: input.reminderDisabled ?? false,
-                    reminderRepeat: input.reminderRepeat ?? 2,
-                    reminderLastRemind: input.reminderLastRemind ?? new Date(),
+                    name: trainerData.name,
+                    status: trainerData.status ?? TrainerStatus.PENDING,
+                    duration: trainerData.duration ?? 0,
+                    countTime: trainerData.countTime ?? 0,
+                    setCountTime: trainerData.setCountTime ?? 0,
+                    reminderDisabled: trainerData.reminderDisabled ?? false,
+                    reminderRepeat: trainerData.reminderRepeat ?? 2,
+                    reminderLastRemind: trainerData.reminderLastRemind ?? new Date(),
                 },
                 include: {
                     vocabAssignments: true,
                     results: true,
                 },
             });
-            return new VocabTrainerDto(trainer);
+
+            // Create vocab assignments if any
+            if (vocabAssignmentIds.length > 0) {
+                await Promise.all(
+                    vocabAssignmentIds.map(async (vocabId) =>
+                        this.prismaService.vocabTrainerWord.create({
+                            data: {
+                                vocabTrainerId: trainer.id,
+                                vocabId,
+                            },
+                        })
+                    )
+                );
+            }
+
+            // Fetch the trainer again to include the new assignments
+            const trainerWithAssignments = await this.prismaService.vocabTrainer.findUnique({
+                where: { id: trainer.id },
+                include: {
+                    vocabAssignments: true,
+                    results: true,
+                },
+            });
+
+            if (!trainerWithAssignments) {
+                throw new NotFoundException(`VocabTrainer with ID ${trainer.id} not found after creation`);
+            }
+
+            return new VocabTrainerDto(trainerWithAssignments);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.errorMapping);
         }
