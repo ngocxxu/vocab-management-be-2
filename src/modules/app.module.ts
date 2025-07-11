@@ -7,6 +7,7 @@ import { LanguageModule } from './language/language.module';
 import { SubjectModule } from './subject/subject.module';
 import { UserModule } from './user/user.module';
 import { VocabModule } from './vocab/vocab.module';
+import { VocabTrainerModule } from './vocab-trainer/vocab-trainer.module';
 import { WordTypeModule } from './word-type/word-type.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         SubjectModule,
         WordTypeModule,
         VocabModule,
+        VocabTrainerModule,
     ],
     providers: [
         {
