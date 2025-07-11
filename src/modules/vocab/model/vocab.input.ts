@@ -1,6 +1,6 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import { VocabExampleDto } from '../../shared/model/vocab-example.data';
+import { VocabExampleDto } from '../flow/vocab-example.data';
 import { VocabDto } from './vocab.data';
 
 export class VocabInput extends PickType(VocabDto, [

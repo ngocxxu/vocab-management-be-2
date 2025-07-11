@@ -25,6 +25,10 @@ export class VocabTrainerService {
     public async find(): Promise<VocabTrainerDto[]> {
         try {
             const trainers = await this.prismaService.vocabTrainer.findMany({
+                include: {
+                    vocabAssignments: true,
+                    results: true,
+                },
                 orderBy: { createdAt: 'desc' },
             });
             return trainers.map((trainer) => new VocabTrainerDto(trainer));
@@ -40,6 +44,10 @@ export class VocabTrainerService {
         try {
             const trainer = await this.prismaService.vocabTrainer.findUnique({
                 where: { id },
+                include: {
+                    vocabAssignments: true,
+                    results: true,
+                },
             });
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
@@ -67,6 +75,10 @@ export class VocabTrainerService {
                     reminderDisabled: input.reminderDisabled ?? false,
                     reminderRepeat: input.reminderRepeat ?? 2,
                     reminderLastRemind: input.reminderLastRemind ?? new Date(),
+                },
+                include: {
+                    vocabAssignments: true,
+                    results: true,
                 },
             });
             return new VocabTrainerDto(trainer);
@@ -96,6 +108,10 @@ export class VocabTrainerService {
                     reminderRepeat: input.reminderRepeat ?? existing.reminderRepeat,
                     reminderLastRemind: input.reminderLastRemind ?? existing.reminderLastRemind,
                 },
+                include: {
+                    vocabAssignments: true,
+                    results: true,
+                },
             });
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
@@ -111,6 +127,10 @@ export class VocabTrainerService {
         try {
             const trainer = await this.prismaService.vocabTrainer.delete({
                 where: { id },
+                include: {
+                    vocabAssignments: true,
+                    results: true,
+                },
             });
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {

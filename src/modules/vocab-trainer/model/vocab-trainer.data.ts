@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TrainerStatus, VocabTrainer } from '@prisma/client';
+import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult } from '@prisma/client';
+import { VocabTrainerResultDto } from './vocab-trainer-result.data';
+import { VocabTrainerWordDto } from './vocab-trainer-word.data';
 
 export class VocabTrainerDto {
     @ApiProperty({ description: 'Unique identifier for the vocab trainer' })
@@ -35,7 +37,24 @@ export class VocabTrainerDto {
     @ApiProperty({ description: 'Updated at' })
     public updatedAt: Date;
 
-    public constructor(entity: VocabTrainer) {
+    @ApiProperty({
+        description: 'Assignments of vocabularies to this trainer',
+        type: [VocabTrainerWordDto],
+        required: false,
+    })
+    public vocabAssignments?: VocabTrainerWordDto[];
+
+    @ApiProperty({
+        description: 'Results for this trainer',
+        type: [VocabTrainerResultDto],
+        required: false,
+    })
+    public results?: VocabTrainerResultDto[];
+
+    public constructor(entity: VocabTrainer & {
+        vocabAssignments?: VocabTrainerWord[];
+        results?: VocabTrainerResult[];
+    }) {
         this.id = entity.id;
         this.name = entity.name;
         this.status = entity.status;
@@ -47,5 +66,9 @@ export class VocabTrainerDto {
         this.reminderLastRemind = entity.reminderLastRemind;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
+        this.vocabAssignments = entity.vocabAssignments?.map(
+            (a) => new VocabTrainerWordDto(a),
+        );
+        this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
     }
 }

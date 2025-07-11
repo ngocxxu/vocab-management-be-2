@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TextTarget, VocabExample, WordType } from '@prisma/client';
-import { VocabExampleDto, WordTypeDto } from '.';
-import { TextTargetSubjectDto } from '.';
+import { TextTargetSubjectDto, VocabExampleDto, WordTypeDto } from '.';
 
 export class TextTargetDto {
     @ApiProperty({ description: 'Unique identifier for the text target' })
