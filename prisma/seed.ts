@@ -13,6 +13,10 @@ type TLanguage = {
     name: string;
 };
 
+type TSubject = {
+    name: string;
+};
+
 const wordTypeData = JSON.parse(
     fs.readFileSync(path.join(__dirname, 'data/wordTypes.json'), 'utf-8'),
 ) as TWordType[];
@@ -20,6 +24,10 @@ const wordTypeData = JSON.parse(
 const languageData = JSON.parse(
     fs.readFileSync(path.join(__dirname, 'data/languages.json'), 'utf-8'),
 ) as TLanguage[];
+
+const subjectData = JSON.parse(
+    fs.readFileSync(path.join(__dirname, 'data/subjects.json'), 'utf-8'),
+) as TSubject[];
 
 export class DatabaseSeeder {
     private readonly prisma: PrismaClient;
@@ -70,10 +78,33 @@ export class DatabaseSeeder {
         this.logger.log('Languages seeding completed!');
     }
 
+    public async seedSubjects() {  
+        this.logger.log('Seeding subjects...');
+
+        for (const [index, subject] of subjectData.entries()) {
+            const created = await this.prisma.subject.upsert({
+                where: { name: subject.name },
+                update: {
+                    name: subject.name,
+                    order: index + 1,
+                },
+                create: {
+                    name: subject.name,
+                    order: index + 1,
+                },
+            });
+
+            this.logger.log(`Created/Updated subject: ${created.name}`);
+        }
+
+        this.logger.log('Subjects seeding completed!');
+    }
+
     public async run() {
         try {
             await this.seedWordTypes();
             await this.seedLanguages();
+            await this.seedSubjects();
             this.logger.log('Seeding completed successfully!');
         } catch (error) {
             throw error;
