@@ -8,13 +8,16 @@ import {
     Post,
     Put,
     UseGuards,
+    Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
+import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
+import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerService } from '../service';
 
 @Controller('vocab-trainers')
@@ -30,9 +33,9 @@ export class VocabTrainerController {
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all vocab trainers' })
-    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabTrainerDto })
-    public async find(): Promise<VocabTrainerDto[]> {
-        return this.vocabTrainerService.find();
+    @ApiResponse({ status: HttpStatus.OK, type: PaginationDto })
+    public async find(@Query() query: VocabTrainerQueryParamsInput): Promise<PaginationDto<VocabTrainerDto>> {
+        return this.vocabTrainerService.find(query);
     }
 
     @Get(':id')

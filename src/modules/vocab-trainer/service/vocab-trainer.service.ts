@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { TrainerStatus, QuestionType } from '@prisma/client';
-import { PrismaService } from '../../common';
+import { TrainerStatus, QuestionType, Prisma } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { VocabTrainerDto, VocabTrainerInput } from '../model';
+import { PaginationDto } from '../../common/model/pagination.dto';
+import { PrismaService } from '../../common/provider/prisma.provider';
+import { getPagination, getOrderBy } from '../../common/util/pagination.util';
+import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
+import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
+import { VocabTrainerDto } from '../model/vocab-trainer.data';
+import { VocabTrainerInput } from '../model/vocab-trainer.input';
 
 @Injectable()
 export class VocabTrainerService {
@@ -22,18 +27,43 @@ export class VocabTrainerService {
     public constructor(private readonly prismaService: PrismaService) {}
 
     /**
-     * Find all vocab trainers in the database
+     * Find all vocab trainers in the database (paginated)
      */
-    public async find(): Promise<VocabTrainerDto[]> {
+    public async find(query: VocabTrainerQueryParamsInput): Promise<PaginationDto<VocabTrainerDto>> {
         try {
-            const trainers = await this.prismaService.vocabTrainer.findMany({
-            include: {
-                    vocabAssignments: true,
-                    results: true,
-                },
-                orderBy: { createdAt: 'desc' },
+            const { page, pageSize, skip, take } = getPagination({
+                page: query.page,
+                pageSize: query.pageSize,
+                defaultPage: PaginationDto.DEFAULT_PAGE,
+                defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
             });
-            return trainers.map((trainer) => new VocabTrainerDto(trainer));
+
+            const orderBy = getOrderBy(
+                query.sortBy,
+                query.sortOrder,
+                'createdAt'
+            ) as Prisma.VocabTrainerOrderByWithRelationInput;
+
+            const where = buildPrismaWhere<VocabTrainerQueryParamsInput, Prisma.VocabTrainerWhereInput>(query, {
+                stringFields: ['name'],
+                enumFields: ['status', 'questionType'],
+            });
+
+            const [totalItems, trainers] = await Promise.all([
+                this.prismaService.vocabTrainer.count({ where }),
+                this.prismaService.vocabTrainer.findMany({
+                    where,
+                    include: {
+                        vocabAssignments: true,
+                        results: true,
+                    },
+                    orderBy,
+                    skip,
+                    take,
+                }),
+            ]);
+            const items = trainers.map((trainer) => new VocabTrainerDto(trainer));
+            return new PaginationDto<VocabTrainerDto>(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.errorMapping);
         }
