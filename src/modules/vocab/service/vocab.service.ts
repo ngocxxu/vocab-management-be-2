@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { PaginationDto } from '../../common/model/pagination.dto';
+import { getPagination, getOrderBy } from '../../common/util/pagination.util';
+import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { VocabDto, VocabInput } from '../model';
+import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 
 @Injectable()
 export class VocabService {
@@ -21,34 +26,69 @@ export class VocabService {
     public constructor(private readonly prismaService: PrismaService) {}
 
     /**
-     * Find all vocabularies in the database
-     * @returns Promise<VocabDto[]> Array of vocabulary DTOs
+     * Find all vocabularies in the database (paginated)
+     * @returns Promise<PaginationDto<VocabDto>> Paginated vocabulary DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(): Promise<VocabDto[]> {
+    public async find(query: VocabQueryParamsInput): Promise<PaginationDto<VocabDto>> {
         try {
-            const vocabs = await this.prismaService.vocab.findMany({
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            examples: true,
-                            subjectAssignments: {
-                                include: {
-                                    subject: true,
+            const { page, pageSize, skip, take } = getPagination({
+                page: query.page,
+                pageSize: query.pageSize,
+                defaultPage: PaginationDto.DEFAULT_PAGE,
+                defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
+            });
+
+            const orderBy = getOrderBy(
+                query.sortBy,
+                query.sortOrder,
+                'createdAt'
+            ) as Prisma.VocabOrderByWithRelationInput;
+
+            const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
+                stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode'],
+                customMap: (input, w) => {
+                    if (input.subjectIds && Array.isArray(input.subjectIds) && input.subjectIds.length > 0) {
+                        (w as Prisma.VocabWhereInput).textTargets = {
+                            some: {
+                                subjectAssignments: {
+                                    some: {
+                                        subjectId: { in: input.subjectIds }
+                                    }
+                                }
+                            }
+                        };
+                    }
+                }
+            });
+
+            const [totalItems, vocabs] = await Promise.all([
+                this.prismaService.vocab.count({ where }),
+                this.prismaService.vocab.findMany({
+                    where,
+                    include: {
+                        sourceLanguage: true,
+                        targetLanguage: true,
+                        textTargets: {
+                            include: {
+                                wordType: true,
+                                examples: true,
+                                subjectAssignments: {
+                                    include: {
+                                        subject: true,
+                                    },
                                 },
                             },
                         },
                     },
-                },
-                orderBy: {
-                    createdAt: 'desc',
-                },
-            });
+                    orderBy,
+                    skip,
+                    take,
+                }),
+            ]);
 
-            return vocabs.map((vocab) => new VocabDto({ ...vocab }));
+            const items = vocabs.map((vocab) => new VocabDto({ ...vocab }));
+            return new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.vocabErrorMapping);
         }

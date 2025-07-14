@@ -8,12 +8,14 @@ import {
     Post,
     Put,
     UseGuards,
+    Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { VocabDto, VocabInput } from '../model';
+import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 import { VocabService } from '../service';
 
 @Controller('vocabs')
@@ -29,9 +31,9 @@ export class VocabController {
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all vocabs' })
-    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabDto })
-    public async find(): Promise<VocabDto[]> {
-        return this.vocabService.find();
+    @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    public async find(@Query() query: VocabQueryParamsInput): Promise<any> {
+        return this.vocabService.find(query);
     }
 
     @Get(':id')
