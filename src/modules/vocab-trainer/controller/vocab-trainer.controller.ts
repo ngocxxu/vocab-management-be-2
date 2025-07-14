@@ -9,8 +9,8 @@ import {
     Put,
     UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiQuery } from '@nestjs/swagger';
-import { UserRole, QuestionType } from '@prisma/client';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
@@ -30,7 +30,6 @@ export class VocabTrainerController {
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all vocab trainers' })
-    @ApiQuery({ name: 'questionType', enum: QuestionType, required: false, description: 'Filter by question type' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabTrainerDto })
     public async find(): Promise<VocabTrainerDto[]> {
         return this.vocabTrainerService.find();
