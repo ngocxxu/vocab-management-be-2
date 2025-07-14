@@ -23,6 +23,16 @@ export class VocabTrainerPipe extends JoiValidationPipe {
                 'any.only': 'Invalid status',
                 'any.required': 'Status is required',
             }),
+            questionType: Joi.string().required().valid(
+                'MULTIPLE_CHOICE',
+                'FILL_IN_THE_BLANK',
+                'MATCHING',
+                'TRUE_OR_FALSE',
+                'SHORT_ANSWER',
+            ).messages({
+                'any.only': 'Invalid question type',
+                'any.required': 'Question type is required',
+            }),
             reminderTime: Joi.number().integer().min(0).optional(),
             countTime: Joi.number().integer().min(0).optional(),
             setCountTime: Joi.number().integer().min(0).optional(),

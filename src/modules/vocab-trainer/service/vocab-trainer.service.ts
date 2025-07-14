@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { TrainerStatus } from '@prisma/client';
+import { TrainerStatus, QuestionType } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
@@ -24,9 +24,11 @@ export class VocabTrainerService {
     /**
      * Find all vocab trainers in the database
      */
-    public async find(): Promise<VocabTrainerDto[]> {
+    public async find(questionType?: QuestionType): Promise<VocabTrainerDto[]> {
         try {
+            const whereClause = questionType ? { questionType } : {};
             const trainers = await this.prismaService.vocabTrainer.findMany({
+                where: whereClause,
                 include: {
                     vocabAssignments: true,
                     results: true,
@@ -93,6 +95,7 @@ export class VocabTrainerService {
                 data: {
                     name: trainerData.name,
                     status: trainerData.status ?? TrainerStatus.PENDING,
+                    questionType: trainerData.questionType ?? QuestionType.MULTIPLE_CHOICE,
                     reminderTime: trainerData.reminderTime ?? 0,
                     countTime: trainerData.countTime ?? 0,
                     setCountTime: trainerData.setCountTime ?? 0,
@@ -153,6 +156,7 @@ export class VocabTrainerService {
                 data: {
                     name: input.name,
                     status: input.status,
+                    questionType: input.questionType ?? existing.questionType,
                     reminderTime: input.reminderTime ?? existing.reminderTime,
                     countTime: input.countTime ?? existing.countTime,
                     setCountTime: input.setCountTime ?? existing.setCountTime,

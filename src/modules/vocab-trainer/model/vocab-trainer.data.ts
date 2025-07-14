@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult } from '@prisma/client';
+import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
 import { VocabTrainerResultDto } from './vocab-trainer-result.data';
 import { VocabTrainerWordDto } from './vocab-trainer-word.data';
 
@@ -12,6 +12,9 @@ export class VocabTrainerDto {
 
     @ApiProperty({ description: 'Status of the trainer' })
     public status: TrainerStatus;
+
+    @ApiProperty({ description: 'Type of questions for this trainer', enum: QuestionType })
+    public questionType: QuestionType;
 
     @ApiProperty({ description: 'Reminder time of the trainer' })
     public reminderTime: number;
@@ -58,6 +61,7 @@ export class VocabTrainerDto {
         this.id = entity.id;
         this.name = entity.name;
         this.status = entity.status;
+        this.questionType = entity.questionType;
         this.reminderTime = entity.reminderTime;
         this.countTime = entity.countTime;
         this.setCountTime = entity.setCountTime;
