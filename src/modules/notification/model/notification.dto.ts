@@ -8,7 +8,7 @@ import {
     User,
 } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
-import { NotificationRecipientDto } from '../../shared/model/notification-recipient';
+import { NotificationRecipientDto } from './notification-recipient.dto';
 
 export class NotificationDto {
     @ApiProperty({ description: 'Unique identifier for the notification' })

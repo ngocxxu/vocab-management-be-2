@@ -1,5 +1,5 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import { LanguageDto } from './language.data';
+import { LanguageDto } from './language.dto';
 
 export class LanguageInput extends PickType(LanguageDto, ['code', 'name'] as const) {
     @ApiProperty({

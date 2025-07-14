@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
-import { VocabTrainerResultDto } from './vocab-trainer-result.data';
-import { VocabTrainerWordDto } from './vocab-trainer-word.data';
+import { VocabTrainerResultDto } from './vocab-trainer-result.dto';
+import { VocabTrainerWordDto } from './vocab-trainer-word.dto';
 
 export class VocabTrainerDto {
     @ApiProperty({ description: 'Unique identifier for the vocab trainer' })

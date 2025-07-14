@@ -1,7 +1,7 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty, PickType } from '@nestjs/swagger';
 import { InputJsonValue, JsonValue } from '@prisma/client/runtime/library';
-import { NotificationDto } from './notification.data';
+import { NotificationDto } from './notification.dto';
 
 export class NotificationInput extends PickType(NotificationDto, [
     'type',

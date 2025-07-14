@@ -1,2 +1,2 @@
-export * from './notification.data';
+export * from './notification.dto';
 export * from './notification.input';

@@ -1,2 +1,2 @@
 export { UserInput } from './user.input';
-export { UserDto } from './user.data';
+export { UserDto } from './user.dto';

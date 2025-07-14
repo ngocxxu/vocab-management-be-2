@@ -1,2 +1,2 @@
-export * from './language.data';
+export * from './language.dto';
 export * from './language.input';

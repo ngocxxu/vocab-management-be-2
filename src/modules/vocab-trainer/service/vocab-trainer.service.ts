@@ -7,7 +7,7 @@ import { getPagination, getOrderBy } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
-import { VocabTrainerDto } from '../model/vocab-trainer.data';
+import { VocabTrainerDto } from '../model/vocab-trainer.dto';
 import { VocabTrainerInput } from '../model/vocab-trainer.input';
 
 @Injectable()

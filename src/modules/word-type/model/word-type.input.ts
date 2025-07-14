@@ -1,5 +1,5 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import { WordTypeDto } from './word-type.data';
+import { WordTypeDto } from './word-type.dto';
 
 export class WordTypeInput extends PickType(WordTypeDto, ['name', 'description'] as const) {
     @ApiProperty({

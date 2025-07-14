@@ -1,2 +1,2 @@
-export * from './subject.data';
+export * from './subject.dto';
 export * from './subject.input';

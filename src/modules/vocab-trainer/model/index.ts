@@ -1,4 +1,4 @@
-export * from './vocab-trainer.data';
+export * from './vocab-trainer.dto';
 export * from './vocab-trainer.input';
-export * from './vocab-trainer-word.data';
-export * from './vocab-trainer-result.data';
+export * from './vocab-trainer-word.dto';
+export * from './vocab-trainer-result.dto';
