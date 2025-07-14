@@ -3,6 +3,7 @@ import { TrainerStatus } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
+import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 
 @Injectable()
 export class VocabTrainerService {
@@ -119,7 +120,7 @@ export class VocabTrainerService {
     /**
      * Update a vocab trainer
      */
-    public async update(id: string, input: VocabTrainerInput): Promise<VocabTrainerDto> {
+    public async update(id: string, input: UpdateVocabTrainerInput): Promise<VocabTrainerDto> {
         try {
             const existing = await this.prismaService.vocabTrainer.findUnique({ where: { id } });
             if (!existing) {

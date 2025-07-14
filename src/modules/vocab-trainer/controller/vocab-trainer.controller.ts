@@ -14,6 +14,7 @@ import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
+import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerService } from '../service';
 
 @Controller('vocab-trainers')
@@ -63,7 +64,7 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
     public async update(
         @Param('id') id: string,
-        @Body() updateTrainerData: VocabTrainerInput,
+        @Body() updateTrainerData: UpdateVocabTrainerInput,
     ): Promise<VocabTrainerDto> {
         const trainer = await this.vocabTrainerService.update(id, updateTrainerData);
         this.logger.info(`Updated vocab trainer with ID ${id}`);
