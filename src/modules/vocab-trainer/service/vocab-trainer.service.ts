@@ -15,6 +15,7 @@ export class VocabTrainerService {
             findOne: 'VocabTrainer not found',
             create: 'Related record not found',
             find: 'VocabTrainer not found',
+            findOneAndExam: 'Exam of vocab trainer not found',
         },
     };
 
@@ -55,11 +56,32 @@ export class VocabTrainerService {
             }
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
-            if (error instanceof NotFoundException) throw error;
             PrismaErrorHandler.handle(error, 'findOne', this.errorMapping);
-            throw error;
         }
     }
+
+    /**
+     * Find a single vocab trainer by ID and exam
+     */
+    public async findOneAndExam(id: string): Promise<VocabTrainerDto> {
+            try {
+                const trainer = await this.prismaService.vocabTrainer.findUnique({
+                    where: { id },
+                    include: {
+                        vocabAssignments: true,
+                        results: true,
+                    },
+                });
+                if (!trainer) {
+                    throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
+                }
+
+
+                return new VocabTrainerDto(trainer);
+            } catch (error: unknown) {
+                PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
+            }
+        }
 
     /**
      * Create a new vocab trainer
@@ -71,7 +93,7 @@ export class VocabTrainerService {
                 data: {
                     name: trainerData.name,
                     status: trainerData.status ?? TrainerStatus.PENDING,
-                    duration: trainerData.duration ?? 0,
+                    reminderTime: trainerData.reminderTime ?? 0,
                     countTime: trainerData.countTime ?? 0,
                     setCountTime: trainerData.setCountTime ?? 0,
                     reminderDisabled: trainerData.reminderDisabled ?? false,
@@ -131,7 +153,7 @@ export class VocabTrainerService {
                 data: {
                     name: input.name,
                     status: input.status,
-                    duration: input.duration ?? existing.duration,
+                    reminderTime: input.reminderTime ?? existing.reminderTime,
                     countTime: input.countTime ?? existing.countTime,
                     setCountTime: input.setCountTime ?? existing.setCountTime,
                     reminderDisabled: input.reminderDisabled ?? existing.reminderDisabled,
@@ -145,7 +167,6 @@ export class VocabTrainerService {
             });
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
-            if (error instanceof NotFoundException) throw error;
             PrismaErrorHandler.handle(error, 'update', this.errorMapping);
         }
     }

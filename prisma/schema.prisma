@@ -46,6 +46,14 @@ enum TrainerStatus {
   PASSED
 }
 
+enum QuestionType {
+  MULTIPLE_CHOICE
+  FILL_IN_THE_BLANK
+  MATCHING
+  TRUE_OR_FALSE
+  SHORT_ANSWER
+}
+
 model Vocab {
   id                 String             @id @default(cuid())
   textSource         String
@@ -88,12 +96,13 @@ model VocabTrainer {
   id                 String        @id @default(cuid())
   name               String
   status             TrainerStatus
-  duration           Int           @default(0)
   countTime          Int           @default(0)
   setCountTime       Int           @default(0)
+  reminderTime       Int           @default(0)
   reminderDisabled   Boolean       @default(false)
   reminderRepeat     Int           @default(2)
   reminderLastRemind DateTime      @default(now())
+  questionType       QuestionType  @default(MULTIPLE_CHOICE)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 

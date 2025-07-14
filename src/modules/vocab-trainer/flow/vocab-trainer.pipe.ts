@@ -23,7 +23,7 @@ export class VocabTrainerPipe extends JoiValidationPipe {
                 'any.only': 'Invalid status',
                 'any.required': 'Status is required',
             }),
-            duration: Joi.number().integer().min(0).optional(),
+            reminderTime: Joi.number().integer().min(0).optional(),
             countTime: Joi.number().integer().min(0).optional(),
             setCountTime: Joi.number().integer().min(0).optional(),
             reminderDisabled: Joi.boolean().optional(),

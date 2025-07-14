@@ -13,8 +13,8 @@ export class VocabTrainerDto {
     @ApiProperty({ description: 'Status of the trainer' })
     public status: TrainerStatus;
 
-    @ApiProperty({ description: 'Duration of the trainer' })
-    public duration: number;
+    @ApiProperty({ description: 'Reminder time of the trainer' })
+    public reminderTime: number;
 
     @ApiProperty({ description: 'Count time' })
     public countTime: number;
@@ -58,7 +58,7 @@ export class VocabTrainerDto {
         this.id = entity.id;
         this.name = entity.name;
         this.status = entity.status;
-        this.duration = entity.duration;
+        this.reminderTime = entity.reminderTime;
         this.countTime = entity.countTime;
         this.setCountTime = entity.setCountTime;
         this.reminderDisabled = entity.reminderDisabled;

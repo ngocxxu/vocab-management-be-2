@@ -43,6 +43,16 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
     public async findOne(@Param('id') id: string): Promise<VocabTrainerDto> {
         return this.vocabTrainerService.findOne(id);
+    };
+
+    @Get(':id/exam')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Find vocab trainer by ID and exam' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
+    public async findOneAndExam(@Param('id') id: string): Promise<VocabTrainerDto> {
+        return this.vocabTrainerService.findOneAndExam(id);
     }
 
     @Post()

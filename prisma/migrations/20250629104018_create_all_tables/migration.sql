@@ -39,7 +39,7 @@ CREATE TABLE "VocabTrainer" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "status" "TrainerStatus" NOT NULL,
-    "duration" INTEGER NOT NULL DEFAULT 0,
+    "reminderTime" INTEGER NOT NULL DEFAULT 0,
     "countTime" INTEGER NOT NULL DEFAULT 0,
     "setCountTime" INTEGER NOT NULL DEFAULT 0,
     "reminderDisabled" BOOLEAN NOT NULL DEFAULT false,

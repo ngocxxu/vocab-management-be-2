@@ -8,8 +8,8 @@ export class VocabTrainerInput {
     @ApiProperty({ description: 'Status of the trainer', enum: TrainerStatus })
     public status: TrainerStatus;
 
-    @ApiProperty({ description: 'Duration of the trainer', required: false })
-    public duration?: number;
+    @ApiProperty({ description: 'reminderTime of the trainer', required: false })
+    public reminderTime?: number;
 
     @ApiProperty({ description: 'Count time', required: false })
     public countTime?: number;
