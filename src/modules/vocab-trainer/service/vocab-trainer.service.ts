@@ -24,12 +24,10 @@ export class VocabTrainerService {
     /**
      * Find all vocab trainers in the database
      */
-    public async find(questionType?: QuestionType): Promise<VocabTrainerDto[]> {
+    public async find(): Promise<VocabTrainerDto[]> {
         try {
-            const whereClause = questionType ? { questionType } : {};
             const trainers = await this.prismaService.vocabTrainer.findMany({
-                where: whereClause,
-                include: {
+            include: {
                     vocabAssignments: true,
                     results: true,
                 },

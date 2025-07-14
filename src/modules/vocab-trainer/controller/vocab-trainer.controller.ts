@@ -7,7 +7,6 @@ import {
     Param,
     Post,
     Put,
-    Query,
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiQuery } from '@nestjs/swagger';
@@ -33,8 +32,8 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Find all vocab trainers' })
     @ApiQuery({ name: 'questionType', enum: QuestionType, required: false, description: 'Filter by question type' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabTrainerDto })
-    public async find(@Query('questionType') questionType?: QuestionType): Promise<VocabTrainerDto[]> {
-        return this.vocabTrainerService.find(questionType);
+    public async find(): Promise<VocabTrainerDto[]> {
+        return this.vocabTrainerService.find();
     }
 
     @Get(':id')
