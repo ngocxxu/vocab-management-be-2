@@ -5,6 +5,7 @@ import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
+import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerDto } from '../model/vocab-trainer.dto';
@@ -23,6 +24,7 @@ export class VocabTrainerService {
             create: 'Related record not found',
             find: 'VocabTrainer not found',
             findOneAndExam: 'Exam of vocab trainer not found',
+            submitExam: 'Exam of vocab trainer not found',
         },
     };
 
@@ -140,6 +142,20 @@ export class VocabTrainerService {
             }
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
+        }
+    }
+
+    public async submitMultipleChoice(id: string, input: SubmitMultipleChoiceInput): Promise<VocabTrainerDto> {
+        try {
+            const trainer = await this.prismaService.vocabTrainer.findUnique({ where: { id } });
+            if (!trainer) {
+                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
+            }
+
+
+            return new VocabTrainerDto(trainer);
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
         }
     }
 

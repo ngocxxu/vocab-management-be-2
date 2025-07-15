@@ -9,13 +9,15 @@ import {
     Put,
     UseGuards,
     Query,
+    BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { QuestionType, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
+import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerService } from '../service';
@@ -56,6 +58,21 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
     public async findOneAndExam(@Param('id') id: string): Promise<VocabTrainerDto> {
         return this.vocabTrainerService.findOneAndExam(id);
+    }
+
+    @Post(':id/exam')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Submit multiple choice exam' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
+    public async submitExam(@Param('id') id: string, @Body() input: SubmitMultipleChoiceInput): Promise<VocabTrainerDto> {
+        if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
+            return this.vocabTrainerService.submitMultipleChoice(id, input);
+        }
+        else {
+            throw new BadRequestException('Question type is not multiple choice');
+        }
     }
 
     @Post()
