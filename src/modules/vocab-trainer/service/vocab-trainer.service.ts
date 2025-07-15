@@ -234,16 +234,21 @@ export class VocabTrainerService {
             const overallStatus = scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
 
             // Update trainer status if needed
-            await this.prismaService.vocabTrainer.update({
+            const result = await this.prismaService.vocabTrainer.update({
                 where: { id: trainer.id },
                 data: {
+                    name: trainer.name,
                     status: overallStatus,
                     countTime,
+                    setCountTime: trainer.setCountTime,
                     updatedAt: new Date(),
+                },
+                include: {
+                    results: true,
                 },
             });
 
-            return new VocabTrainerDto(trainer as unknown as VocabTrainer);
+            return new VocabTrainerDto(result as unknown as VocabTrainer);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
         }
