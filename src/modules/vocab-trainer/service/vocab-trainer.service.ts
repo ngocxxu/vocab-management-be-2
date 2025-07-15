@@ -4,7 +4,6 @@ import {
     QuestionType,
     TrainerStatus,
     VocabTrainer,
-    VocabTrainerResult,
 } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
@@ -16,7 +15,7 @@ import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerDto } from '../model/vocab-trainer.dto';
 import { VocabTrainerInput } from '../model/vocab-trainer.input';
-import { createQuestion, getRandomElements } from '../util';
+import { createQuestion, getRandomElements, evaluateMultipleChoiceAnswers } from '../util';
 import { VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util/type';
 
 @Injectable()
@@ -187,41 +186,12 @@ export class VocabTrainerService {
 
             const { countTime, wordTestSelects } = input;
 
-            // Process and save each result
-            const wordResults: VocabTrainerResult[] = [];
-            const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
-            let correctAnswers = 0;
-
-            for (const wordTest of wordTestSelects) {
-                let isCorrect = false;
-
-                const questionAnswer = trainer.questionAnswers.find(
-                    (answer) => answer.vocabId === wordTest.vocabId,
-                );
-
-                isCorrect = questionAnswer?.systemSelected === wordTest.userSelect;
-
-                if (isCorrect) correctAnswers++;
-
-                // Prepare data for batch insert
-                createResults.push({
-                    vocabTrainerId: trainer.id,
-                    status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
-                    userSelected: wordTest.userSelect,
-                    systemSelected: questionAnswer?.systemSelected ?? '',
-                });
-
-                // Add to response
-                wordResults.push({
-                    id: '',
-                    vocabTrainerId: trainer.id,
-                    status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
-                    userSelected: wordTest.userSelect,
-                    systemSelected: questionAnswer?.systemSelected ?? '',
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                });
-            }
+            // Use the utility function for answer evaluation
+            const { createResults, correctAnswers } = evaluateMultipleChoiceAnswers(
+                trainer.id,
+                wordTestSelects,
+                trainer.questionAnswers
+            );
 
             // Batch insert all results
             await this.prismaService.vocabTrainerResult.createMany({

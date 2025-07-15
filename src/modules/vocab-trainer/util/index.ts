@@ -1,4 +1,6 @@
-import { VocabWithTextTargets } from './type';
+import { TrainerStatus, VocabTrainerResult } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { EvaluateResult, QuestionAnswer, VocabWithTextTargets, WordTestSelect } from './type';
 
 export function getRandomElements<T extends { id: string }>(arr: T[], n: number, exclude: T): T[] {
     const filtered = arr.filter(item => item.id !== exclude.id);
@@ -32,4 +34,47 @@ export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongV
 
     return { systemSelected, options, content, type };
 };
+
+export function evaluateMultipleChoiceAnswers(
+  trainerId: string,
+  wordTestSelects: WordTestSelect[],
+  questionAnswers: QuestionAnswer[]
+): EvaluateResult {
+  const wordResults: VocabTrainerResult[] = [];
+  const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
+  let correctAnswers = 0;
+
+  for (const wordTest of wordTestSelects) {
+    let isCorrect = false;
+
+    const questionAnswer = questionAnswers.find(
+      (answer) => answer.vocabId === wordTest.vocabId,
+    );
+
+    isCorrect = questionAnswer?.systemSelected === wordTest.userSelect;
+
+    if (isCorrect) correctAnswers++;
+
+    // Prepare data for batch insert
+    createResults.push({
+      vocabTrainerId: trainerId,
+      status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+      userSelected: wordTest.userSelect,
+      systemSelected: questionAnswer?.systemSelected ?? '',
+    });
+
+    // Add to response
+    wordResults.push({
+      id: '',
+      vocabTrainerId: trainerId,
+      status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+      userSelected: wordTest.userSelect,
+      systemSelected: questionAnswer?.systemSelected ?? '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  return { wordResults, createResults, correctAnswers };
+}
 

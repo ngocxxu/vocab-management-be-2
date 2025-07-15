@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { WordTestSelect } from '../util/type';
 import { SubmitExamInput } from './submit-exam';
 
 export class SubmitMultipleChoiceInput extends SubmitExamInput {
@@ -12,8 +13,5 @@ export class SubmitMultipleChoiceInput extends SubmitExamInput {
             },
         ],
     })
-    public wordTestSelects: {
-        vocabId: string;
-        userSelect: string;
-    }[];
+    public wordTestSelects: WordTestSelect[];
 }
