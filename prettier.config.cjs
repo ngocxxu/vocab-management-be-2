@@ -12,4 +12,5 @@ module.exports = {
   arrowParens: 'always',
   bracketSameLine: false,
   semi: true,
+  endOfLine: 'auto',
 };

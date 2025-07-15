@@ -1,10 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-    Prisma,
-    QuestionType,
-    TrainerStatus,
-    VocabTrainer,
-} from '@prisma/client';
+import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
@@ -190,7 +185,7 @@ export class VocabTrainerService {
             const { createResults, correctAnswers } = evaluateMultipleChoiceAnswers(
                 trainer.id,
                 wordTestSelects,
-                trainer.questionAnswers
+                trainer.questionAnswers,
             );
 
             // Batch insert all results
@@ -201,7 +196,8 @@ export class VocabTrainerService {
             // Calculate overall status
             const totalQuestions = wordTestSelects.length;
             const scorePercentage = (correctAnswers / totalQuestions) * 100;
-            const overallStatus = scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
+            const overallStatus =
+                scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
 
             // Update trainer status if needed
             const result = await this.prismaService.vocabTrainer.update({
