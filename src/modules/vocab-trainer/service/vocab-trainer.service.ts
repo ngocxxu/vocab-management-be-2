@@ -1,14 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { TrainerStatus, QuestionType, Prisma } from '@prisma/client';
+import { Prisma, QuestionType, TrainerStatus } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
-import { getPagination, getOrderBy } from '../../common/util/pagination.util';
+import { getOrderBy, getPagination } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerDto } from '../model/vocab-trainer.dto';
 import { VocabTrainerInput } from '../model/vocab-trainer.input';
+import { createQuestion, getRandomElements } from '../util';
+import { VocabWithTextTargets } from '../util/type';
 
 @Injectable()
 export class VocabTrainerService {
@@ -29,7 +31,9 @@ export class VocabTrainerService {
     /**
      * Find all vocab trainers in the database (paginated)
      */
-    public async find(query: VocabTrainerQueryParamsInput): Promise<PaginationDto<VocabTrainerDto>> {
+    public async find(
+        query: VocabTrainerQueryParamsInput,
+    ): Promise<PaginationDto<VocabTrainerDto>> {
         try {
             const { page, pageSize, skip, take } = getPagination({
                 page: query.page,
@@ -41,10 +45,13 @@ export class VocabTrainerService {
             const orderBy = getOrderBy(
                 query.sortBy,
                 query.sortOrder,
-                'createdAt'
+                'createdAt',
             ) as Prisma.VocabTrainerOrderByWithRelationInput;
 
-            const where = buildPrismaWhere<VocabTrainerQueryParamsInput, Prisma.VocabTrainerWhereInput>(query, {
+            const where = buildPrismaWhere<
+                VocabTrainerQueryParamsInput,
+                Prisma.VocabTrainerWhereInput
+            >(query, {
                 stringFields: ['name'],
                 enumFields: ['status', 'questionType'],
             });
@@ -94,24 +101,47 @@ export class VocabTrainerService {
      * Find a single vocab trainer by ID and exam
      */
     public async findOneAndExam(id: string): Promise<VocabTrainerDto> {
-            try {
-                const trainer = await this.prismaService.vocabTrainer.findUnique({
-                    where: { id },
-                    include: {
-                        vocabAssignments: true,
-                        results: true,
+        try {
+            const trainer = await this.prismaService.vocabTrainer.findUnique({
+                where: { id },
+                include: {
+                    vocabAssignments: {
+                        include: {
+                            vocab: {
+                                include: {
+                                    textTargets: true,
+                                },
+                            },
+                        },
                     },
-                });
-                if (!trainer) {
-                    throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-                }
-
-
-                return new VocabTrainerDto(trainer);
-            } catch (error: unknown) {
-                PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
+                    results: true,
+                },
+            });
+            if (!trainer) {
+                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
+
+            // -----------------------------Create multiple choice questions-------------------------------
+            if (trainer.questionType === QuestionType.MULTIPLE_CHOICE) {
+                const dataVocabAssignments: VocabWithTextTargets[] = trainer.vocabAssignments.map(
+                    (vocabAssignment) => vocabAssignment.vocab,
+                );
+                const listVocab = await this.prismaService.vocab.findMany({
+                    include: { textTargets: true },
+                });
+                const questions = dataVocabAssignments.map((vocab) => {
+                    const type = Math.random() < 0.5 ? 'source' : 'target';
+                    const wrongVocabs = getRandomElements(listVocab, 3, vocab);
+                    return createQuestion(vocab, type, wrongVocabs);
+                });
+                return new VocabTrainerDto({ ...trainer, questions });
+            } else {
+                return new VocabTrainerDto(trainer);
+            }
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
         }
+    }
 
     /**
      * Create a new vocab trainer
@@ -146,8 +176,8 @@ export class VocabTrainerService {
                                 vocabTrainerId: trainer.id,
                                 vocabId,
                             },
-                        })
-                    )
+                        }),
+                    ),
                 );
             }
 
@@ -161,7 +191,9 @@ export class VocabTrainerService {
             });
 
             if (!trainerWithAssignments) {
-                throw new NotFoundException(`VocabTrainer with ID ${trainer.id} not found after creation`);
+                throw new NotFoundException(
+                    `VocabTrainer with ID ${trainer.id} not found after creation`,
+                );
             }
 
             return new VocabTrainerDto(trainerWithAssignments);

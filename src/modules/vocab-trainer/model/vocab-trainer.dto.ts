@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
+import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType,  } from '@prisma/client';
+import { MultipleChoiceQuestionDto } from './multiple-choice-question.dto';
 import { VocabTrainerResultDto } from './vocab-trainer-result.dto';
 import { VocabTrainerWordDto } from './vocab-trainer-word.dto';
 
@@ -54,9 +55,17 @@ export class VocabTrainerDto {
     })
     public results?: VocabTrainerResultDto[];
 
+    @ApiProperty({
+        description: 'Questions for this trainer',
+        type: [MultipleChoiceQuestionDto],
+        required: false,
+    })
+    public questions?: MultipleChoiceQuestionDto[];
+
     public constructor(entity: VocabTrainer & {
         vocabAssignments?: VocabTrainerWord[];
         results?: VocabTrainerResult[];
+        questions?: MultipleChoiceQuestionDto[];
     }) {
         this.id = entity.id;
         this.name = entity.name;
@@ -74,5 +83,6 @@ export class VocabTrainerDto {
             (a) => new VocabTrainerWordDto(a),
         );
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
+        this.questions = entity.questions;
     }
 }

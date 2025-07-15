@@ -1,0 +1,35 @@
+import { VocabWithTextTargets } from './type';
+
+export function getRandomElements<T extends { id: string }>(arr: T[], n: number, exclude: T): T[] {
+    const filtered = arr.filter(item => item.id !== exclude.id);
+    const shuffled = [...filtered].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, n);
+  }
+
+// Helper functions
+const getRandomTextTarget = (vocab: VocabWithTextTargets): string => {
+    if (!vocab.textTargets?.length) return '';
+    const randomIndex = Math.floor(Math.random() * vocab.textTargets.length);
+    return vocab.textTargets[randomIndex]?.textTarget ?? '';
+};
+
+export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongVocabs: VocabWithTextTargets[]) => {
+    const isSourceType = type === 'source';
+
+    const content = [isSourceType ? vocab.textSource : getRandomTextTarget(vocab)];
+
+    const correctAnswer = {
+        label: isSourceType ? getRandomTextTarget(vocab) : vocab.textSource,
+        value: vocab.id
+    };
+
+    const wrongOptions = wrongVocabs.map((item: VocabWithTextTargets) => ({
+        label: isSourceType ? getRandomTextTarget(item) : item.textSource ?? '',
+        value: item.id
+    }));
+
+    const options = [correctAnswer, ...wrongOptions].sort(() => 0.5 - Math.random());
+
+    return { options, content, type };
+};
+

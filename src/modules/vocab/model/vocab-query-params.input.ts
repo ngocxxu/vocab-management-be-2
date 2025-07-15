@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { QueryParamsInput } from '../../common/model/query-params.input';
 
 export class VocabQueryParamsInput extends QueryParamsInput {
-    @ApiProperty({ description: 'Source text of the vocabulary', example: 'Hello', required: false })
+    @ApiProperty({ description: 'Source text of the vocabulary', example: 'Xin chào', required: false })
     public readonly textSource: string;
 
     @ApiProperty({ description: 'Code of the source language', example: 'vi', required: false })

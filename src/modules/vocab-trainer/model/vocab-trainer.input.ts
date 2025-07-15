@@ -2,13 +2,13 @@ import { ApiProperty } from '@nestjs/swagger';
 import { TrainerStatus, QuestionType } from '@prisma/client';
 
 export class VocabTrainerInput {
-    @ApiProperty({ description: 'Name of the vocab trainer' })
+    @ApiProperty({ description: 'Name of the vocab trainer', example: 'Vocab Trainer 1' })
     public name: string;
 
-    @ApiProperty({ description: 'Status of the trainer', enum: TrainerStatus })
+    @ApiProperty({ description: 'Status of the trainer', example: TrainerStatus.PENDING, enum: TrainerStatus })
     public status: TrainerStatus;
 
-    @ApiProperty({ description: 'Type of questions for this trainer', enum: QuestionType })
+    @ApiProperty({ description: 'Type of questions for this trainer', example: QuestionType.MULTIPLE_CHOICE, enum: QuestionType })
     public questionType: QuestionType;
 
     @ApiProperty({ description: 'reminderTime of the trainer', required: false })
