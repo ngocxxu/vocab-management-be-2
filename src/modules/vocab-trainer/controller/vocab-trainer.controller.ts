@@ -10,6 +10,7 @@ import {
     UseGuards,
     Query,
     BadRequestException,
+    Patch,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { QuestionType, UserRole } from '@prisma/client';
@@ -60,10 +61,10 @@ export class VocabTrainerController {
         return this.vocabTrainerService.findOneAndExam(id);
     }
 
-    @Post(':id/exam')
+    @Patch(':id/exam')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
-    @ApiOperation({ summary: 'Submit multiple choice exam' })
+    @ApiOperation({ summary: 'Submit exam' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
     public async submitExam(@Param('id') id: string, @Body() input: SubmitMultipleChoiceInput): Promise<VocabTrainerDto> {
@@ -71,7 +72,7 @@ export class VocabTrainerController {
             return this.vocabTrainerService.submitMultipleChoice(id, input);
         }
         else {
-            throw new BadRequestException('Question type is not multiple choice');
+            throw new BadRequestException('Question type is not suitable');
         }
     }
 

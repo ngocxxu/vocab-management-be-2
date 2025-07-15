@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus } from '@prisma/client';
+import {
+    Prisma,
+    QuestionType,
+    TrainerStatus,
+    VocabTrainer,
+    VocabTrainerResult,
+} from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
@@ -11,7 +17,7 @@ import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-param
 import { VocabTrainerDto } from '../model/vocab-trainer.dto';
 import { VocabTrainerInput } from '../model/vocab-trainer.input';
 import { createQuestion, getRandomElements } from '../util';
-import { VocabWithTextTargets } from '../util/type';
+import { VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util/type';
 
 @Injectable()
 export class VocabTrainerService {
@@ -131,11 +137,33 @@ export class VocabTrainerService {
                 const listVocab = await this.prismaService.vocab.findMany({
                     include: { textTargets: true },
                 });
-                const questions = dataVocabAssignments.map((vocab) => {
-                    const type = Math.random() < 0.5 ? 'source' : 'target';
-                    const wrongVocabs = getRandomElements(listVocab, 3, vocab);
-                    return createQuestion(vocab, type, wrongVocabs);
-                });
+                const questions = await Promise.all(
+                    dataVocabAssignments.map(async (vocab) => {
+                        const type = Math.random() < 0.5 ? 'source' : 'target';
+                        const wrongVocabs = getRandomElements(listVocab, 3, vocab);
+
+                        const { systemSelected, ...data } = createQuestion(
+                            vocab,
+                            type,
+                            wrongVocabs,
+                        );
+
+                        await this.prismaService.vocabTrainer.update({
+                            where: { id: trainer.id },
+                            data: {
+                                questionAnswers: {
+                                    push: {
+                                        systemSelected: systemSelected.label,
+                                        vocabId: vocab.id,
+                                    },
+                                },
+                            },
+                        });
+
+                        return { ...data };
+                    }),
+                );
+
                 return new VocabTrainerDto({ ...trainer, questions });
             } else {
                 return new VocabTrainerDto(trainer);
@@ -145,15 +173,77 @@ export class VocabTrainerService {
         }
     }
 
-    public async submitMultipleChoice(id: string, input: SubmitMultipleChoiceInput): Promise<VocabTrainerDto> {
+    public async submitMultipleChoice(
+        id: string,
+        input: SubmitMultipleChoiceInput,
+    ): Promise<VocabTrainerDto> {
         try {
-            const trainer = await this.prismaService.vocabTrainer.findUnique({ where: { id } });
+            const trainer = (await this.prismaService.vocabTrainer.findUnique({
+                where: { id },
+            })) as unknown as VocabTrainerWithTypedAnswers;
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
 
+            const { countTime, wordTestSelects } = input;
 
-            return new VocabTrainerDto(trainer);
+            // Process and save each result
+            const wordResults: VocabTrainerResult[] = [];
+            const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
+            let correctAnswers = 0;
+
+            for (const wordTest of wordTestSelects) {
+                let isCorrect = false;
+
+                const questionAnswer = trainer.questionAnswers.find(
+                    (answer) => answer.vocabId === wordTest.vocabId,
+                );
+
+                isCorrect = questionAnswer?.systemSelected === wordTest.userSelect;
+
+                if (isCorrect) correctAnswers++;
+
+                // Prepare data for batch insert
+                createResults.push({
+                    vocabTrainerId: trainer.id,
+                    status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+                    userSelected: wordTest.userSelect,
+                    systemSelected: questionAnswer?.systemSelected ?? '',
+                });
+
+                // Add to response
+                wordResults.push({
+                    id: '',
+                    vocabTrainerId: trainer.id,
+                    status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+                    userSelected: wordTest.userSelect,
+                    systemSelected: questionAnswer?.systemSelected ?? '',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                });
+            }
+
+            // Batch insert all results
+            await this.prismaService.vocabTrainerResult.createMany({
+                data: createResults,
+            });
+
+            // Calculate overall status
+            const totalQuestions = wordTestSelects.length;
+            const scorePercentage = (correctAnswers / totalQuestions) * 100;
+            const overallStatus = scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
+
+            // Update trainer status if needed
+            await this.prismaService.vocabTrainer.update({
+                where: { id: trainer.id },
+                data: {
+                    status: overallStatus,
+                    countTime,
+                    updatedAt: new Date(),
+                },
+            });
+
+            return new VocabTrainerDto(trainer as unknown as VocabTrainer);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
         }

@@ -7,7 +7,7 @@ export class VocabDto {
     @ApiProperty({ description: 'Unique identifier for the vocabulary' })
     public id: string;
 
-    @ApiProperty({ description: 'Source text of the vocabulary', example: 'Hello' })
+    @ApiProperty({ description: 'Source text of the vocabulary', example: 'Xin chào' })
     public readonly textSource: string;
 
     @ApiProperty({ description: 'Code of the source language', example: 'vi' })

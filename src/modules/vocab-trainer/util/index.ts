@@ -18,7 +18,7 @@ export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongV
 
     const content = [isSourceType ? vocab.textSource : getRandomTextTarget(vocab)];
 
-    const correctAnswer = {
+    const systemSelected = {
         label: isSourceType ? getRandomTextTarget(vocab) : vocab.textSource,
         value: vocab.id
     };
@@ -28,8 +28,8 @@ export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongV
         value: item.id
     }));
 
-    const options = [correctAnswer, ...wrongOptions].sort(() => 0.5 - Math.random());
+    const options = [systemSelected, ...wrongOptions].sort(() => 0.5 - Math.random());
 
-    return { options, content, type };
+    return { systemSelected, options, content, type };
 };
 

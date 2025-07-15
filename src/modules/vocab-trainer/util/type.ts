@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, VocabTrainer } from '@prisma/client';
 
 // Type for VocabTrainerWord with vocab relation
 export type VocabTrainerWordWithVocab = Prisma.VocabTrainerWordGetPayload<{
@@ -38,3 +38,12 @@ export type VocabTrainerFullRelations = Prisma.VocabTrainerGetPayload<{
     };
   };
 }>;
+
+export interface QuestionAnswer {
+  vocabId: string;
+  systemSelected: string;
+}
+
+export type VocabTrainerWithTypedAnswers = Omit<VocabTrainer, 'questionAnswers'> & {
+  questionAnswers: QuestionAnswer[];
+};
