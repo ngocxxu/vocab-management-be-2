@@ -8,6 +8,8 @@ export enum RedisPrefix {
     QUEUE = 'queue:',
     NOTIFICATION = 'notification:',
     SUBJECT = 'subject:',
+    WORD_TYPE = 'word-type:',
+    LANGUAGE = 'language:',
 }
 
 export class RedisKeyManager {

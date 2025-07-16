@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Language } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { RedisService } from '../../common/provider/redis.provider';
+import { RedisPrefix } from '../../common/util/redis-key.util';
 import { LanguageDto, LanguageInput } from '../model';
 
 @Injectable()
@@ -18,7 +21,10 @@ export class LanguageService {
         P2003: 'Invalid language data provided',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(
+        private readonly prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {}
 
     /**
      * Find all languages in the database
@@ -27,11 +33,22 @@ export class LanguageService {
      */
     public async find(): Promise<LanguageDto[]> {
         try {
+            const cached = await this.redisService.jsonGetWithPrefix<Language[]>(RedisPrefix.LANGUAGE, 'all');
+            if (cached) {
+                return cached.map((language) => new LanguageDto(language));
+            }
+
             const languages = await this.prismaService.language.findMany({
                 orderBy: {
                     name: 'asc',
                 },
             });
+
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.LANGUAGE,
+                'all',
+                languages
+            );
 
             return languages.map((language) => new LanguageDto(language));
         } catch (error: unknown) {
@@ -48,6 +65,11 @@ export class LanguageService {
      */
     public async findOne(id: string): Promise<LanguageDto> {
         try {
+            const cached = await this.redisService.getObjectWithPrefix<Language>(RedisPrefix.LANGUAGE, `id:${id}`);
+            if (cached) {
+                return new LanguageDto(cached);
+            }
+
             const language = await this.prismaService.language.findUnique({
                 where: { id },
             });
@@ -55,6 +77,12 @@ export class LanguageService {
             if (!language) {
                 throw new NotFoundException(`Language with ID ${id} not found`);
             }
+
+            await this.redisService.setObjectWithPrefix(
+                RedisPrefix.LANGUAGE,
+                `id:${id}`,
+                language
+            );
 
             return new LanguageDto(language);
         } catch (error: unknown) {

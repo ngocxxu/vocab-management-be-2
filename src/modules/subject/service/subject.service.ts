@@ -34,11 +34,22 @@ export class SubjectService {
      */
     public async find(): Promise<SubjectDto[]> {
         try {
+            const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(RedisPrefix.SUBJECT, 'all');
+            if (cached) {
+                return cached.map((subject) => new SubjectDto(subject));
+            }
+
             const subjects = await this.prismaService.subject.findMany({
                 orderBy: {
                     order: 'asc',
                 },
             });
+
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.SUBJECT,
+                'all',
+                subjects
+            );
 
             return subjects.map((subject) => new SubjectDto(subject));
         } catch (error: unknown) {

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Vocab } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
@@ -108,8 +108,7 @@ export class VocabService {
      */
     public async findOne(id: string): Promise<VocabDto> {
         try {
-            // Try to get from cache first using RedisJSON
-            const cached = await this.redisService.jsonGetWithPrefix<VocabDto>(RedisPrefix.VOCAB, `id:${id}`);
+            const cached = await this.redisService.getObjectWithPrefix<Vocab>(RedisPrefix.VOCAB, `id:${id}`);
             if (cached) {
                 return new VocabDto(cached);
             }
@@ -137,18 +136,13 @@ export class VocabService {
                 throw new NotFoundException(`Vocabulary with ID ${id} not found`);
             }
 
-            const vocabDto = new VocabDto({
-                ...vocab,
-            });
-
-            // Cache the result as RedisJSON
-            await this.redisService.jsonSetWithPrefix(
+            await this.redisService.setObjectWithPrefix(
                 RedisPrefix.VOCAB,
                 `id:${id}`,
-                vocabDto
+                vocab
             );
 
-            return vocabDto;
+            return new VocabDto(vocab);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;

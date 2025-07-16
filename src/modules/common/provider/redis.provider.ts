@@ -170,10 +170,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Get object data from hash
-    public async getObjectWithPrefix<T>(
-        prefix: RedisPrefix,
-        key: string,
-    ): Promise<T | null> {
+    public async getObjectWithPrefix<T>(prefix: RedisPrefix, key: string): Promise<T | null> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
         const hashData = await this.redisClient.hgetall(fullKey);
 
@@ -327,12 +324,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    public async jsonGetWithPrefix<T = unknown>(prefix: RedisPrefix, key: string): Promise<T | null> {
+    public async jsonGetWithPrefix<T>(
+        prefix: RedisPrefix,
+        key: string,
+    ): Promise<T | null> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
-        const result = await this.redisClient.call('JSON.GET', fullKey, '');
+        const result = await this.redisClient.call('JSON.GET', fullKey, '') as string;
         if (!result) return null;
-        const arr = JSON.parse(result as string) as T;
-        return (Array.isArray(arr) ? arr[0] : arr) as T;
+        const data = JSON.parse(result) as T;
+        return data;
     }
 
     public getClient(): Redis {

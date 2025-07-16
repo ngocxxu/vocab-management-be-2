@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { WordType } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { RedisService } from '../../common/provider/redis.provider';
+import { RedisPrefix } from '../../common/util/redis-key.util';
 import { WordTypeDto, WordTypeInput } from '../model';
 
 @Injectable()
@@ -18,7 +21,10 @@ export class WordTypeService {
         P2003: 'Invalid word type data provided',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(
+        private readonly prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {}
 
     /**
      * Find all word types in the database
@@ -27,11 +33,22 @@ export class WordTypeService {
      */
     public async find(): Promise<WordTypeDto[]> {
         try {
+            const cached = await this.redisService.jsonGetWithPrefix<WordType[]>(RedisPrefix.WORD_TYPE, 'all');
+            if (cached) {
+                return cached.map((wordType) => new WordTypeDto(wordType));
+            }
+
             const wordTypes = await this.prismaService.wordType.findMany({
                 orderBy: {
                     name: 'asc',
                 },
             });
+
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.WORD_TYPE,
+                'all',
+                wordTypes
+            );
 
             return wordTypes.map((wordType) => new WordTypeDto(wordType));
         } catch (error: unknown) {
@@ -48,6 +65,11 @@ export class WordTypeService {
      */
     public async findOne(id: string): Promise<WordTypeDto> {
         try {
+            const cached = await this.redisService.getObjectWithPrefix<WordType>(RedisPrefix.WORD_TYPE, `id:${id}`);
+            if (cached) {
+                return new WordTypeDto(cached);
+            }
+
             const wordType = await this.prismaService.wordType.findUnique({
                 where: { id },
             });
@@ -55,6 +77,12 @@ export class WordTypeService {
             if (!wordType) {
                 throw new NotFoundException(`Word type with ID ${id} not found`);
             }
+
+            await this.redisService.setObjectWithPrefix(
+                RedisPrefix.WORD_TYPE,
+                `id:${id}`,
+                wordType
+            );
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {
