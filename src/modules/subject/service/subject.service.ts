@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Subject } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { RedisService } from '../../common/provider/redis.provider';
+import { RedisPrefix } from '../../common/util/redis-key.util';
 import { SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
 
@@ -19,7 +22,10 @@ export class SubjectService {
         P2003: 'Invalid subject data provided',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(
+        private readonly prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {}
 
     /**
      * Find all subjects in the database
@@ -49,6 +55,11 @@ export class SubjectService {
      */
     public async findOne(id: string): Promise<SubjectDto> {
         try {
+            // Try to get from cache first using hash
+            const cached = await this.redisService.getObjectWithPrefix<Subject>(RedisPrefix.SUBJECT, `id:${id}`);
+            if (cached) {
+                return new SubjectDto(cached);
+            }
             const subject = await this.prismaService.subject.findUnique({
                 where: { id },
             });
@@ -57,7 +68,15 @@ export class SubjectService {
                 throw new NotFoundException(`Subject with ID ${id} not found`);
             }
 
-            return new SubjectDto(subject);
+            // Cache the result as hash
+            await this.redisService.setObjectWithPrefix(
+                RedisPrefix.SUBJECT,
+                `id:${id}`,
+                subject
+            );
+
+            const subjectDto = new SubjectDto(subject);
+            return subjectDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -95,7 +114,16 @@ export class SubjectService {
                 },
             });
 
-            return new SubjectDto(subject);
+            // Cache the new subject as hash
+            await this.redisService.setObjectWithPrefix(
+                RedisPrefix.SUBJECT,
+                `id:${subject.id}`,
+                subject
+            );
+
+            const subjectDto = new SubjectDto(subject);
+
+            return subjectDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.subjectErrorMapping);
         }
@@ -170,7 +198,14 @@ export class SubjectService {
                 },
             });
 
-            return new SubjectDto(subject);
+            // Update cache as hash
+            await this.redisService.setObjectWithPrefix(
+                RedisPrefix.SUBJECT,
+                `id:${id}`,
+                subject
+            );
+            const subjectDto = new SubjectDto(subject);
+            return subjectDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -215,8 +250,10 @@ export class SubjectService {
 
                 return deleted;
             });
-
-            return new SubjectDto(deletedSubject);
+            const subjectDto = new SubjectDto(deletedSubject);
+            // Remove from cache
+            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
+            return subjectDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;

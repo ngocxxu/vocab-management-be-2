@@ -3,8 +3,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
-import { getPagination, getOrderBy } from '../../common/util/pagination.util';
+import { RedisService } from '../../common/provider/redis.provider';
+import { getOrderBy, getPagination } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
+import { RedisPrefix } from '../../common/util/redis-key.util';
 import { VocabDto, VocabInput } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 
@@ -23,7 +25,10 @@ export class VocabService {
         P2003: 'Invalid language ID, word type ID, or subject ID provided',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(
+        private readonly prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {}
 
     /**
      * Find all vocabularies in the database (paginated)
@@ -103,6 +108,12 @@ export class VocabService {
      */
     public async findOne(id: string): Promise<VocabDto> {
         try {
+            // Try to get from cache first using RedisJSON
+            const cached = await this.redisService.jsonGetWithPrefix<VocabDto>(RedisPrefix.VOCAB, `id:${id}`);
+            if (cached) {
+                return new VocabDto(cached);
+            }
+
             const vocab = await this.prismaService.vocab.findUnique({
                 where: { id },
                 include: {
@@ -126,9 +137,18 @@ export class VocabService {
                 throw new NotFoundException(`Vocabulary with ID ${id} not found`);
             }
 
-            return new VocabDto({
+            const vocabDto = new VocabDto({
                 ...vocab,
             });
+
+            // Cache the result as RedisJSON
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.VOCAB,
+                `id:${id}`,
+                vocabDto
+            );
+
+            return vocabDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -202,9 +222,18 @@ export class VocabService {
                 },
             });
 
-            return new VocabDto({
+            const vocabDto = new VocabDto({
                 ...vocab,
             });
+
+            // Cache the new vocab as RedisJSON
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.VOCAB,
+                `id:${vocabDto.id}`,
+                vocabDto
+            );
+
+            return vocabDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.vocabErrorMapping);
         }
@@ -241,16 +270,13 @@ export class VocabService {
                 throw new Error('Source and target languages must be different');
             }
 
-            // Prepare update data
-            const updateData = {
-                ...(textSource !== undefined && { textSource }),
-                ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
-                ...(targetLanguageCode !== undefined && { targetLanguageCode }),
-            };
-
             const vocab = await this.prismaService.vocab.update({
                 where: { id },
-                data: updateData,
+                data: {
+                    ...(textSource !== undefined && { textSource }),
+                    ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
+                    ...(targetLanguageCode !== undefined && { targetLanguageCode }),
+                },
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
@@ -268,21 +294,32 @@ export class VocabService {
                 },
             });
 
-            return new VocabDto({
+            const vocabDto = new VocabDto({
                 ...vocab,
             });
+
+            // Update cache as RedisJSON
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.VOCAB,
+                `id:${id}`,
+                vocabDto
+            );
+
+            return vocabDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
             }
             PrismaErrorHandler.handle(error, 'update', this.vocabErrorMapping);
+            throw error;
         }
     }
 
     /**
-     * Delete a vocabulary from the database
+     * Delete a vocabulary record
      * @param id - The vocabulary ID to delete
      * @returns Promise<VocabDto> The deleted vocabulary DTO
+     * @throws NotFoundException when vocabulary is not found
      * @throws PrismaError when database operation fails or vocabulary not found
      */
     public async delete(id: string): Promise<VocabDto> {
@@ -306,11 +343,41 @@ export class VocabService {
                 },
             });
 
-            return new VocabDto({
+            const vocabDto = new VocabDto({
                 ...vocab,
             });
+
+            // Remove from cache
+            await this.redisService.delWithPrefix(RedisPrefix.VOCAB, `id:${id}`);
+
+            return vocabDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.vocabErrorMapping);
         }
+    }
+
+    /**
+     * Clear vocab cache
+     */
+    public async clearVocabCache(): Promise<void> {
+        await this.redisService.clearByPrefix(RedisPrefix.VOCAB);
+    }
+
+    /**
+     * Clear specific vocab cache by ID
+     */
+    public async clearVocabCacheById(id: string): Promise<void> {
+        await this.redisService.delWithPrefix(RedisPrefix.VOCAB, `id:${id}`);
+    }
+
+    /**
+     * Update specific fields in cached vocab object
+     */
+    public async updateVocabCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
+        await this.redisService.updateObjectFieldsWithPrefix(
+            RedisPrefix.VOCAB,
+            `id:${id}`,
+            fields
+        );
     }
 }

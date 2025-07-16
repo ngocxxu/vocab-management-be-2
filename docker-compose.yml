@@ -25,8 +25,26 @@ services:
       - ./servers.json:/pgadmin4/servers.json
     ports:
       - '${PGADMIN_PORT:-5050}:80'
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  redis:
+    container_name: redis_container
+    image: redis/redis-stack:7.2.0-v18
+    command: [ "/entrypoint.sh", "./redis-stack.conf" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+      - '${REDIS_INSIGHT_PORT:-8001}:8001'
+    volumes:
+      - redis_data:/data
+    depends_on:
+      - postgres
     restart: unless-stopped
 
 volumes:
   postgres_vol:
   pgadmin_vol:
+  redis_data:
