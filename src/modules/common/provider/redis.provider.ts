@@ -329,10 +329,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         key: string,
     ): Promise<T | null> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
-        const result = await this.redisClient.call('JSON.GET', fullKey, '') as string;
+        const result = await this.redisClient.call('JSON.GET', fullKey, '$') as string;
         if (!result) return null;
-        const data = JSON.parse(result) as T;
-        return data;
+
+        const parsed = JSON.parse(result) as T;
+        return (Array.isArray(parsed) ? parsed[0] : parsed) as T;
     }
 
     public getClient(): Redis {

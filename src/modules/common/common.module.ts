@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
-
 import { HealthController } from './controller';
 import { LogInterceptor } from './flow';
 import { configProvider, LoggerService, PrismaService } from './provider';
@@ -9,7 +9,8 @@ import { CacheManagerService } from './service/cache-manager.service';
 
 @Module({
   imports: [
-    TerminusModule
+    TerminusModule,
+    ConfigModule
   ],
   providers: [
     configProvider,
