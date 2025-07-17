@@ -1,5 +1,9 @@
 import { Prisma, VocabTrainer, VocabTrainerResult } from '@prisma/client';
 
+export enum EReminderRepeat {
+  MAX_REPEAT = 32,
+}
+
 // Type for VocabTrainerWord with vocab relation
 export type VocabTrainerWordWithVocab = Prisma.VocabTrainerWordGetPayload<{
   include: { vocab: true };

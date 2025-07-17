@@ -11,7 +11,7 @@ import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-param
 import { VocabTrainerDto } from '../model/vocab-trainer.dto';
 import { VocabTrainerInput } from '../model/vocab-trainer.input';
 import { createQuestion, getRandomElements, evaluateMultipleChoiceAnswers } from '../util';
-import { VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util/type';
+import { EReminderRepeat, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util/type';
 
 @Injectable()
 export class VocabTrainerService {
@@ -198,6 +198,21 @@ export class VocabTrainerService {
             const scorePercentage = (correctAnswers / totalQuestions) * 100;
             const overallStatus =
                 scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
+
+            if (overallStatus === TrainerStatus.PASSED) {
+                await this.prismaService.vocabTrainer.update({
+                    where: { id: trainer.id },
+                    data: {
+                        reminderRepeat: Math.min(
+                            trainer.reminderRepeat * 2,
+                            Number(EReminderRepeat.MAX_REPEAT),
+                        ),
+                        reminderLastRemind: new Date(),
+                        reminderDisabled:
+                            trainer.reminderRepeat * 2 >= Number(EReminderRepeat.MAX_REPEAT),
+                    },
+                });
+            }
 
             // Update trainer status if needed
             const result = await this.prismaService.vocabTrainer.update({

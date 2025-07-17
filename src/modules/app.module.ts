@@ -1,3 +1,4 @@
+import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { APP_GUARD } from '@nestjs/core';
@@ -20,6 +21,15 @@ import { WordTypeModule } from './word-type/word-type.module';
         WordTypeModule,
         VocabModule,
         VocabTrainerModule,
+        BullModule.forRoot({
+            redis: {
+                host: 'localhost',
+                port: 6379,
+            },
+        }),
+        BullModule.registerQueue({
+            name: 'vocab-trainer-reminder',
+        }),
     ],
     providers: [
         {
