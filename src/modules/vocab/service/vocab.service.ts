@@ -161,7 +161,7 @@ export class VocabService {
      */
     public async create(createVocabData: VocabInput): Promise<VocabDto> {
         try {
-            const { textSource, sourceLanguageCode, targetLanguageCode, textTargets }: VocabInput =
+            const { textSource, sourceLanguageCode, targetLanguageCode, textTargets, userId }: VocabInput =
                 createVocabData;
 
             // Validate that source and target languages are different
@@ -198,7 +198,7 @@ export class VocabService {
                                 : undefined,
                         })),
                     },
-                    userId: '1',
+                    userId,
                 },
                 include: {
                     sourceLanguage: true,

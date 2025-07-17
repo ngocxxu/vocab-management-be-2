@@ -8,4 +8,10 @@ export class CreateSubjectInput extends PickType(SubjectDto, ['name'] as const) 
         maxLength: 100,
     })
     public readonly name: string;
+
+    @ApiProperty({
+        description: 'User ID',
+        example: '1',
+    })
+    public readonly userId: string;
 }

@@ -106,7 +106,7 @@ export class SubjectService {
      */
     public async create(createSubjectData: CreateSubjectInput): Promise<SubjectDto> {
         try {
-            const { name } = createSubjectData;
+            const { name, userId } = createSubjectData;
 
             // Take the subject with the highest order
             const lastSubject = await this.prismaService.subject.findFirst({
@@ -122,7 +122,7 @@ export class SubjectService {
                 data: {
                     name,
                     order: newOrder,
-                    userId: '1',
+                    userId,
                 },
             });
 

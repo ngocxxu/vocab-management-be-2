@@ -30,6 +30,12 @@ export class VocabInput extends PickType(VocabDto, [
         ],
     })
     public readonly textTargets: CreateTextTargetInput[];
+
+    @ApiProperty({
+        description: 'User ID',
+        example: '1',
+    })
+    public readonly userId: string;
 }
 
 export class CreateTextTargetInput {

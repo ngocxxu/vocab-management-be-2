@@ -34,7 +34,7 @@ export class VocabTrainerWordDto {
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.vocab = entity.vocab
-            ? new VocabDto({ ...entity.vocab, userId: '1' })
+            ? new VocabDto({ ...entity.vocab})
             : undefined;
     }
 }
