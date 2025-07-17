@@ -51,7 +51,7 @@ export class VocabService {
             ) as Prisma.VocabOrderByWithRelationInput;
 
             const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
-                stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode'],
+                stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId'],
                 customMap: (input, w) => {
                     if (input.subjectIds && Array.isArray(input.subjectIds) && input.subjectIds.length > 0) {
                         (w as Prisma.VocabWhereInput).textTargets = {

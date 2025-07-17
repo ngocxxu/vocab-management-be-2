@@ -7,6 +7,7 @@ import {
     Param,
     Post,
     Put,
+    Query,
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -31,8 +32,8 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all subjects' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
-    public async find(): Promise<SubjectDto[]> {
-        return this.subjectService.find();
+    public async find(@Query('userId') userId: string): Promise<SubjectDto[]> {
+        return this.subjectService.find(userId);
     }
 
     @Get(':id')

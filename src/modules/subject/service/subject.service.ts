@@ -32,9 +32,9 @@ export class SubjectService {
      * @returns Promise<SubjectDto[]> Array of subject DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(): Promise<SubjectDto[]> {
+    public async find(userId: string): Promise<SubjectDto[]> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(RedisPrefix.SUBJECT, 'all');
+            const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(RedisPrefix.SUBJECT, `userId:${userId}`);
             if (cached) {
                 return cached.map((subject) => new SubjectDto(subject));
             }
@@ -42,6 +42,9 @@ export class SubjectService {
             const subjects = await this.prismaService.subject.findMany({
                 orderBy: {
                     order: 'asc',
+                },
+                where: {
+                    userId,
                 },
             });
 

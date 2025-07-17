@@ -59,7 +59,7 @@ export class VocabTrainerService {
                 VocabTrainerQueryParamsInput,
                 Prisma.VocabTrainerWhereInput
             >(query, {
-                stringFields: ['name'],
+                stringFields: ['name', 'userId'],
                 enumFields: ['status', 'questionType'],
             });
 

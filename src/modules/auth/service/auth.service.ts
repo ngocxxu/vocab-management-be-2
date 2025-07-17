@@ -76,6 +76,11 @@ export class AuthService {
                 },
             });
 
+            if (!user) {
+                await this.supabase.auth.admin.deleteUser(supabaseUser.id);
+                throw new Error('User data is missing from Supabase response');
+            }
+
             return new UserDto({
                 ...user,
             });

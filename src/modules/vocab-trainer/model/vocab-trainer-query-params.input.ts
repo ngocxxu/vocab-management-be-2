@@ -11,4 +11,7 @@ export class VocabTrainerQueryParamsInput extends QueryParamsInput {
 
     @ApiProperty({ description: 'Type of questions for this trainer', example: QuestionType.MULTIPLE_CHOICE, enum: QuestionType, required: false })
     public questionType: QuestionType;
+
+    @ApiProperty({ description: 'User ID', example: '1', required: false })
+    public readonly userId: string;
 }

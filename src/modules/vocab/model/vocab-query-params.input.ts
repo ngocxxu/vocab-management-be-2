@@ -19,4 +19,7 @@ export class VocabQueryParamsInput extends QueryParamsInput {
         example: ['subjectId1', 'subjectId2']
     })
     public readonly subjectIds: string[];
+
+    @ApiProperty({ description: 'User ID', example: '1', required: false })
+    public readonly userId: string;
 }
