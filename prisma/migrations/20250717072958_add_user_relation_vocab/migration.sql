@@ -13,10 +13,16 @@ CREATE TYPE "PriorityLevel" AS ENUM ('LOW', 'MEDIUM', 'HIGH');
 -- CreateEnum
 CREATE TYPE "TrainerStatus" AS ENUM ('PENDING', 'IN_PROCESS', 'COMPLETED', 'CANCELLED', 'FAILED', 'PASSED');
 
+-- CreateEnum
+CREATE TYPE "QuestionType" AS ENUM ('MULTIPLE_CHOICE', 'FILL_IN_THE_BLANK', 'MATCHING', 'TRUE_OR_FALSE', 'SHORT_ANSWER');
+
 -- CreateTable
 CREATE TABLE "Vocab" (
     "id" TEXT NOT NULL,
     "textSource" TEXT NOT NULL,
+    "sourceLanguageCode" TEXT NOT NULL,
+    "targetLanguageCode" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -39,14 +45,17 @@ CREATE TABLE "VocabTrainer" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "status" "TrainerStatus" NOT NULL,
-    "reminderTime" INTEGER NOT NULL DEFAULT 0,
     "countTime" INTEGER NOT NULL DEFAULT 0,
     "setCountTime" INTEGER NOT NULL DEFAULT 0,
+    "reminderTime" INTEGER NOT NULL DEFAULT 0,
     "reminderDisabled" BOOLEAN NOT NULL DEFAULT false,
     "reminderRepeat" INTEGER NOT NULL DEFAULT 2,
     "reminderLastRemind" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "questionType" "QuestionType" NOT NULL DEFAULT 'MULTIPLE_CHOICE',
+    "questionAnswers" JSONB[] DEFAULT ARRAY[]::JSONB[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "userId" TEXT NOT NULL,
 
     CONSTRAINT "VocabTrainer_pkey" PRIMARY KEY ("id")
 );
@@ -120,6 +129,7 @@ CREATE TABLE "Subject" (
     "order" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "userId" TEXT NOT NULL,
 
     CONSTRAINT "Subject_pkey" PRIMARY KEY ("id")
 );
@@ -167,8 +177,8 @@ CREATE TABLE "NotificationRecipient" (
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "firstName" TEXT,
-    "lastName" TEXT,
+    "firstName" TEXT NOT NULL,
+    "lastName" TEXT NOT NULL,
     "phone" TEXT,
     "avatar" TEXT,
     "role" "UserRole" NOT NULL DEFAULT 'CUSTOMER',
@@ -190,10 +200,25 @@ CREATE INDEX "Vocab_createdAt_idx" ON "Vocab"("createdAt");
 CREATE INDEX "Vocab_updatedAt_idx" ON "Vocab"("updatedAt");
 
 -- CreateIndex
+CREATE INDEX "Vocab_sourceLanguageCode_idx" ON "Vocab"("sourceLanguageCode");
+
+-- CreateIndex
+CREATE INDEX "Vocab_targetLanguageCode_idx" ON "Vocab"("targetLanguageCode");
+
+-- CreateIndex
+CREATE INDEX "Vocab_sourceLanguageCode_targetLanguageCode_idx" ON "Vocab"("sourceLanguageCode", "targetLanguageCode");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Vocab_textSource_sourceLanguageCode_targetLanguageCode_key" ON "Vocab"("textSource", "sourceLanguageCode", "targetLanguageCode");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Language_code_key" ON "Language"("code");
 
 -- CreateIndex
 CREATE INDEX "Language_name_idx" ON "Language"("name");
+
+-- CreateIndex
+CREATE INDEX "Language_code_idx" ON "Language"("code");
 
 -- CreateIndex
 CREATE INDEX "VocabTrainer_status_idx" ON "VocabTrainer"("status");
@@ -358,6 +383,18 @@ CREATE INDEX "User_firstName_lastName_idx" ON "User"("firstName", "lastName");
 CREATE INDEX "User_phone_idx" ON "User"("phone");
 
 -- AddForeignKey
+ALTER TABLE "Vocab" ADD CONSTRAINT "Vocab_sourceLanguageCode_fkey" FOREIGN KEY ("sourceLanguageCode") REFERENCES "Language"("code") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Vocab" ADD CONSTRAINT "Vocab_targetLanguageCode_fkey" FOREIGN KEY ("targetLanguageCode") REFERENCES "Language"("code") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Vocab" ADD CONSTRAINT "Vocab_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VocabTrainer" ADD CONSTRAINT "VocabTrainer_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "VocabTrainerWord" ADD CONSTRAINT "VocabTrainerWord_vocabTrainerId_fkey" FOREIGN KEY ("vocabTrainerId") REFERENCES "VocabTrainer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -374,6 +411,9 @@ ALTER TABLE "TextTarget" ADD CONSTRAINT "TextTarget_wordTypeId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "VocabExample" ADD CONSTRAINT "VocabExample_textTargetId_fkey" FOREIGN KEY ("textTargetId") REFERENCES "TextTarget"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Subject" ADD CONSTRAINT "Subject_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "TextTargetSubject" ADD CONSTRAINT "TextTargetSubject_textTargetId_fkey" FOREIGN KEY ("textTargetId") REFERENCES "TextTarget"("id") ON DELETE CASCADE ON UPDATE CASCADE;

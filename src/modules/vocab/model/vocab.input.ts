@@ -20,7 +20,7 @@ export class VocabInput extends PickType(VocabDto, [
                 explanationSource: 'Lời chào thân thiện',
                 explanationTarget: 'A friendly greeting',
                 subjectIds: ['cmcvuc64d00002dtxq5tkcl27'],
-                examples: [
+                vocabExamples: [
                     {
                         source: 'Xin chào bạn!',
                         target: 'Hello friend!',
@@ -57,10 +57,10 @@ export class CreateTextTargetInput {
     public readonly subjectIds: string[];
 
     @ApiProperty({
-        description: 'List of examples for this text target',
+        description: 'List of vocabExamples for this text target',
         type: 'array',
         items: { type: 'object' },
         required: false,
     })
-    public readonly examples?: VocabExampleDto[];
+    public readonly vocabExamples?: VocabExampleDto[];
 }

@@ -1,5 +1,0 @@
--- CreateEnum
-CREATE TYPE "QuestionType" AS ENUM ('MULTIPLE_CHOICE', 'FILL_IN_THE_BLANK', 'MATCHING', 'TRUE_OR_FALSE', 'SHORT_ANSWER');
-
--- AlterTable
-ALTER TABLE "VocabTrainer" ADD COLUMN     "questionType" "QuestionType" NOT NULL DEFAULT 'MULTIPLE_CHOICE';

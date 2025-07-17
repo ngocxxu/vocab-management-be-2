@@ -274,6 +274,7 @@ export class VocabTrainerService {
                     reminderDisabled: trainerData.reminderDisabled ?? false,
                     reminderRepeat: trainerData.reminderRepeat ?? 2,
                     reminderLastRemind: trainerData.reminderLastRemind ?? new Date(),
+                    userId: trainerData.userId,
                 },
                 include: {
                     vocabAssignments: true,

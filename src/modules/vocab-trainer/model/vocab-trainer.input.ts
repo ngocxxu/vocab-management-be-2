@@ -31,4 +31,7 @@ export class VocabTrainerInput {
 
     @ApiProperty({ description: 'IDs of vocabs to assign to this trainer', required: false, type: [String] })
     public vocabAssignmentIds?: string[];
+
+    @ApiProperty({ description: 'User ID', example: '1' })
+    public userId: string;
 }

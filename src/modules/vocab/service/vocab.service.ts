@@ -56,7 +56,7 @@ export class VocabService {
                     if (input.subjectIds && Array.isArray(input.subjectIds) && input.subjectIds.length > 0) {
                         (w as Prisma.VocabWhereInput).textTargets = {
                             some: {
-                                subjectAssignments: {
+                                textTargetSubjects: {
                                     some: {
                                         subjectId: { in: input.subjectIds }
                                     }
@@ -77,8 +77,8 @@ export class VocabService {
                         textTargets: {
                             include: {
                                 wordType: true,
-                                examples: true,
-                                subjectAssignments: {
+                                vocabExamples: true,
+                                textTargetSubjects: {
                                     include: {
                                         subject: true,
                                     },
@@ -121,8 +121,8 @@ export class VocabService {
                     textTargets: {
                         include: {
                             wordType: true,
-                            examples: true,
-                            subjectAssignments: {
+                            vocabExamples: true,
+                            textTargetSubjects: {
                                 include: {
                                     subject: true,
                                 },
@@ -153,7 +153,7 @@ export class VocabService {
     }
 
     /**
-     * Create a new vocabulary record with text targets and examples
+     * Create a new vocabulary record with text targets and vocabExamples
      * @param createVocabData - The vocabulary input data
      * @returns Promise<VocabDto> The created vocabulary DTO
      * @throws Error when validation fails
@@ -181,15 +181,15 @@ export class VocabService {
                             grammar: target.grammar,
                             explanationSource: target.explanationSource,
                             explanationTarget: target.explanationTarget,
-                            examples: target.examples
+                            vocabExamples: target.vocabExamples
                                 ? {
-                                      create: target.examples.map((example) => ({
+                                      create: target.vocabExamples.map((example) => ({
                                           source: example.source,
                                           target: example.target,
                                       })),
                                   }
                                 : undefined,
-                            subjectAssignments: target.subjectIds
+                            textTargetSubjects: target.subjectIds
                                 ? {
                                       create: target.subjectIds.map((subjectId: string) => ({
                                           subjectId,
@@ -198,6 +198,7 @@ export class VocabService {
                                 : undefined,
                         })),
                     },
+                    userId: '1',
                 },
                 include: {
                     sourceLanguage: true,
@@ -205,8 +206,8 @@ export class VocabService {
                     textTargets: {
                         include: {
                             wordType: true,
-                            examples: true,
-                            subjectAssignments: {
+                            vocabExamples: true,
+                            textTargetSubjects: {
                                 include: {
                                     subject: true,
                                 },
@@ -277,8 +278,8 @@ export class VocabService {
                     textTargets: {
                         include: {
                             wordType: true,
-                            examples: true,
-                            subjectAssignments: {
+                            vocabExamples: true,
+                            textTargetSubjects: {
                                 include: {
                                     subject: true,
                                 },
@@ -326,8 +327,8 @@ export class VocabService {
                     textTargets: {
                         include: {
                             wordType: true,
-                            examples: true,
-                            subjectAssignments: {
+                            vocabExamples: true,
+                            textTargetSubjects: {
                                 include: {
                                     subject: true,
                                 },

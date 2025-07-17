@@ -17,11 +17,11 @@ export class UserDto {
     @ApiProperty({ description: 'User last update date', example: '2024-01-01T00:00:00.000Z' })
     public readonly updatedAt: Date;
 
-    @ApiProperty({ description: 'User first name', example: 'John', required: false })
-    public readonly firstName?: string;
+    @ApiProperty({ description: 'User first name', example: 'John'})
+    public readonly firstName: string;
 
-    @ApiProperty({ description: 'User last name', example: 'Doe', required: false })
-    public readonly lastName?: string;
+    @ApiProperty({ description: 'User last name', example: 'Doe'})
+    public readonly lastName: string;
 
     @ApiProperty({
         description: 'User avatar URL',
@@ -45,8 +45,8 @@ export class UserDto {
         this.phone = entity.phone ?? undefined;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
-        this.firstName = entity.firstName ?? '';
-        this.lastName = entity.lastName ?? '';
+        this.firstName = entity.firstName;
+        this.lastName = entity.lastName;
         this.avatar = entity.avatar ?? '';
         this.role = entity.role;
         this.isActive = entity.isActive;

@@ -17,6 +17,6 @@ import { EReminderType } from './util';
     providers: [
         ReminderService
     ],
-    exports: []
+    exports: [ReminderService]
 })
 export class ReminderModule { }

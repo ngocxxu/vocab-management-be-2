@@ -113,7 +113,7 @@ export class UserService {
     public async update(updateUserData: UserInput): Promise<UserDto> {
         try {
             const {
-                supabaseUserId,
+                id,
                 email,
                 firstName,
                 lastName,
@@ -124,13 +124,13 @@ export class UserService {
                 password,
             } = updateUserData;
 
-            if (!supabaseUserId) {
+            if (!id) {
                 throw new Error('Supabase user ID is required for update');
             }
 
             // 1. Get current user data
             const existingUser = await this.prismaService.user.findUnique({
-                where: { supabaseUserId },
+                where: { id },
             });
 
             if (!existingUser) {
@@ -138,7 +138,7 @@ export class UserService {
             }
 
             if (password) {
-                const { error } = await this.supabase.auth.admin.updateUserById(supabaseUserId, {
+                const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
                     password,
                 });
                 if (error) {
@@ -148,7 +148,7 @@ export class UserService {
 
             // 2. Update user in Supabase if email is being changed
             if (email && email !== existingUser.email) {
-                const { error } = await this.supabase.auth.admin.updateUserById(supabaseUserId, {
+                const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
                     email,
                 });
 
@@ -170,7 +170,7 @@ export class UserService {
 
             // 4. Update user in local DB
             const user = await this.prismaService.user.update({
-                where: { supabaseUserId },
+                where: { id },
                 data: updateData,
             });
 
@@ -185,16 +185,22 @@ export class UserService {
     /**
      * Delete a user from the database
      */
-    public async delete(supabaseUserId: string): Promise<UserDto> {
+    public async delete(id: string): Promise<UserDto> {
         try {
-            const { error } = await this.supabase.auth.admin.deleteUser(supabaseUserId);
+            const existingUser = await this.prismaService.user.findUnique({
+                where: { id },
+            });
+            if (!existingUser) {
+                throw new Error('User not found');
+            }
+            const { error } = await this.supabase.auth.admin.deleteUser(existingUser.supabaseUserId ?? '');
 
             if (error) {
                 throw new Error(`Supabase delete error: ${error.code}`);
             }
 
             const user = await this.prismaService.user.delete({
-                where: { supabaseUserId },
+                where: { id },
             });
 
             return new UserDto({ ...user });

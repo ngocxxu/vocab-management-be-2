@@ -45,10 +45,10 @@ export class UserPipe extends JoiValidationPipe {
                 'boolean.base': 'isActive must be a boolean value',
             }),
 
-            supabaseUserId: Joi.string().required().max(255).messages({
-                'string.empty': 'Supabase user ID cannot be empty',
-                'string.max': 'Supabase user ID cannot exceed 255 characters',
-                'any.required': 'Supabase user ID is required',
+            id: Joi.string().required().max(255).messages({
+                'string.empty': 'User ID cannot be empty',
+                'string.max': 'User ID cannot exceed 255 characters',
+                'any.required': 'User ID is required',
             }),
         });
     }

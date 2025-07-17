@@ -67,8 +67,8 @@ export class AuthService {
                 data: {
                     email: email ?? supabaseUser.email,
                     supabaseUserId: supabaseUser.id,
-                    firstName,
-                    lastName,
+                    firstName: firstName ?? '',
+                    lastName: lastName ?? '',
                     phone: phone ?? supabaseUser.phone,
                     avatar,
                     role: role ?? UserRole.CUSTOMER, // Use enum value

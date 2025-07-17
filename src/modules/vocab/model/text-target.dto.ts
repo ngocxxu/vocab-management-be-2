@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TextTarget, VocabExample, WordType } from '@prisma/client';
+import { Subject, TextTarget, TextTargetSubject, VocabExample, WordType } from '@prisma/client';
 import { TextTargetSubjectDto, VocabExampleDto, WordTypeDto } from '.';
 
 export class TextTargetDto {
@@ -42,7 +42,7 @@ export class TextTargetDto {
         items: { type: 'object' },
         required: false,
     })
-    public readonly examples?: VocabExampleDto[];
+    public readonly vocabExamples?: VocabExampleDto[];
 
     @ApiProperty({
         description: 'List of subject assignments',
@@ -50,13 +50,13 @@ export class TextTargetDto {
         items: { type: 'object' },
         required: false,
     })
-    public readonly subjectAssignments?: TextTargetSubjectDto[];
+    public readonly textTargetSubjects?: TextTargetSubjectDto[];
 
     public constructor(
         entity: TextTarget & {
             wordType?: WordType;
-            examples?: VocabExample[];
-            subjectAssignments?: TextTargetSubjectDto[];
+            vocabExamples?: VocabExample[];
+            textTargetSubjects?: (TextTargetSubject & { subject?: Subject })[];
         },
     ) {
         this.id = entity.id;
@@ -69,9 +69,9 @@ export class TextTargetDto {
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.wordType = entity.wordType ? new WordTypeDto(entity.wordType) : undefined;
-        this.examples = entity.examples?.map((example) => new VocabExampleDto(example)) ?? [];
-        this.subjectAssignments =
-            entity.subjectAssignments?.map((assignment) => new TextTargetSubjectDto(assignment)) ??
+        this.vocabExamples = entity.vocabExamples?.map((example) => new VocabExampleDto(example)) ?? [];
+        this.textTargetSubjects =
+            entity.textTargetSubjects?.map((assignment) => new TextTargetSubjectDto(assignment)) ??
             [];
     }
 }

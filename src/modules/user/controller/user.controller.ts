@@ -39,14 +39,14 @@ export class UserController {
         return this.userService.find();
     }
 
-    @Get(':supabaseUserId')
+    @Get(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find user by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
-    public async findOne(@Param('supabaseUserId') supabaseUserId: string): Promise<UserDto> {
-        return this.userService.findOne(supabaseUserId);
+    public async findOne(@Param('id') id: string): Promise<UserDto> {
+        return this.userService.findOne(id);
     }
 
     @Post()
@@ -71,20 +71,20 @@ export class UserController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
     public async update(@Body(UserPipe) updateUserData: UserInput): Promise<UserDto> {
         const user = await this.userService.update(updateUserData);
-        this.logger.info(`Updated user with ID ${updateUserData.supabaseUserId}`);
+        this.logger.info(`Updated user with ID ${updateUserData.id}`);
 
         return user;
     }
 
-    @Delete(':supabaseUserId')
+    @Delete(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Delete user' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
-    public async delete(@Param('supabaseUserId') supabaseUserId: string): Promise<UserDto> {
-        const user = await this.userService.delete(supabaseUserId);
-        this.logger.info(`Deleted user with ID ${supabaseUserId}`);
+    public async delete(@Param('id') id: string): Promise<UserDto> {
+        const user = await this.userService.delete(id);
+        this.logger.info(`Deleted user with ID ${id}`);
 
         return user;
     }

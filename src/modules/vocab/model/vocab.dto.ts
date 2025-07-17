@@ -22,6 +22,9 @@ export class VocabDto {
     @ApiProperty({ description: 'Target language details', required: false , type: () => LanguageDto })
     public readonly targetLanguage?: LanguageDto;
 
+    @ApiProperty({ description: 'User ID', example: '1' })
+    public readonly userId: string;
+
     @ApiProperty({ description: 'Date when the vocabulary was created' })
     public readonly createdAt: Date;
 
@@ -47,6 +50,7 @@ export class VocabDto {
         this.textSource = entity.textSource;
         this.sourceLanguageCode = entity.sourceLanguageCode;
         this.targetLanguageCode = entity.targetLanguageCode;
+        this.userId = entity.userId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.sourceLanguage = entity.sourceLanguage

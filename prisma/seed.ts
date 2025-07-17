@@ -1,5 +1,5 @@
 import { Logger, LoggerService } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -11,6 +11,14 @@ type TWordType = {
 type TLanguage = {
     code: string;
     name: string;
+};
+
+type TUser = {
+    email: string;
+    password: string;
+    role: UserRole;
+    firstName: string;
+    lastName: string;
 };
 
 type TSubject = {
@@ -91,6 +99,7 @@ export class DatabaseSeeder {
                 create: {
                     name: subject.name,
                     order: index + 1,
+                    userId: '1',
                 },
             });
 

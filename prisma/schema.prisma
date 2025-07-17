@@ -55,16 +55,19 @@ enum QuestionType {
 }
 
 model Vocab {
-  id                 String             @id @default(cuid())
+  id                 String   @id @default(cuid())
   textSource         String
   sourceLanguageCode String
-  sourceLanguage     Language           @relation("VocabSourceLanguage", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
+  sourceLanguage     Language @relation("VocabSourceLanguage", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
   targetLanguageCode String
-  targetLanguage     Language           @relation("VocabTargetLanguage", fields: [targetLanguageCode], references: [code], onDelete: Cascade)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  trainerAssignments VocabTrainerWord[]
-  textTargets        TextTarget[]
+  targetLanguage     Language @relation("VocabTargetLanguage", fields: [targetLanguageCode], references: [code], onDelete: Cascade)
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  vocabTrainerWords VocabTrainerWord[]
+  textTargets       TextTarget[]
 
   @@unique([textSource, sourceLanguageCode, targetLanguageCode]) // For unique vocab entries
   // Indexes
@@ -110,6 +113,9 @@ model VocabTrainer {
   // Relations
   vocabAssignments VocabTrainerWord[]
   results          VocabTrainerResult[]
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Indexes
   @@index([status]) // For filtering by status
@@ -166,8 +172,8 @@ model TextTarget {
   explanationTarget  String
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
-  examples           VocabExample[]
-  subjectAssignments TextTargetSubject[]
+  vocabExamples      VocabExample[]
+  textTargetSubjects TextTargetSubject[]
 
   @@unique([vocabId, wordTypeId])
   // Indexes
@@ -188,7 +194,7 @@ model VocabExample {
   updatedAt    DateTime   @updatedAt
 
   // Indexes
-  @@index([textTargetId]) // For querying target's examples
+  @@index([textTargetId]) // For querying target's vocabExamples
   @@index([textTargetId, createdAt]) // For pagination within target
   @@index([source]) // For searching source text
   @@index([target]) // For searching target text
@@ -207,12 +213,14 @@ model WordType {
 }
 
 model Subject {
-  id                    String              @id @default(cuid())
-  name                  String              @unique
-  order                 Int
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  textTargetAssignments TextTargetSubject[]
+  id                 String              @id @default(cuid())
+  name               String              @unique
+  order              Int
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  textTargetSubjects TextTargetSubject[]
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Indexes
   @@index([order]) // For ordering subjects
@@ -236,16 +244,16 @@ model TextTargetSubject {
 }
 
 model Notification {
-  id                    String                  @id @default(cuid())
-  type                  NotificationType
-  action                NotificationAction
-  priority              PriorityLevel
-  data                  Json
-  isActive              Boolean                 @default(true)
-  expiresAt             DateTime
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  recipientAsssignments NotificationRecipient[]
+  id                     String                  @id @default(cuid())
+  type                   NotificationType
+  action                 NotificationAction
+  priority               PriorityLevel
+  data                   Json
+  isActive               Boolean                 @default(true)
+  expiresAt              DateTime
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  notificationRecipients NotificationRecipient[]
 
   // Indexes
   @@index([type, isActive]) // For filtering by type and active status
@@ -278,18 +286,21 @@ model NotificationRecipient {
 }
 
 model User {
-  id                      String                  @id @default(cuid())
-  email                   String                  @unique
-  firstName               String?
-  lastName                String?
-  phone                   String?
-  avatar                  String?
-  role                    UserRole                @default(CUSTOMER)
-  isActive                Boolean                 @default(true)
-  supabaseUserId          String?                 @unique // For Supabase integration
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
-  notificationAssignments NotificationRecipient[]
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  firstName              String
+  lastName               String
+  phone                  String?
+  avatar                 String?
+  role                   UserRole                @default(CUSTOMER)
+  isActive               Boolean                 @default(true)
+  supabaseUserId         String?                 @unique // For Supabase integration
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  notificationRecipients NotificationRecipient[]
+  vocabs                 Vocab[]
+  vocabTrainers          VocabTrainer[]
+  subjects               Subject[]
 
   // Indexes
   @@index([role, isActive]) // For filtering users by role and status

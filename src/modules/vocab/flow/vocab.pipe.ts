@@ -91,7 +91,7 @@ export class VocabPipe extends JoiValidationPipe {
                                 'any.required': 'Subject IDs are required',
                             }),
 
-                        examples: Joi.array()
+                        vocabExamples: Joi.array()
                             .items(
                                 Joi.object({
                                     source: Joi.string()

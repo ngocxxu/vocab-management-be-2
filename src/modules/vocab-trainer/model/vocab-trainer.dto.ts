@@ -35,6 +35,9 @@ export class VocabTrainerDto {
     @ApiProperty({ description: 'Last reminder date' })
     public reminderLastRemind: Date;
 
+    @ApiProperty({ description: 'User ID', example: '1' })
+    public userId: string;
+
     @ApiProperty({ description: 'Created at' })
     public createdAt: Date;
 
@@ -77,6 +80,7 @@ export class VocabTrainerDto {
         this.reminderDisabled = entity.reminderDisabled;
         this.reminderRepeat = entity.reminderRepeat;
         this.reminderLastRemind = entity.reminderLastRemind;
+        this.userId = entity.userId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.vocabAssignments = entity.vocabAssignments?.map(

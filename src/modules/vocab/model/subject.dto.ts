@@ -11,6 +11,9 @@ export class SubjectDto {
     @ApiProperty({ description: 'Display order', example: 1 })
     public order: number;
 
+    @ApiProperty({ description: 'User ID', example: '1' })
+    public userId: string;
+
     @ApiProperty({ description: 'Date when the subject was created' })
     public readonly createdAt: Date;
 

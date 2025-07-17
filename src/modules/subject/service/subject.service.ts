@@ -122,6 +122,7 @@ export class SubjectService {
                 data: {
                     name,
                     order: newOrder,
+                    userId: '1',
                 },
             });
 

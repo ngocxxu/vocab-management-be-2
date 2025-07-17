@@ -2,7 +2,7 @@ import { ApiProperty, PickType } from '@nestjs/swagger';
 import { UserDto } from './user.dto';
 
 export class UserInput extends PickType(UserDto, [
-    'supabaseUserId',
+    'id',
     'email',
     'avatar',
     'firstName',
