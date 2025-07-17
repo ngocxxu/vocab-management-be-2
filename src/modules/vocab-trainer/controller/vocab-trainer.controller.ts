@@ -13,9 +13,10 @@ import {
     Patch,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { QuestionType, UserRole } from '@prisma/client';
+import { QuestionType, User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
+import { CurrentUser } from '../../common/decorator/user.decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
 import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
@@ -67,9 +68,9 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Submit exam' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
-    public async submitExam(@Param('id') id: string, @Body() input: SubmitMultipleChoiceInput): Promise<VocabTrainerDto> {
+    public async submitExam(@Param('id') id: string, @Body() input: SubmitMultipleChoiceInput, @CurrentUser() user: User): Promise<VocabTrainerDto> {
         if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
-            return this.vocabTrainerService.submitMultipleChoice(id, input);
+            return this.vocabTrainerService.submitMultipleChoice(id, input, user);
         }
         else {
             throw new BadRequestException('Question type is not suitable');

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
@@ -175,6 +175,7 @@ export class VocabTrainerService {
     public async submitMultipleChoice(
         id: string,
         input: SubmitMultipleChoiceInput,
+        user: User,
     ): Promise<VocabTrainerDto> {
         try {
             const trainer = (await this.prismaService.vocabTrainer.findUnique({
@@ -205,48 +206,55 @@ export class VocabTrainerService {
                 scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
 
             if (overallStatus === TrainerStatus.PASSED) {
+                const reminderRepeatNext = trainer.reminderRepeat * 2;
+                const reminderDisabled = reminderRepeatNext >= Number(EReminderRepeat.MAX_REPEAT);
+
                 await this.prismaService.vocabTrainer.update({
                     where: { id: trainer.id },
                     data: {
                         reminderRepeat: Math.min(
-                            trainer.reminderRepeat * 2,
+                            reminderRepeatNext,
                             Number(EReminderRepeat.MAX_REPEAT),
                         ),
                         reminderLastRemind: new Date(),
-                        reminderDisabled:
-                            trainer.reminderRepeat * 2 >= Number(EReminderRepeat.MAX_REPEAT),
+                        reminderDisabled,
                     },
                 });
 
                 const sendData = {
                     data: {
-                        firstName: 'Ngoc',
-                        lastName: 'Quach',
+                        firstName: user.firstName,
+                        lastName: user.lastName,
                         testName: trainer.name,
-                        repeatDays: (trainer.reminderRepeat * 2).toString(),
+                        repeatDays: reminderRepeatNext.toString(),
                         examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
                     },
                 };
 
                 // ----------------------Schedule reminder----------------------
-                const lastRemindDate =
-                    trainer.reminderLastRemind instanceof Date
-                        ? trainer.reminderLastRemind
-                        : new Date(trainer.reminderLastRemind);
+                if (!reminderDisabled) {
+                    const lastRemindDate =
+                        trainer.reminderLastRemind instanceof Date
+                            ? trainer.reminderLastRemind
+                            : new Date(trainer.reminderLastRemind);
 
-                const reminderIntervalDays = trainer.reminderRepeat * 2;
-                const nextReminderTime = new Date(
-                    lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
-                );
-                const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
+                    const reminderIntervalDays = trainer.reminderRepeat * 2;
+                    const nextReminderTime = new Date(
+                        lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
+                    );
+                    const delayInMs = Math.max(
+                        0,
+                        nextReminderTime.getTime() - new Date().getTime(),
+                    );
 
-                await this.reminderService.scheduleReminder(
-                    'ngocquach4397@gmail.com',
-                    'Vocab Trainer',
-                    EEmailTemplate.TEST_REMINDER,
-                    sendData.data,
-                    delayInMs,
-                );
+                    await this.reminderService.scheduleReminder(
+                        user.email,
+                        'Vocab Trainer',
+                        EEmailTemplate.TEST_REMINDER,
+                        sendData.data,
+                        delayInMs,
+                    );
+                }
             }
 
             // Update trainer status if needed

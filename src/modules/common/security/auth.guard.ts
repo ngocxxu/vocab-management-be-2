@@ -1,14 +1,16 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { User as CurrentUser } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { createClient, SupabaseClient,User } from '@supabase/supabase-js';
 import { FastifyRequest } from 'fastify';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { PrismaErrorHandler } from '../handler/error.handler';
-import { LoggerService } from '../provider';
+import { LoggerService, PrismaService } from '../provider';
 
 interface RequestWithUser extends FastifyRequest {
     user: User;
+    currentUser: CurrentUser;
 }
 
 @Injectable()
@@ -17,6 +19,7 @@ export class AuthGuard implements CanActivate {
     public constructor(
         private readonly reflector: Reflector,
         private readonly logger: LoggerService,
+        private readonly prismaService: PrismaService,
     ) {
         this.supabase = createClient(
             process.env.SUPABASE_URL ?? '',
@@ -57,7 +60,14 @@ export class AuthGuard implements CanActivate {
                 throw new UnauthorizedException('Invalid or expired token');
             }
 
+            const currentUser = await this.prismaService.user.findUnique({
+                where: {
+                    supabaseUserId: user.id ?? '',
+                },
+            });
+
             request.user = user;
+            request.currentUser = currentUser as unknown as CurrentUser;
             return true;
         } catch (err) {
             if (err instanceof PrismaClientKnownRequestError) {
