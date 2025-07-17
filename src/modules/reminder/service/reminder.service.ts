@@ -1,7 +1,7 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
-import { EmailJobData, ReminderData } from '../../email/util/type';
+import { EmailJobData, TemplateData } from '../../email/util/type';
 import { EEmailReminderType, EReminderType } from '../util';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class ReminderService {
     @InjectQueue(EReminderType.EMAIL_REMINDER) private readonly emailQueue: Queue,
   ) {}
 
-  public async sendImmediateReminder(userEmail: string, reminderType: string, data: ReminderData) {
+  public async sendImmediateReminder(userEmail: string, reminderType: string, data: TemplateData) {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
@@ -18,7 +18,7 @@ export class ReminderService {
     });
   }
 
-  public async scheduleReminder(userEmail: string, reminderType: string, data: ReminderData, delayInMs: number) {
+  public async scheduleReminder(userEmail: string, reminderType: string, data: TemplateData, delayInMs: number) {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
@@ -28,7 +28,7 @@ export class ReminderService {
     });
   }
 
-  public async scheduleRecurringReminder(userEmail: string, reminderType: string, data: ReminderData, cronPattern: string) {
+  public async scheduleRecurringReminder(userEmail: string, reminderType: string, data: TemplateData, cronPattern: string) {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,

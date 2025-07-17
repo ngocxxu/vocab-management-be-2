@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { CommonModule } from '../common';
+import { EmailProcessor } from './processor/email.processor';
 import { EmailService } from './service';
 
 @Module({
@@ -8,7 +9,8 @@ import { EmailService } from './service';
         CommonModule,
     ],
     providers: [
-        EmailService
+        EmailService,
+        EmailProcessor
     ],
     exports: []
 })
