@@ -4,7 +4,9 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
+import { EmailModule } from './email/email.module';
 import { LanguageModule } from './language/language.module';
+import { ReminderModule } from './reminder/reminder.module';
 import { EReminderType } from './reminder/util';
 import { SubjectModule } from './subject/subject.module';
 import { UserModule } from './user/user.module';
@@ -14,6 +16,15 @@ import { WordTypeModule } from './word-type/word-type.module';
 
 @Module({
     imports: [
+        BullModule.forRoot({
+            redis: {
+                host: process.env.REDIS_HOST,
+                port: Number(process.env.REDIS_PORT),
+            },
+        }),
+        BullModule.registerQueue({
+            name: EReminderType.EMAIL_REMINDER,
+        }),
         CommonModule,
         AuthModule,
         UserModule,
@@ -22,15 +33,8 @@ import { WordTypeModule } from './word-type/word-type.module';
         WordTypeModule,
         VocabModule,
         VocabTrainerModule,
-        BullModule.forRoot({
-            redis: {
-                host: 'localhost',
-                port: 6379,
-            },
-        }),
-        BullModule.registerQueue({
-            name: EReminderType.EMAIL_REMINDER,
-        }),
+        ReminderModule,
+        EmailModule,
     ],
     providers: [
         {

@@ -20,7 +20,7 @@ export class EmailService {
 
   public async sendReminderEmail(userEmail: string, reminderType: string, data: ReminderData) {
     await this.transporter.sendMail({
-      from: '"Your App" <noreply@yourapp.com>',
+      from: '"Vocab Management" <noreply@vocab-management.com>',
       to: userEmail,
       subject: `Reminder: ${reminderType}`,
       html: `

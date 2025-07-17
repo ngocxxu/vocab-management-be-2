@@ -1,7 +1,7 @@
-import { Controller, Post, Body, HttpStatus, UseGuards, LoggerService } from '@nestjs/common';
+import { Controller, Post, Body, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { RolesGuard } from '../../common';
+import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
 import { RecurringReminderInput, ScheduleReminderInput, SendReminderInput } from '../model';
 import { ReminderService } from '../service';
@@ -25,7 +25,7 @@ export class ReminderController {
 
     await this.reminderService.sendImmediateReminder(userEmail, reminderType, data);
 
-    this.logger.log(`Immediate reminder sent to ${userEmail} with reminder type: ${reminderType}`);
+    this.logger.info(`Immediate reminder sent to ${userEmail} with reminder type: ${reminderType}`);
 
     return { message: 'Immediate reminder sent' };
   }
@@ -47,7 +47,7 @@ export class ReminderController {
       delayInMs
     );
 
-    this.logger.log(`Reminder scheduled successfully for ${userEmail} with reminder type: ${reminderType}`);
+    this.logger.info(`Reminder scheduled successfully for ${userEmail} with reminder type: ${reminderType}`);
 
     return { message: 'Reminder scheduled successfully' };
   }
@@ -67,7 +67,7 @@ export class ReminderController {
       cronPattern
     );
 
-    this.logger.log(`Recurring reminder scheduled for ${userEmail} with reminder type: ${reminderType}`);
+    this.logger.info(`Recurring reminder scheduled for ${userEmail} with reminder type: ${reminderType}`);
 
     return { message: 'Recurring reminder scheduled' };
   }
