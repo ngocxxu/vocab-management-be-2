@@ -34,7 +34,6 @@ export class ReminderService {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
-      templateName,
       data,
     }, {
       repeat: { pattern: cronPattern },

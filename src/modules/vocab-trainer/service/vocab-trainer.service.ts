@@ -5,12 +5,14 @@ import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
+import { ReminderService } from '../../reminder/service';
+import { EEmailTemplate } from '../../reminder/util';
 import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerDto } from '../model/vocab-trainer.dto';
 import { VocabTrainerInput } from '../model/vocab-trainer.input';
-import { createQuestion, getRandomElements, evaluateMultipleChoiceAnswers } from '../util';
+import { createQuestion, evaluateMultipleChoiceAnswers, getRandomElements } from '../util';
 import { EReminderRepeat, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util/type';
 
 @Injectable()
@@ -28,7 +30,10 @@ export class VocabTrainerService {
         },
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(
+        private readonly prismaService: PrismaService,
+        private readonly reminderService: ReminderService,
+    ) {}
 
     /**
      * Find all vocab trainers in the database (paginated)
@@ -212,6 +217,23 @@ export class VocabTrainerService {
                             trainer.reminderRepeat * 2 >= Number(EReminderRepeat.MAX_REPEAT),
                     },
                 });
+
+                const sendData = {
+                    data: {
+                        firstName: 'Ngoc',
+                        lastName: 'Quach',
+                        testName: trainer.name,
+                        repeatDays: (trainer.reminderRepeat * 2).toString(),
+                        examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
+                    },
+                };
+
+                await this.reminderService.sendImmediateReminder(
+                    'ngocquach4397@gmail.com',
+                    'Vocab Trainer',
+                    EEmailTemplate.TEST_REMINDER,
+                    sendData.data,
+                );
             }
 
             // Update trainer status if needed
