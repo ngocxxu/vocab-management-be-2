@@ -20,15 +20,15 @@ export class SignUpInput {
 
     @ApiPropertyOptional({
         description: 'User avatar URL',
-        example: 'https://example.com/avatar.jpg',
+        example: 'https://i.pravatar.cc/300?img=test',
     })
     public readonly avatar?: string;
 
     @ApiPropertyOptional({
         description: 'User role',
         enum: ['CUSTOMER', 'ADMIN', 'STAFF'],
-        example: 'STAFF',
-        default: 'STAFF',
+        example: 'ADMIN',
+        default: 'ADMIN',
     })
     public readonly role?: UserRole;
 }

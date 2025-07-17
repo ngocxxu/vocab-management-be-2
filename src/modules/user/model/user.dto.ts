@@ -25,7 +25,7 @@ export class UserDto {
 
     @ApiProperty({
         description: 'User avatar URL',
-        example: 'https://example.com/avatar.jpg',
+        example: 'https://i.pravatar.cc/300?img=test',
         required: false,
     })
     public readonly avatar?: string;
