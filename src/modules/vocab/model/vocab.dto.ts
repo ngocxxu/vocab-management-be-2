@@ -22,7 +22,7 @@ export class VocabDto {
     @ApiProperty({ description: 'Target language details', required: false , type: () => LanguageDto })
     public readonly targetLanguage?: LanguageDto;
 
-    @ApiProperty({ description: 'User ID', example: '1' })
+    @ApiProperty({ description: 'User ID', example: 'string' })
     public readonly userId: string;
 
     @ApiProperty({ description: 'Date when the vocabulary was created' })

@@ -29,7 +29,7 @@ export class NotificationService {
         try {
             const notifications = await this.prismaService.notification.findMany({
                 include: {
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         include: {
                             user: {
                                 select: {
@@ -71,7 +71,7 @@ export class NotificationService {
                     expiresAt: {
                         gt: new Date(),
                     },
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         some: {
                             userId,
                             isDeleted: includeDeleted ? undefined : false,
@@ -79,7 +79,7 @@ export class NotificationService {
                     },
                 },
                 include: {
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         where: {
                             userId,
                         },
@@ -117,7 +117,7 @@ export class NotificationService {
             const notification = await this.prismaService.notification.findUnique({
                 where: { id },
                 include: {
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         include: {
                             user: true,
                         },
@@ -166,14 +166,14 @@ export class NotificationService {
                     data,
                     isActive,
                     expiresAt,
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         create: recipientUserIds.map((userId) => ({
                             userId,
                         })),
                     },
                 },
                 include: {
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         include: {
                             user: true,
                         },
@@ -233,7 +233,7 @@ export class NotificationService {
                 where: { id },
                 data: updateData,
                 include: {
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         include: {
                             user: true,
                         },
@@ -360,7 +360,7 @@ export class NotificationService {
             const notification = await this.prismaService.notification.delete({
                 where: { id },
                 include: {
-                    recipientAsssignments: {
+                    notificationRecipients: {
                         include: {
                             user: true,
                         },

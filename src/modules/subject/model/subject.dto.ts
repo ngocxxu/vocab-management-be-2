@@ -17,7 +17,7 @@ export class SubjectDto {
     @ApiProperty({ description: 'Date when the subject was last updated' })
     public readonly updatedAt: Date;
 
-    @ApiProperty({ description: 'User ID', example: '1' })
+    @ApiProperty({ description: 'User ID', example: 'string' })
     public readonly userId: string;
 
     public constructor(entity: Subject) {

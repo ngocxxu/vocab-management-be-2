@@ -16,10 +16,10 @@ export class VocabQueryParamsInput extends QueryParamsInput {
         type: 'array',
         items: { type: 'string' },
         required: false,
-        example: ['subjectId1', 'subjectId2']
+        example: ['Game']
     })
     public readonly subjectIds: string[];
 
-    @ApiProperty({ description: 'User ID', example: '1', required: false })
+    @ApiProperty({ description: 'User ID', example: 'string', required: false })
     public readonly userId: string;
 }

@@ -59,7 +59,7 @@ export class NotificationDto {
 
     public constructor(
         entity: Notification & {
-            recipientAsssignments?: (NotificationRecipient & { user?: User })[];
+            notificationRecipients?: (NotificationRecipient & { user?: User })[];
         },
     ) {
         this.id = entity.id;
@@ -71,7 +71,7 @@ export class NotificationDto {
         this.expiresAt = entity.expiresAt;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
-        this.recipients = entity.recipientAsssignments?.map(
+        this.recipients = entity.notificationRecipients?.map(
             (recipient) => new NotificationRecipientDto(recipient),
         );
     }

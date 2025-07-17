@@ -35,7 +35,7 @@ export class VocabTrainerDto {
     @ApiProperty({ description: 'Last reminder date' })
     public reminderLastRemind: Date;
 
-    @ApiProperty({ description: 'User ID', example: '1' })
+    @ApiProperty({ description: 'User ID', example: 'string' })
     public userId: string;
 
     @ApiProperty({ description: 'Created at' })

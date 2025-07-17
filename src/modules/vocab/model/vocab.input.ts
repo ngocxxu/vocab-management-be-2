@@ -33,7 +33,7 @@ export class VocabInput extends PickType(VocabDto, [
 
     @ApiProperty({
         description: 'User ID',
-        example: '1',
+        example: 'string',
     })
     public readonly userId: string;
 }
