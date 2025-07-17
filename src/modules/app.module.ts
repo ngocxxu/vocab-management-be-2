@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
 import { LanguageModule } from './language/language.module';
+import { EReminderType } from './reminder/util';
 import { SubjectModule } from './subject/subject.module';
 import { UserModule } from './user/user.module';
 import { VocabModule } from './vocab/vocab.module';
@@ -28,7 +29,7 @@ import { WordTypeModule } from './word-type/word-type.module';
             },
         }),
         BullModule.registerQueue({
-            name: 'vocab-trainer-reminder',
+            name: EReminderType.EMAIL_REMINDER,
         }),
     ],
     providers: [

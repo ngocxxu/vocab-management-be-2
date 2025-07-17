@@ -18,8 +18,7 @@ import { Roles } from '../../common/decorator/roles.decorator';
 import {
     NotificationDto,
     NotificationInput,
-    UpdateNotificationInput,
-    UpdateNotificationStatusInput,
+    UpdateNotificationStatusInput
 } from '../model';
 import { NotificationService } from '../service';
 
@@ -99,7 +98,7 @@ export class NotificationController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
     public async update(
         @Param('id') id: string,
-        @Body() updateNotificationData: UpdateNotificationInput,
+        @Body() updateNotificationData: Partial<NotificationInput>,
     ): Promise<NotificationDto> {
         const notification = await this.notificationService.update(id, updateNotificationData);
         this.logger.info(`Updated notification with ID ${id}`);
