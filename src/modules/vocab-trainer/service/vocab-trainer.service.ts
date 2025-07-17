@@ -228,11 +228,24 @@ export class VocabTrainerService {
                     },
                 };
 
-                await this.reminderService.sendImmediateReminder(
+                // ----------------------Schedule reminder----------------------
+                const lastRemindDate =
+                    trainer.reminderLastRemind instanceof Date
+                        ? trainer.reminderLastRemind
+                        : new Date(trainer.reminderLastRemind);
+
+                const reminderIntervalDays = trainer.reminderRepeat * 2;
+                const nextReminderTime = new Date(
+                    lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
+                );
+                const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
+
+                await this.reminderService.scheduleReminder(
                     'ngocquach4397@gmail.com',
                     'Vocab Trainer',
                     EEmailTemplate.TEST_REMINDER,
                     sendData.data,
+                    delayInMs,
                 );
             }
 

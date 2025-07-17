@@ -1,11 +1,12 @@
+import { EEmailTemplate } from '../../reminder/util';
 import { TemplateData } from '../util/type';
 
 export class EmailTemplates {
     private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map(
         [
-            ['reminder', (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
-            ['test-reminder', (data: TemplateData) => EmailTemplates.testReminderTemplate(data)],
-            ['welcome', (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
+            [EEmailTemplate.REMINDER, (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
+            [EEmailTemplate.TEST_REMINDER, (data: TemplateData) => EmailTemplates.testReminderTemplate(data)],
+            [EEmailTemplate.WELCOME, (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
         ],
     );
 
