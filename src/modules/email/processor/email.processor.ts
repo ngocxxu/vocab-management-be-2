@@ -10,10 +10,10 @@ export class EmailProcessor {
 
   @Process('send_reminder')
   public async handleReminderEmail(job: Job<EmailJobData>) {
-    const { userEmail, reminderType, data } = job.data;
+    const { userEmail, reminderType, templateName, data } = job.data;
 
     try {
-      await this.emailService.sendReminderEmail(userEmail, reminderType, data);
+      await this.emailService.sendReminderEmail(userEmail, reminderType, templateName, data);
       this.logger.info(`Email sent successfully to ${userEmail} with reminder type: ${reminderType}`);
     } catch (error) {
       this.logger.error(`Failed to send email: ${error}`);

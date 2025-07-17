@@ -1,6 +1,28 @@
 import { TemplateData } from '../util/type';
 
 export class EmailTemplates {
+    private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map(
+        [
+            ['reminder', (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
+            ['test-reminder', (data: TemplateData) => EmailTemplates.testReminderTemplate(data)],
+            ['welcome', (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
+        ],
+    );
+
+    public static render(templateName: string, data: TemplateData): string {
+        const templateFunction = this.templateRegistry.get(templateName);
+
+        if (!templateFunction) {
+            throw new Error(
+                `Template '${templateName}' not found. Available templates: ${Array.from(
+                    this.templateRegistry.keys(),
+                ).join(', ')}`,
+            );
+        }
+
+        return templateFunction(data);
+    }
+
     public static testReminderTemplate(data: TemplateData): string {
         return `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -39,7 +61,7 @@ export class EmailTemplates {
             </div>
           </div>
         `;
-      }
+    }
 
     public static reminderTemplate(data: TemplateData): string {
         return `

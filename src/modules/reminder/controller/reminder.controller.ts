@@ -21,9 +21,9 @@ export class ReminderController {
   @ApiOperation({ summary: 'Send immediate reminder' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Immediate reminder sent' })
   public async sendImmediateReminder(@Body() body: SendReminderInput) {
-    const { userEmail, reminderType, data } = body;
+    const { userEmail, reminderType, templateName, data } = body;
 
-    await this.reminderService.sendImmediateReminder(userEmail, reminderType, data);
+    await this.reminderService.sendImmediateReminder(userEmail, reminderType, templateName, data);
 
     this.logger.info(`Immediate reminder sent to ${userEmail} with reminder type: ${reminderType}`);
 
@@ -36,13 +36,14 @@ export class ReminderController {
   @ApiOperation({ summary: 'Schedule reminder' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Reminder scheduled successfully' })
   public async scheduleReminder(@Body() body: ScheduleReminderInput) {
-    const { userEmail, reminderType, data, scheduleTime } = body;
+    const { userEmail, reminderType, templateName, data, scheduleTime } = body;
 
     const delayInMs = new Date(scheduleTime).getTime() - Date.now();
 
     await this.reminderService.scheduleReminder(
       userEmail,
       reminderType,
+      templateName,
       data,
       delayInMs
     );
@@ -58,11 +59,12 @@ export class ReminderController {
   @ApiOperation({ summary: 'Schedule recurring reminder' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Recurring reminder scheduled' })
   public async scheduleRecurringReminder(@Body() body: RecurringReminderInput) {
-    const { userEmail, reminderType, data, cronPattern } = body;
+    const { userEmail, reminderType, templateName, data, cronPattern } = body;
 
     await this.reminderService.scheduleRecurringReminder(
       userEmail,
       reminderType,
+      templateName,
       data,
       cronPattern
     );

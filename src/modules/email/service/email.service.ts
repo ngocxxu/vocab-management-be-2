@@ -32,15 +32,20 @@ export class EmailService {
         }
     }
 
-    public async sendReminderEmail(userEmail: string, reminderType: string, data: TemplateData) {
+    public async sendReminderEmail(
+        userEmail: string,
+        reminderType: string,
+        templateName: string,
+        data: TemplateData,
+    ) {
         try {
-            this.logger.log(`📤 Sending email to: ${userEmail}`);
+            this.logger.log(`📤 Sending ${templateName} email to: ${userEmail}`);
 
             const result = await this.transporter.sendMail({
                 from: '"Vocab Management" <noreply@vocab-management.com>',
                 to: userEmail,
                 subject: `[Reminder]: ${reminderType}`,
-                html: EmailTemplates.testReminderTemplate(data),
+                html: EmailTemplates.render(templateName, data), // ← Dynamic template
             });
 
             return result;

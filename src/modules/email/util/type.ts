@@ -1,6 +1,7 @@
 export interface EmailJobData {
   userEmail: string;
   reminderType: string;
+  templateName: string;
   data: TemplateData;
 }
 

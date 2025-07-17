@@ -10,28 +10,31 @@ export class ReminderService {
     @InjectQueue(EReminderType.EMAIL_REMINDER) private readonly emailQueue: Queue,
   ) {}
 
-  public async sendImmediateReminder(userEmail: string, reminderType: string, data: TemplateData) {
+  public async sendImmediateReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData) {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
+      templateName,
       data,
     });
   }
 
-  public async scheduleReminder(userEmail: string, reminderType: string, data: TemplateData, delayInMs: number) {
+  public async scheduleReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData, delayInMs: number) {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
+      templateName,
       data,
     }, {
       delay: delayInMs,
     });
   }
 
-  public async scheduleRecurringReminder(userEmail: string, reminderType: string, data: TemplateData, cronPattern: string) {
+  public async scheduleRecurringReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData, cronPattern: string) {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
+      templateName,
       data,
     }, {
       repeat: { pattern: cronPattern },
