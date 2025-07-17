@@ -176,7 +176,7 @@ export class SendNotificationToRoleInput {
     @ApiProperty({
         description: 'User role to send notification to',
         enum: ['ADMIN', 'STAFF', 'CUSTOMER'],
-        example: 'CUSTOMER',
+        example: 'STAFF',
     })
     public readonly role: string;
 

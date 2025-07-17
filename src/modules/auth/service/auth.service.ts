@@ -49,7 +49,7 @@ export class AuthService {
                 password,
                 options: {
                     data: {
-                        role: role ?? UserRole.CUSTOMER,
+                        role: role ?? UserRole.STAFF,
                     },
                 },
             });
@@ -71,7 +71,7 @@ export class AuthService {
                     lastName: lastName ?? '',
                     phone: phone ?? supabaseUser.phone,
                     avatar,
-                    role: role ?? UserRole.CUSTOMER, // Use enum value
+                    role: role ?? UserRole.STAFF, // Use enum value
                     isActive: true,
                 },
             });

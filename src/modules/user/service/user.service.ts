@@ -94,7 +94,7 @@ export class UserService {
                     lastName,
                     phone: phone ?? supabaseUser.phone,
                     avatar,
-                    role: role ?? UserRole.CUSTOMER, // Use enum value
+                    role: role ?? UserRole.STAFF, // Use enum value
                     isActive: true,
                 },
             });
