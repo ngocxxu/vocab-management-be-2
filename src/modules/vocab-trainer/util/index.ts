@@ -77,4 +77,3 @@ export function evaluateMultipleChoiceAnswers(
 
   return { wordResults, createResults, correctAnswers };
 }
-

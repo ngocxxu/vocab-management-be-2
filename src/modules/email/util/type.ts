@@ -6,5 +6,5 @@ export interface EmailJobData {
 }
 
 export interface TemplateData {
-  [key: string]: string;
+  [key: string]: string | number;
 }

@@ -8,6 +8,7 @@ import { EEmailReminderType, EReminderType } from '../util';
 export class ReminderService {
   public constructor(
     @InjectQueue(EReminderType.EMAIL_REMINDER) private readonly emailQueue: Queue,
+    @InjectQueue(EReminderType.NOTIFICATION) private readonly notificationQueue: Queue,
   ) {}
 
   public async sendImmediateReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData) {
@@ -34,9 +35,28 @@ export class ReminderService {
     await this.emailQueue.add(EEmailReminderType.SEND_REMINDER, {
       userEmail,
       reminderType,
+      templateName,
       data,
     }, {
       repeat: { pattern: cronPattern },
+    });
+  }
+
+  public async sendImmediateCreateNotification(recipientUserIds: string[], reminderType: string, data: TemplateData) {
+    await this.notificationQueue.add(EEmailReminderType.SEND_CREATE_NOTIFICATION, {
+      recipientUserIds,
+      reminderType,
+      data,
+    });
+  }
+
+  public async scheduleCreateNotification(recipientUserIds: string[], reminderType: string, data: TemplateData, delayInMs: number) {
+    await this.notificationQueue.add(EEmailReminderType.SEND_CREATE_NOTIFICATION, {
+      recipientUserIds,
+      reminderType,
+      data,
+    }, {
+      delay: delayInMs,
     });
   }
 

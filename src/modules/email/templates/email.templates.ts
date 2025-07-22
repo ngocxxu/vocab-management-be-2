@@ -5,7 +5,7 @@ export class EmailTemplates {
     private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map(
         [
             [EEmailTemplate.REMINDER, (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
-            [EEmailTemplate.TEST_REMINDER, (data: TemplateData) => EmailTemplates.testReminderTemplate(data)],
+            [EEmailTemplate.EXAM_REMINDER, (data: TemplateData) => EmailTemplates.examReminderTemplate(data)],
             [EEmailTemplate.WELCOME, (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
         ],
     );
@@ -24,7 +24,7 @@ export class EmailTemplates {
         return templateFunction(data);
     }
 
-    public static testReminderTemplate(data: TemplateData): string {
+    public static examReminderTemplate(data: TemplateData): string {
         return `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">

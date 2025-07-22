@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { PrismaService } from '../../common/provider/prisma.provider';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { ReminderService } from '../../reminder/service';
-import { EEmailTemplate } from '../../reminder/util';
+import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
@@ -221,7 +221,8 @@ export class VocabTrainerService {
                     },
                 });
 
-                const sendData = {
+                // ----------------------Schedule reminder----------------------
+                const sendDataReminder = {
                     data: {
                         firstName: user.firstName,
                         lastName: user.lastName,
@@ -231,7 +232,13 @@ export class VocabTrainerService {
                     },
                 };
 
-                // ----------------------Schedule reminder----------------------
+                const sendDataNotification = {
+                    data: {
+                        trainerName: trainer.name,
+                        scorePercentage,
+                    },
+                };
+
                 if (!reminderDisabled) {
                     const lastRemindDate =
                         trainer.reminderLastRemind instanceof Date
@@ -249,13 +256,40 @@ export class VocabTrainerService {
 
                     await this.reminderService.scheduleReminder(
                         user.email,
-                        'Vocab Trainer',
-                        EEmailTemplate.TEST_REMINDER,
-                        sendData.data,
+                        EReminderTitle.VOCAB_TRAINER,
+                        EEmailTemplate.EXAM_REMINDER,
+                        sendDataReminder.data,
+                        delayInMs,
+                    );
+
+                    await this.reminderService.scheduleCreateNotification(
+                        [user.id],
+                        EReminderTitle.VOCAB_TRAINER,
+                        sendDataNotification.data,
                         delayInMs,
                     );
                 }
             }
+
+            // ----------------------Create notification----------------------
+            await this.prismaService.notification.create({
+                data: {
+                    type: NotificationType.VOCAB_TRAINER,
+                    action: NotificationAction.CREATE,
+                    priority: scorePercentage >= 70 ? PriorityLevel.LOW : PriorityLevel.MEDIUM,
+                    data: {
+                        trainerName: trainer.name,
+                        scorePercentage,
+                    },
+                    expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
+                    isActive: true,
+                    notificationRecipients: {
+                        create: {
+                            userId: user.id,
+                        },
+                    },
+                },
+            });
 
             // Update trainer status if needed
             const result = await this.prismaService.vocabTrainer.update({

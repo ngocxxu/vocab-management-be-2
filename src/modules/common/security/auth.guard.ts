@@ -1,17 +1,12 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { User as CurrentUser } from '@prisma/client';
+import { User } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { createClient, SupabaseClient,User } from '@supabase/supabase-js';
-import { FastifyRequest } from 'fastify';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { PrismaErrorHandler } from '../handler/error.handler';
 import { LoggerService, PrismaService } from '../provider';
-
-interface RequestWithUser extends FastifyRequest {
-    user: User;
-    currentUser: CurrentUser;
-}
+import { RequestWithUser } from '../util/type';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -67,7 +62,7 @@ export class AuthGuard implements CanActivate {
             });
 
             request.user = user;
-            request.currentUser = currentUser as unknown as CurrentUser;
+            request.currentUser = currentUser as User;
             return true;
         } catch (err) {
             if (err instanceof PrismaClientKnownRequestError) {

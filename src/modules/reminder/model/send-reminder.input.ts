@@ -9,7 +9,7 @@ export class SendReminderInput {
     @ApiProperty({ description: 'Reminder type', example: 'daily', required: true })
     public readonly reminderType: string;
 
-    @ApiProperty({ description: 'Template name', example: EEmailTemplate.TEST_REMINDER, required: true })
+    @ApiProperty({ description: 'Template name', example: EEmailTemplate.EXAM_REMINDER, required: true })
     public readonly templateName: string;
 
     @ApiProperty({ description: 'Reminder data', example: { userName: 'John Doe', dueDate: '2025-01-01' }, required: true })

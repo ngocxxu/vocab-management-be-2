@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
-import { RecurringReminderInput, ScheduleReminderInput, SendReminderInput } from '../model';
+import { CreateNotificationReminderInput, RecurringReminderInput, ScheduleReminderInput, SendReminderInput } from '../model';
 import { ReminderService } from '../service';
 
 @Controller('reminders')
@@ -72,5 +72,20 @@ export class ReminderController {
     this.logger.info(`Recurring reminder scheduled for ${userEmail} with reminder type: ${reminderType}`);
 
     return { message: 'Recurring reminder scheduled' };
+  }
+
+  @Post('create-notification')
+  @UseGuards(RolesGuard)
+  @Roles([UserRole.ADMIN, UserRole.STAFF])
+  @ApiOperation({ summary: 'Send create notification' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Create notification sent' })
+  public async sendCreateNotification(@Body() body: CreateNotificationReminderInput) {
+    const { recipientUserIds, reminderType, data } = body;
+
+    await this.reminderService.sendImmediateCreateNotification(recipientUserIds, reminderType, data);
+
+    this.logger.info(`Create notification sent to ${recipientUserIds.join(', ')} with reminder type: ${reminderType}`);
+
+    return { message: 'Create notification sent' };
   }
 }

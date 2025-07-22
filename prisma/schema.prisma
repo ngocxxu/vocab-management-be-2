@@ -29,6 +29,7 @@ enum NotificationAction {
   DELETE
   MULTI_CREATE
   MULTI_DELETE
+  REMIND
 }
 
 enum PriorityLevel {

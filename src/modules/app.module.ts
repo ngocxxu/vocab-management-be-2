@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
 import { EmailModule } from './email/email.module';
 import { LanguageModule } from './language/language.module';
+import { NotificationModule } from './notification/notification.module';
 import { ReminderModule } from './reminder/reminder.module';
 import { EReminderType } from './reminder/util';
 import { SubjectModule } from './subject/subject.module';
@@ -25,6 +26,9 @@ import { WordTypeModule } from './word-type/word-type.module';
         BullModule.registerQueue({
             name: EReminderType.EMAIL_REMINDER,
         }),
+        BullModule.registerQueue({
+            name: EReminderType.NOTIFICATION,
+        }),
         CommonModule,
         AuthModule,
         UserModule,
@@ -33,6 +37,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         WordTypeModule,
         VocabModule,
         VocabTrainerModule,
+        NotificationModule,
         ReminderModule,
         EmailModule,
     ],

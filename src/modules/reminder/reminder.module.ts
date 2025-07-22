@@ -12,6 +12,9 @@ import { EReminderType } from './util';
         BullModule.registerQueue({
             name: EReminderType.EMAIL_REMINDER,
         }),
+        BullModule.registerQueue({
+            name: EReminderType.NOTIFICATION,
+        }),
     ],
     controllers: [ReminderController],
     providers: [

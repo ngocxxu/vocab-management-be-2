@@ -1,14 +1,15 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Job } from 'bullmq';
 import { LoggerService } from '../../common';
+import { EEmailReminderType, EReminderType } from '../../reminder/util';
 import { EmailService } from '../service';
 import { EmailJobData } from '../util/type';
 
-@Processor('email_reminder')
+@Processor(EReminderType.EMAIL_REMINDER)
 export class EmailProcessor {
   public constructor(private readonly emailService: EmailService, private readonly logger: LoggerService) {}
 
-  @Process('send_reminder')
+  @Process(EEmailReminderType.SEND_REMINDER)
   public async handleReminderEmail(job: Job<EmailJobData>) {
     const { userEmail, reminderType, templateName, data } = job.data;
 
