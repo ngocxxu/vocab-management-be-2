@@ -12,6 +12,8 @@
     "build": "npm run clean && tsc",
     "test": "env-cmd -f .env jest --config=jest.json",
     "lint": "eslint -c .eslintrc.js --ext .ts 'src/**/*.ts'",
+    "prisma": "prisma migrate dev && prisma generate && prisma db seed",
+    "prisma:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
     "db:migrate": "prisma migrate dev",

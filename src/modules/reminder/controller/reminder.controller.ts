@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator/roles.decorator';
-import { CreateNotificationReminderInput, RecurringReminderInput, ScheduleReminderInput, SendReminderInput } from '../model';
+import { CancelReminderInput, CreateNotificationReminderInput, RecurringReminderInput, ScheduleReminderInput, SendReminderInput } from '../model';
 import { ReminderService } from '../service';
 
 @Controller('reminders')
@@ -74,12 +74,12 @@ export class ReminderController {
     return { message: 'Recurring reminder scheduled' };
   }
 
-  @Post('create-notification')
+  @Post('immediate/create-notification')
   @UseGuards(RolesGuard)
   @Roles([UserRole.ADMIN, UserRole.STAFF])
   @ApiOperation({ summary: 'Send create notification' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Create notification sent' })
-  public async sendCreateNotification(@Body() body: CreateNotificationReminderInput) {
+  public async sendImmediateCreateNotification(@Body() body: CreateNotificationReminderInput) {
     const { recipientUserIds, reminderType, data } = body;
 
     await this.reminderService.sendImmediateCreateNotification(recipientUserIds, reminderType, data);
@@ -87,5 +87,37 @@ export class ReminderController {
     this.logger.info(`Create notification sent to ${recipientUserIds.join(', ')} with reminder type: ${reminderType}`);
 
     return { message: 'Create notification sent' };
+  }
+
+  @Post('schedule/create-notification')
+  @UseGuards(RolesGuard)
+  @Roles([UserRole.ADMIN, UserRole.STAFF])
+  @ApiOperation({ summary: 'Schedule create notification' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Create notification scheduled' })
+  public async scheduleCreateNotification(@Body() body: CreateNotificationReminderInput) {
+    const { recipientUserIds, reminderType, data, scheduleTime } = body;
+
+    const delayInMs = new Date(scheduleTime).getTime() - Date.now();
+
+    await this.reminderService.scheduleCreateNotification(recipientUserIds, reminderType, data, delayInMs);
+
+    this.logger.info(`Create notification scheduled for ${recipientUserIds.join(', ')} with reminder type: ${reminderType}`);
+
+    return { message: 'Create notification scheduled' };
+  }
+
+  @Post('cancel')
+  @UseGuards(RolesGuard)
+  @Roles([UserRole.ADMIN, UserRole.STAFF])
+  @ApiOperation({ summary: 'Cancel reminder' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Reminder cancelled' })
+  public async cancelReminder(@Body() body: CancelReminderInput) {
+    const { jobId } = body;
+
+    await this.reminderService.cancelReminder(jobId);
+
+    this.logger.info(`Reminder cancelled with job id: ${jobId}`);
+
+    return { message: 'Reminder cancelled' };
   }
 }
