@@ -5,7 +5,6 @@ import {
     Get,
     Headers,
     HttpStatus,
-    Inject,
     Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -40,7 +39,6 @@ import { AuthService } from '../service';
 @ApiTags('authentication')
 export class AuthController {
     public constructor(
-        @Inject()
         private readonly logger: LoggerService,
         private readonly authService: AuthService,
     ) {}

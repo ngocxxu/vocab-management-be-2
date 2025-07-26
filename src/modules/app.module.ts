@@ -9,6 +9,7 @@ import { LanguageModule } from './language/language.module';
 import { NotificationModule } from './notification/notification.module';
 import { ReminderModule } from './reminder/reminder.module';
 import { EReminderType } from './reminder/util';
+import { SSEModule } from './sse/sse.module';
 import { SubjectModule } from './subject/subject.module';
 import { UserModule } from './user/user.module';
 import { VocabModule } from './vocab/vocab.module';
@@ -40,6 +41,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         NotificationModule,
         ReminderModule,
         EmailModule,
+        SSEModule,
     ],
     providers: [
         {

@@ -4,7 +4,6 @@ import {
     Delete,
     Get,
     HttpStatus,
-    Inject,
     Param,
     Post,
     Put,
@@ -25,7 +24,6 @@ import { UserService } from '../service';
 @ApiBearerAuth()
 export class UserController {
     public constructor(
-        @Inject()
         private readonly logger: LoggerService,
         private readonly userService: UserService,
     ) {}
