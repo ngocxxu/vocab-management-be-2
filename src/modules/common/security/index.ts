@@ -1,5 +1,6 @@
-export { RestrictedGuard } from './restricted.guard';
-export { GuestGuard } from './guest.guard';
-export { AuthGuard } from './auth.guard';
-export { RolesGuard } from './roles.guard';
+export * from './restricted.guard';
+export * from './guest.guard';
+export * from './auth.guard';
+export * from './roles.guard';
 export * from './security-utils';
+export * from './health.guard';
