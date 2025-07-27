@@ -15,7 +15,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { QuestionType, User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator/roles.decorator';
+import { Roles } from '../../common/decorator';
 import { CurrentUser } from '../../common/decorator/user.decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';

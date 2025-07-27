@@ -12,9 +12,9 @@ import { SSEService } from '../service/sse.service';
 export class SSEController {
     public constructor(private readonly sseService: SSEService) {}
 
-    @Get('notifications')
+    @Get('events')
     @UseGuards(AuthGuard)
-    @ApiOperation({ summary: 'Establish SSE connection for notifications' })
+    @ApiOperation({ summary: 'Establish SSE connection for events' })
     @ApiResponse({ status: HttpStatus.OK, description: 'SSE connection established' })
     public connect(
         @Res() response: FastifyReply,

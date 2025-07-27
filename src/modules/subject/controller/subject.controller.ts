@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator/roles.decorator';
+import { Roles } from '../../common/decorator';
 import { SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
 import { SubjectService } from '../service';

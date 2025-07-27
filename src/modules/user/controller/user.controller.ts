@@ -14,7 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { UserRole } from '@prisma/client';
 import { LoggerService, RestrictedGuard, RolesGuard } from '../../common';
 
-import { Roles } from '../../common/decorator/roles.decorator';
+import { Roles } from '../../common/decorator';
 import { UserPipe } from '../flow';
 import { UserDto, UserInput } from '../model';
 import { UserService } from '../service';

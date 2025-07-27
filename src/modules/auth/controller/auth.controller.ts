@@ -11,7 +11,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 
 import { UserResponse } from '@supabase/supabase-js';
 import { LoggerService } from '../../common';
-import { Public } from '../../common/decorator/public.decorator';
+import { Public } from '../../common/decorator';
 import { UserDto } from '../../user/model';
 import {
     OAuthPipe,

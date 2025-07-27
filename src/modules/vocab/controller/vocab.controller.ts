@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator/roles.decorator';
+import { Roles } from '../../common/decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabDto, VocabInput } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';

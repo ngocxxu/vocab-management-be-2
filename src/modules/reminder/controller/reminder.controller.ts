@@ -2,7 +2,7 @@ import { Controller, Post, Body, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator/roles.decorator';
+import { Roles } from '../../common/decorator';
 import { CancelReminderInput, CreateNotificationReminderInput, RecurringReminderInput, ScheduleReminderInput, SendReminderInput } from '../model';
 import { ReminderService } from '../service';
 
