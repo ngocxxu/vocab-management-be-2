@@ -4,8 +4,9 @@ import { Job } from 'bullmq';
 import { LoggerService } from '../../common';
 import { EEmailReminderType, EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import { SSEPublisherService } from '../../sse/service';
+import { SSE_EVENT_TYPES } from '../../sse/util';
 import { NotificationService } from '../service';
-import { NotificationJobData } from '../util/type';
+import { NotificationJobData } from '../util';
 
 @Processor(EReminderType.NOTIFICATION)
 export class NotificationProcessor {
@@ -31,12 +32,16 @@ export class NotificationProcessor {
       });
 
       // Publish notification event via SSE
-      this.ssePublisher.publishNotification(
-        notification.id,
-        notification.type,
-        notification.action,
-        notification.priority,
-        notification.data as Record<string, unknown>,
+      this.ssePublisher.publishCustomEvent(
+        SSE_EVENT_TYPES.NOTIFICATION_CREATED,
+        {
+          id: notification.id,
+          type: notification.type,
+          action: notification.action,
+          priority: notification.priority,
+          data: notification.data,
+          timestamp: notification.createdAt.toISOString(),
+        },
         recipientUserIds,
       );
 

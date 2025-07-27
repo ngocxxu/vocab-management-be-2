@@ -1,4 +1,4 @@
-import { TemplateData } from '../../common/util/type';
+import { TemplateData } from '../../common/util/type.util';
 
 export interface NotificationJobData {
   reminderType: string;

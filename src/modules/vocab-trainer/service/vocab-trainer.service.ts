@@ -1,19 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
-import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { PaginationDto } from '../../common/model/pagination.dto';
-import { PrismaService } from '../../common/provider/prisma.provider';
-import { getOrderBy, getPagination } from '../../common/util/pagination.util';
-import { buildPrismaWhere } from '../../common/util/query-builder.util';
+import { PrismaErrorHandler } from '../../common/handler';
+import { PaginationDto } from '../../common/model';
+import { PrismaService } from '../../common/provider';
+import { getOrderBy, getPagination } from '../../common/util';
+import { buildPrismaWhere } from '../../common/util';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
-import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
-import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
-import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
-import { VocabTrainerDto } from '../model/vocab-trainer.dto';
-import { VocabTrainerInput } from '../model/vocab-trainer.input';
+import { SubmitMultipleChoiceInput, UpdateVocabTrainerInput, VocabTrainerDto, VocabTrainerInput, VocabTrainerQueryParamsInput } from '../model';
+import { EReminderRepeat, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util';
 import { createQuestion, evaluateMultipleChoiceAnswers, getRandomElements } from '../util';
-import { EReminderRepeat, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util/type';
 
 @Injectable()
 export class VocabTrainerService {

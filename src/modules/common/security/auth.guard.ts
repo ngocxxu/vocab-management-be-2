@@ -6,7 +6,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { PrismaErrorHandler } from '../handler/error.handler';
 import { LoggerService, PrismaService } from '../provider';
-import { RequestWithUser } from '../util/type';
+import { RequestWithUser } from '../util/type.util';
 
 @Injectable()
 export class AuthGuard implements CanActivate {

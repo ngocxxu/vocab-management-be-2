@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { WordTestSelect } from '../util/type';
-import { SubmitExamInput } from './submit-exam';
+import { WordTestSelect } from '../util/type.util';
+import { SubmitExamInput } from './submit-exam.dto';
 
 export class SubmitMultipleChoiceInput extends SubmitExamInput {
     @ApiProperty({

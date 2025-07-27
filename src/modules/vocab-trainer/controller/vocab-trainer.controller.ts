@@ -19,7 +19,7 @@ import { Roles } from '../../common/decorator';
 import { CurrentUser } from '../../common/decorator/user.decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
-import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice';
+import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice.dto';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerService } from '../service';
