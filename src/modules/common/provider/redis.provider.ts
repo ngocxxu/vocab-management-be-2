@@ -22,6 +22,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
                 maxRetriesPerRequest: this.configService.get('redis.maxRetriesPerRequest'),
                 enableReadyCheck: this.configService.get('redis.enableReadyCheck'),
                 lazyConnect: true,
+                username: this.configService.get('redis.username'),
+                tls: this.configService.get('redis.tls'),
             });
 
             this.redisClient.on('connect', () => {
