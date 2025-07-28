@@ -13,19 +13,44 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     public async onModuleInit() {
         try {
-            this.redisClient = new Redis({
-                host: this.configService.get('redis.host'),
-                port: this.configService.get('redis.port'),
-                password: this.configService.get('redis.password'),
-                db: this.configService.get('redis.db'),
-                retryStrategy: () => this.configService.get('redis.retryDelayOnFailover'),
-                maxRetriesPerRequest: this.configService.get('redis.maxRetriesPerRequest'),
-                enableReadyCheck: this.configService.get('redis.enableReadyCheck'),
-                lazyConnect: true,
-                username: this.configService.get('redis.username'),
-                tls: this.configService.get('redis.tls'),
-            });
+            // Check if we should use Upstash (production) or local Redis
+            const useUpstash = process.env.SWITCH_REDIS === 'true' || process.env.NODE_ENV === 'production';
 
+            if (useUpstash) {
+                // Use Upstash Redis (production)
+                const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
+                if (!redisUrl) {
+                    throw new Error('REDIS_URL or UPSTASH_REDIS_URL environment variable is required for production');
+                }
+
+                this.redisClient = new Redis(redisUrl, {
+                    lazyConnect: true,
+                    retryStrategy: (times: number) => {
+                        const delay = Math.min(times * 50, 2000);
+                        return delay;
+                    },
+                    maxRetriesPerRequest: 3,
+                    enableReadyCheck: true,
+                });
+
+                this.logger.info('Using Upstash Redis (production configuration)');
+            } else {
+                // Use local Redis (development)
+                this.redisClient = new Redis({
+                    host: this.configService.get('redis.host'),
+                    port: this.configService.get('redis.port'),
+                    password: this.configService.get('redis.password'),
+                    db: this.configService.get('redis.db'),
+                    retryStrategy: () => this.configService.get('redis.retryDelayOnFailover'),
+                    maxRetriesPerRequest: this.configService.get('redis.maxRetriesPerRequest'),
+                    enableReadyCheck: this.configService.get('redis.enableReadyCheck'),
+                    lazyConnect: true,
+                });
+
+                this.logger.info('Using local Redis (development configuration)');
+            }
+
+            // Set up event listeners
             this.redisClient.on('connect', () => {
                 this.logger.info('Redis client connected');
             });
@@ -38,7 +63,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
                 this.logger.info('Redis client ready');
             });
 
-            await this.redisClient.connect();
+            this.redisClient.on('close', () => {
+                this.logger.error('Redis client connection closed');
+            });
+
+            this.redisClient.on('reconnecting', () => {
+                this.logger.info('Redis client reconnecting...');
+            });
+
+            // Connect to Redis (only if not already connected)
+            if (!this.redisClient.status || this.redisClient.status === 'end') {
+                await this.redisClient.connect();
+            }
         } catch (error: unknown) {
             if (error instanceof Error) {
                 this.logger.error(`Failed to connect to Redis: ${error.message}`);

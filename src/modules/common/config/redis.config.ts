@@ -10,6 +10,4 @@ export const redisConfig = registerAs('redis', () => ({
   enableReadyCheck: process.env.REDIS_ENABLE_READY_CHECK === 'true',
   maxMemoryPolicy: process.env.REDIS_MAX_MEMORY_POLICY || 'allkeys-lru',
   ttl: parseInt(process.env.REDIS_TTL || '3600', 10), // 1 hour default
-  username: process.env.REDIS_USERNAME || 'default',
-  tls: {}
 }));
