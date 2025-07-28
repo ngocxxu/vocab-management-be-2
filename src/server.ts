@@ -68,7 +68,12 @@ async function bootstrap(): Promise<void> {
     const logInterceptor = app.select(CommonModule).get(LogInterceptor);
     app.useGlobalInterceptors(logInterceptor);
 
-    await app.listen(process.env.API_PORT || API_DEFAULT_PORT);
+    const port = process.env.API_PORT || API_DEFAULT_PORT;
+    const host = '0.0.0.0';
+    await app.listen(port, host);
+
+    // eslint-disable-next-line no-console
+    console.info(`Application is running on: http://${host}:${port}`);
 }
 
 /**
