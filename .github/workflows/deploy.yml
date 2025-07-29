@@ -38,6 +38,6 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             cd /root/vocab-be
-            docker-compose pull
-            docker-compose up -d
+            docker compose pull app
+            docker compose up -d app
             docker image prune -f
