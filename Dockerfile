@@ -45,7 +45,4 @@ COPY --from=builder --chown=node:node /home/node/node_modules/ ./node_modules/
 COPY --from=builder --chown=node:node /home/node/dist/ ./dist/
 COPY --from=builder --chown=node:node /home/node/prisma/ ./prisma/
 
-# Install Prisma CLI for production
-RUN pnpm add prisma
-
 CMD ["node", "dist/server.js"]
