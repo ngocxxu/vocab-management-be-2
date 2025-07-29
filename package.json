@@ -20,7 +20,7 @@
     "db:generate": "prisma generate"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "node prisma/seed.ts"
   },
   "dependencies": {
     "@fastify/helmet": "^11.1.1",
