@@ -44,4 +44,7 @@ COPY --from=builder --chown=node:node /home/node/pnpm-lock.yaml ./
 COPY --from=builder --chown=node:node /home/node/node_modules/ ./node_modules/
 COPY --from=builder --chown=node:node /home/node/dist/ ./dist/
 
+# Install Prisma CLI for production
+RUN pnpm add prisma
+
 CMD ["node", "dist/server.js"]
