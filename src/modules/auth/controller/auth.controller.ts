@@ -92,7 +92,7 @@ export class AuthController {
         this.logger.info(`User signed in successfully with email: ${email}`);
 
         // Set refresh token in cookie using the utility
-        await CookieUtil.setAuthCookie(response, result.refreshToken);
+        CookieUtil.setAuthCookie(response, result.refreshToken);
 
         return result.session;
     }
@@ -168,7 +168,7 @@ export class AuthController {
         const result = await this.authService.refreshSession(refreshToken);
 
         // Set new secure HTTP-only cookies using the utility
-        await CookieUtil.setAuthCookie(response, result.refreshToken);
+        CookieUtil.setAuthCookie(response, result.refreshToken);
 
         this.logger.info('Session refreshed successfully');
 
@@ -190,7 +190,7 @@ export class AuthController {
         const result = await this.authService.signOut();
 
         // Clear authentication cookies using the utility
-        await CookieUtil.clearAuthCookie(response);
+        CookieUtil.clearAuthCookie(response);
 
         this.logger.info('User signed out successfully');
 
