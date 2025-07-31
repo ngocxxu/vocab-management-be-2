@@ -6,11 +6,14 @@ import {
     Headers,
     HttpStatus,
     Post,
+    Res,
+    UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-
 import { UserResponse } from '@supabase/supabase-js';
-import { LoggerService } from '../../common';
+import { FastifyReply } from 'fastify';
+
+import { LoggerService, CookieUtil } from '../../common';
 import { Public } from '../../common/decorator';
 import { UserDto } from '../../user/model';
 import {
@@ -82,13 +85,16 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Authentication failed',
     })
-    public async signIn(@Body(SignInPipe) input: SignInInput): Promise<SessionDto> {
+    public async signIn(@Body(SignInPipe) input: SignInInput, @Res({ passthrough: true }) response: FastifyReply): Promise<SessionDto> {
         const { email, password } = input;
 
         const result = await this.authService.signIn(email, password);
         this.logger.info(`User signed in successfully with email: ${email}`);
 
-        return result;
+        // Set refresh token in cookie using the utility
+        await CookieUtil.setAuthCookie(response, result.refreshToken);
+
+        return result.session;
     }
 
     @Post('oauth')
@@ -147,13 +153,26 @@ export class AuthController {
     })
     public async refreshSession(
         @Body(RefreshTokenPipe) input: RefreshTokenInput,
+        @Res({ passthrough: true }) response: FastifyReply,
     ): Promise<SessionDto> {
-        const { refreshToken } = input;
+        // Try to get refresh token from cookies first, then from request body
+        const refreshToken = input.refreshToken;
+
+        // For now, only use the refresh token from the request body
+        // TODO: Add cookie support for refresh tokens
+
+        if (!refreshToken) {
+            throw new UnauthorizedException('Refresh token not found');
+        }
 
         const result = await this.authService.refreshSession(refreshToken);
+
+        // Set new secure HTTP-only cookies using the utility
+        await CookieUtil.setAuthCookie(response, result.refreshToken);
+
         this.logger.info('Session refreshed successfully');
 
-        return result;
+        return result.session;
     }
 
     @Post('signout')
@@ -167,8 +186,12 @@ export class AuthController {
         status: HttpStatus.BAD_REQUEST,
         description: 'Sign out failed',
     })
-    public async signOut() {
+    public async signOut(@Res({ passthrough: true }) response: FastifyReply) {
         const result = await this.authService.signOut();
+
+        // Clear authentication cookies using the utility
+        await CookieUtil.clearAuthCookie(response);
+
         this.logger.info('User signed out successfully');
 
         return result;

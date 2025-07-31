@@ -2,25 +2,22 @@ import { BadRequestException, Injectable, Logger, UnauthorizedException } from '
 import { UserRole } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { AuthError, createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
-import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { PrismaService } from '../../common/provider';
 import { UserDto } from '../../user/model';
 import { OAuthResponseDto, SessionDto } from '../model';
+import { SignInResponse } from '../util';
 
 @Injectable()
 export class AuthService {
     private readonly logger = new Logger(AuthService.name);
     private readonly supabase: SupabaseClient;
 
-    // Custom error mapping for Auth operations
     private readonly authErrorMapping = {
-        invalid_credentials: 'Invalid email or password',
-        email_not_confirmed: 'Email not confirmed. Please check your email for confirmation link',
-        signup_disabled: 'Sign up is currently disabled',
-        email_address_invalid: 'Invalid email address format',
-        password_too_short: 'Password must be at least 6 characters long',
-        token_expired: 'Token has expired',
-        invalid_token: 'Invalid or malformed token',
+        'Invalid login credentials': 'Invalid email or password',
+        'Email not confirmed': 'Please confirm your email before signing in',
+        'User not found': 'User not found',
+        'Invalid refresh token': 'Invalid refresh token',
     };
 
     public constructor(private readonly prismaService: PrismaService) {
@@ -81,16 +78,7 @@ export class AuthService {
                 throw new Error('User data is missing from Supabase response');
             }
 
-            // 3. Update User ID in Supabase
-            await this.supabase.auth.admin.updateUserById(supabaseUser.id, {
-                user_metadata: {
-                    user_id: user.id,
-                },
-            });
-
-            return new UserDto({
-                ...user,
-            });
+            return new UserDto(user);
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -106,7 +94,7 @@ export class AuthService {
     public async signIn(
         email: string,
         password: string,
-    ): Promise<{ session: SessionDto; refreshToken: string }> {
+    ): Promise<SignInResponse> {
         try {
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
@@ -185,7 +173,7 @@ export class AuthService {
     /**
      * Refresh user session
      */
-    public async refreshSession(refreshToken: string): Promise<SessionDto> {
+    public async refreshSession(refreshToken: string): Promise<SignInResponse> {
         try {
             const { data, error } = await this.supabase.auth.refreshSession({
                 refresh_token: refreshToken,
@@ -198,7 +186,10 @@ export class AuthService {
                 throw new UnauthorizedException('No session data returned');
             }
 
-            return new SessionDto(data.session);
+            return {
+                session: new SessionDto(data.session),
+                refreshToken: data.session.refresh_token,
+            };
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -207,6 +198,7 @@ export class AuthService {
             throw new UnauthorizedException('Session refresh failed');
         }
     }
+
     /**
      * Sign out current user
      */
@@ -218,7 +210,7 @@ export class AuthService {
                 this.handleAuthError(error, 'signOut');
             }
 
-            return { message: 'Signed out successfully' };
+            return { message: 'User signed out successfully' };
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -241,7 +233,7 @@ export class AuthService {
                 this.handleAuthError(error, 'resetPassword');
             }
 
-            return { message: 'Password reset email sent' };
+            return { message: 'Password reset email sent successfully' };
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -297,7 +289,7 @@ export class AuthService {
                 this.handleAuthError(error, 'resendConfirmation');
             }
 
-            return { message: 'Password reset email sent' };
+            return { message: 'Confirmation email resent successfully' };
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -312,27 +304,9 @@ export class AuthService {
      */
     private handleAuthError(error: unknown, operation: string): void {
         if (error instanceof AuthError) {
-            const errorMessage =
-                this.authErrorMapping[error.code as keyof typeof this.authErrorMapping] ??
-                error.code;
-            this.logger.error(`${operation} error:`, error);
-
-            if (
-                error.code?.includes('invalid_credentials') ||
-                error.code?.includes('user_not_found') ||
-                error.code?.includes('token_expired') ||
-                error.code?.includes('invalid_token')
-            ) {
-                throw new UnauthorizedException(errorMessage);
-            }
-            throw new BadRequestException(errorMessage);
+            const message = this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] || error.message;
+            throw new UnauthorizedException(message);
         }
-
-        // Handle other types of errors
-        if (error instanceof Error) {
-            throw new Error(`Database operation failed: ${error.message}`);
-        }
-
-        throw new Error('An unexpected error occurred');
+        throw new UnauthorizedException(`Authentication ${operation} failed`);
     }
 }

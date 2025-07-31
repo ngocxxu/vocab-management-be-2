@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { FastifyRequest } from 'fastify';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { PrismaErrorHandler } from '../handler/error.handler';
 import { LoggerService, PrismaService } from '../provider';
@@ -31,17 +32,13 @@ export class AuthGuard implements CanActivate {
             return true;
         }
 
-        const request = context.switchToHttp().getRequest<RequestWithUser>();
-        const header = request.headers.authorization;
+        const request = context.switchToHttp().getRequest<RequestWithUser & FastifyRequest>();
 
-        if (!header) {
-            return false;
-        }
-
-        const token = this.extractTokenFromHeader(header);
+        // Get token from Authorization header
+        const token = this.extractTokenFromHeader(request.headers.authorization);
 
         if (!token) {
-            throw new UnauthorizedException('Token not found');
+            return false;
         }
 
         try {
@@ -72,7 +69,8 @@ export class AuthGuard implements CanActivate {
             throw new UnauthorizedException('Token verification failed');
         }
     }
-    private extractTokenFromHeader(header: string): string | null {
+
+    private extractTokenFromHeader(header: string | undefined): string | null {
         if (!header?.startsWith('Bearer ')) {
             return null;
         }
