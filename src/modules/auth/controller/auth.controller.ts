@@ -142,6 +142,7 @@ export class AuthController {
     }
 
     @Post('refresh')
+    @ApiBearerAuth()
     @ApiOperation({ summary: 'Refresh user session' })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -157,9 +158,6 @@ export class AuthController {
     ): Promise<SessionDto> {
         // Try to get refresh token from cookies first, then from request body
         const refreshToken = input.refreshToken;
-
-        // For now, only use the refresh token from the request body
-        // TODO: Add cookie support for refresh tokens
 
         if (!refreshToken) {
             throw new UnauthorizedException('Refresh token not found');
@@ -198,6 +196,7 @@ export class AuthController {
     }
 
     @Post('reset-password')
+    @Public()
     @ApiOperation({ summary: 'Send password reset email' })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -217,6 +216,7 @@ export class AuthController {
     }
 
     @Post('verify-otp')
+    @Public()
     @ApiOperation({ summary: 'Verify OTP token' })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -236,6 +236,7 @@ export class AuthController {
     }
 
     @Post('resend-confirmation')
+    @Public()
     @ApiOperation({ summary: 'Resend confirmation email' })
     @ApiResponse({
         status: HttpStatus.OK,

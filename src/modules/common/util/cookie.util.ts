@@ -43,11 +43,4 @@ export class CookieUtil {
         newCookies.push(cookieValue);
         response.raw.setHeader('Set-Cookie', newCookies as string[]);
     }
-
-    /**
-     * Get cookie name for external use
-     */
-    public static getCookieName(): string {
-        return this.COOKIE_NAME;
-    }
 }
