@@ -26,7 +26,6 @@ export class SessionDto {
     public readonly user: UserDto;
 
     public constructor(entity: Session) {
-        this.access_token = entity.access_token;
         this.expires_in = entity.expires_in;
         this.expires_at = entity.expires_at?.toString() ?? '';
         this.token_type = entity.token_type;

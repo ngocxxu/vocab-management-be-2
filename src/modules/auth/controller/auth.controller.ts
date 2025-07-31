@@ -91,8 +91,8 @@ export class AuthController {
         const result = await this.authService.signIn(email, password);
         this.logger.info(`User signed in successfully with email: ${email}`);
 
-        // Set refresh token in cookie using the utility
-        CookieUtil.setAuthCookie(response, result.refreshToken);
+        // Set both access and refresh token cookies
+        CookieUtil.setAuthCookies(response, result.session.access_token, result.refreshToken);
 
         return result.session;
     }
@@ -156,7 +156,7 @@ export class AuthController {
         @Body(RefreshTokenPipe) input: RefreshTokenInput,
         @Res({ passthrough: true }) response: FastifyReply,
     ): Promise<SessionDto> {
-        // Try to get refresh token from cookies first, then from request body
+        // Try to get refresh token from request body first, then from cookies
         const refreshToken = input.refreshToken;
 
         if (!refreshToken) {
@@ -166,7 +166,7 @@ export class AuthController {
         const result = await this.authService.refreshSession(refreshToken);
 
         // Set new secure HTTP-only cookies using the utility
-        CookieUtil.setAuthCookie(response, result.refreshToken);
+        CookieUtil.setAuthCookies(response, result.session.access_token, result.refreshToken);
 
         this.logger.info('Session refreshed successfully');
 

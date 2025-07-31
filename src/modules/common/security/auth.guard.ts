@@ -7,6 +7,7 @@ import { FastifyRequest } from 'fastify';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { PrismaErrorHandler } from '../handler/error.handler';
 import { LoggerService, PrismaService } from '../provider';
+import { CookieUtil } from '../util/cookie.util';
 import { RequestWithUser } from '../util/type.util';
 
 @Injectable()
@@ -34,8 +35,13 @@ export class AuthGuard implements CanActivate {
 
         const request = context.switchToHttp().getRequest<RequestWithUser & FastifyRequest>();
 
-        // Get token from Authorization header
-        const token = this.extractTokenFromHeader(request.headers.authorization);
+        // Try to get token from cookies first, then from Authorization header
+        let token = this.extractTokenFromCookies(request.headers.cookie);
+
+        if (!token) {
+            // Fallback to Authorization header
+            token = this.extractTokenFromHeader(request.headers.authorization);
+        }
 
         if (!token) {
             return false;
@@ -76,5 +82,23 @@ export class AuthGuard implements CanActivate {
         }
         const [, token] = header.split(' ');
         return token || null;
+    }
+
+    private extractTokenFromCookies(cookieHeader: string | undefined): string | null {
+        if (!cookieHeader) {
+            return null;
+        }
+
+        const cookies = this.parseCookies(cookieHeader);
+        return cookies[CookieUtil.getAccessTokenCookieName()] || null;
+    }
+
+    private parseCookies(cookieHeader: string): Record<string, string> {
+        return Object.fromEntries(
+            cookieHeader.split(';').map(cookie => {
+                const [key, ...v] = cookie.trim().split('=');
+                return [key, decodeURIComponent(v.join('='))];
+            })
+        );
     }
 }
