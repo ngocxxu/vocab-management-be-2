@@ -81,6 +81,13 @@ export class AuthService {
                 throw new Error('User data is missing from Supabase response');
             }
 
+            // 3. Update User ID in Supabase
+            await this.supabase.auth.admin.updateUserById(supabaseUser.id, {
+                user_metadata: {
+                    user_id: user.id,
+                },
+            });
+
             return new UserDto({
                 ...user,
             });
@@ -96,7 +103,10 @@ export class AuthService {
     /**
      * Sign in user with email and password
      */
-    public async signIn(email: string, password: string): Promise<SessionDto> {
+    public async signIn(
+        email: string,
+        password: string,
+    ): Promise<{ session: SessionDto; refreshToken: string }> {
         try {
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
@@ -110,7 +120,10 @@ export class AuthService {
                 throw new UnauthorizedException('No session data returned');
             }
 
-            return new SessionDto(data.session);
+            return {
+                session: new SessionDto(data.session),
+                refreshToken: data.session.refresh_token,
+            };
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -119,6 +132,7 @@ export class AuthService {
             throw new UnauthorizedException('Authentication failed');
         }
     }
+
     /**
      * Sign in with OAuth provider
      */

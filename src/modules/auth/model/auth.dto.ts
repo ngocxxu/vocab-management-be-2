@@ -27,7 +27,7 @@ export class SessionDto {
 
     public constructor(entity: Session) {
         this.access_token = entity.access_token;
-        this.refresh_token = entity.refresh_token;
+        this.refresh_token = process.env.NODE_ENV === 'development' ? entity.refresh_token : 'string';
         this.expires_in = entity.expires_in;
         this.expires_at = entity.expires_at?.toString() ?? '';
         this.token_type = entity.token_type;
