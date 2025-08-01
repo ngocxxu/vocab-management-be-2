@@ -35,7 +35,7 @@ function getCorsOptions() {
             origin: true, // Allow all origins in development
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+            allowedHeaders: ['Content-Type', 'X-Requested-With'],
         };
     }
 
@@ -43,7 +43,7 @@ function getCorsOptions() {
         origin: allowedOrigins.length > 0 ? allowedOrigins : false,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+        allowedHeaders: ['Content-Type', 'X-Requested-With'],
     };
 }
 

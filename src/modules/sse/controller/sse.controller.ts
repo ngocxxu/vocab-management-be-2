@@ -1,7 +1,7 @@
-import { Controller, Get, HttpStatus, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User as UserEntity } from '@prisma/client';
-import { FastifyReply } from 'fastify';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthGuard } from '../../common';
 import { CurrentUser } from '../../common/decorator/user.decorator';
 import { SSEService } from '../service/sse.service';
@@ -16,16 +16,23 @@ export class SSEController {
     @UseGuards(AuthGuard)
     @ApiOperation({ summary: 'Establish SSE connection for events' })
     @ApiResponse({ status: HttpStatus.OK, description: 'SSE connection established' })
-    public connect(
-        @Res() response: FastifyReply,
-        @CurrentUser() user: UserEntity,
-    ): void {
-        // Set SSE headers
+    public connect(@Req() request: FastifyRequest, @Res() response: FastifyReply, @CurrentUser() user: UserEntity): void {
+        // Get allowed origins from environment or use default
+        const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || ['http://localhost:5173'];
+
+        // Get the requesting origin
+        const requestOrigin = request.headers.origin || '';
+
+        // Find the matching domain from allowed origins
+        const corsOrigin = allowedOrigins.find(origin => origin === requestOrigin) || '*';
+
+        // Set SSE headers with proper CORS for cookie-based authentication
         response.raw.writeHead(HttpStatus.OK, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Access-Control-Allow-Credentials': 'true',
             'Access-Control-Allow-Headers': 'Cache-Control',
         });
 
