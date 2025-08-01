@@ -272,66 +272,75 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async update(id: string, updateVocabData: Partial<VocabInput>): Promise<VocabDto> {
+    public async update(
+        id: string,
+        updateVocabData: Partial<VocabInput>,
+        userId: string,
+    ): Promise<VocabDto> {
         try {
-            const { textSource, sourceLanguageCode, targetLanguageCode }: Partial<VocabInput> =
-                updateVocabData;
-
-            // Check if vocabulary exists
-            const existingVocab = await this.prismaService.vocab.findUnique({
-                where: { id },
+            // First, verify the vocab exists and belongs to the user
+            const existingVocab = await this.prismaService.vocab.findFirst({
+                where: {
+                    id,
+                    userId,
+                },
             });
 
             if (!existingVocab) {
-                throw new NotFoundException(`Vocabulary with ID ${id} not found`);
+                throw new Error('Vocab not found or unauthorized');
             }
 
             // Validate that source and target languages are different if both are provided
-            const finalSourceLangCode: string =
-                sourceLanguageCode ?? existingVocab.sourceLanguageCode;
-            const finalTargetLangCode: string =
-                targetLanguageCode ?? existingVocab.targetLanguageCode;
-
-            if (finalSourceLangCode === finalTargetLangCode) {
+            if (
+                updateVocabData.sourceLanguageCode &&
+                updateVocabData.targetLanguageCode &&
+                updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode
+            ) {
                 throw new Error('Source and target languages must be different');
             }
+
+            // If updating textTargets, we need to handle the nested updates
+            const textTargetsUpdate = updateVocabData.textTargets
+                ? {
+                      deleteMany: {}, // Remove all existing textTargets
+                      create: updateVocabData.textTargets.map((target) => ({
+                          textTarget: target.textTarget,
+                          grammar: target.grammar,
+                          explanationSource: target.explanationSource,
+                          explanationTarget: target.explanationTarget,
+                          ...(target.subjectIds && {
+                              textTargetSubjects: {
+                                  create: target.subjectIds.map((subjectId: string) => ({
+                                      subjectId,
+                                  })),
+                              },
+                          }),
+                          ...(target.wordTypeId && {
+                              wordType: { connect: { id: target.wordTypeId } },
+                          }),
+                          ...(target.vocabExamples && {
+                              vocabExamples: {
+                                  create: target.vocabExamples.map((example) => ({
+                                      source: example.source,
+                                      target: example.target,
+                                  })),
+                              },
+                          }),
+                      })),
+                  }
+                : undefined;
 
             const vocab = await this.prismaService.vocab.update({
                 where: { id },
                 data: {
-                    ...(textSource !== undefined && { textSource }),
-                    ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
-                    ...(targetLanguageCode !== undefined && { targetLanguageCode }),
-
-                    ...(updateVocabData.textTargets && {
-                        textTargets: {
-                            deleteMany: {},
-                            create: updateVocabData.textTargets.map((target) => ({
-                                textTarget: target.textTarget,
-                                grammar: target.grammar,
-                                explanationSource: target.explanationSource,
-                                explanationTarget: target.explanationTarget,
-                                textTargetSubjects: {
-                                    create: target.subjectIds?.map((subjectId: string) => ({
-                                        subjectId,
-                                    })) || [],
-                                },
-
-                                ...(target.wordTypeId && {
-                                    wordType: { connect: { id: target.wordTypeId } },
-                                }),
-
-                                ...(target.vocabExamples && {
-                                    vocabExamples: {
-                                        create: target.vocabExamples.map((example) => ({
-                                            source: example.source,
-                                            target: example.target,
-                                        })),
-                                    },
-                                }),
-                            })),
-                        },
+                    ...(updateVocabData.textSource && { textSource: updateVocabData.textSource }),
+                    ...(updateVocabData.sourceLanguageCode && {
+                        sourceLanguageCode: updateVocabData.sourceLanguageCode,
                     }),
+                    ...(updateVocabData.targetLanguageCode && {
+                        targetLanguageCode: updateVocabData.targetLanguageCode,
+                    }),
+                    ...(textTargetsUpdate && { textTargets: textTargetsUpdate }),
                 },
                 include: {
                     sourceLanguage: true,
@@ -354,8 +363,12 @@ export class VocabService {
                 ...vocab,
             });
 
-            // Update cache as RedisJSON
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, `id:${id}`, vocabDto);
+            // Update the cache
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.VOCAB,
+                `id:${vocabDto.id}`,
+                vocabDto,
+            );
 
             return vocabDto;
         } catch (error: unknown) {
@@ -363,7 +376,6 @@ export class VocabService {
                 throw error;
             }
             PrismaErrorHandler.handle(error, 'update', this.vocabErrorMapping);
-            throw error;
         }
     }
 

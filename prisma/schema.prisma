@@ -176,12 +176,11 @@ model TextTarget {
   vocabExamples      VocabExample[]
   textTargetSubjects TextTargetSubject[]
 
-  @@unique([vocabId, wordTypeId])
+  @@unique([vocabId, textTarget])
   // Indexes
   @@index([vocabId]) // For querying vocab's targets
   @@index([wordTypeId]) // For filtering by word type
   @@index([textTarget]) // For text search
-  @@index([wordTypeId, textTarget]) // For combined filtering
   @@index([createdAt]) // For sorting
 }
 

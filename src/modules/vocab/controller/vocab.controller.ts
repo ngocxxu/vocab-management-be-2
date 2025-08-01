@@ -76,8 +76,9 @@ export class VocabController {
     public async update(
         @Param('id') id: string,
         @Body() updateVocabData: VocabInput,
+        @CurrentUser() user: User,
     ): Promise<VocabDto> {
-        const vocab = await this.vocabService.update(id, updateVocabData);
+        const vocab = await this.vocabService.update(id, updateVocabData, user.id);
         this.logger.info(`Updated vocab with ID ${id}`);
         return vocab;
     }
