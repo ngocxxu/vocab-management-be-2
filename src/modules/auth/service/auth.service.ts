@@ -4,6 +4,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { AuthError, createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PrismaService } from '../../common/provider';
+import { jwtDecode } from '../../common/util/jwt.util';
 import { UserDto } from '../../user/model';
 import { OAuthResponseDto, SessionDto } from '../model';
 import { SignInResponse } from '../util';
@@ -91,10 +92,7 @@ export class AuthService {
     /**
      * Sign in user with email and password
      */
-    public async signIn(
-        email: string,
-        password: string,
-    ): Promise<SignInResponse> {
+    public async signIn(email: string, password: string): Promise<SignInResponse> {
         try {
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
@@ -108,8 +106,20 @@ export class AuthService {
                 throw new UnauthorizedException('No session data returned');
             }
 
+            const decodedToken = jwtDecode(data.session.access_token);
+
+            const user = await this.prismaService.user.findUnique({
+                where: {
+                    supabaseUserId: decodedToken?.sub,
+                },
+            });
+
+            if (!user) {
+                throw new UnauthorizedException('User not found');
+            }
+
             return {
-                session: new SessionDto(data.session),
+                session: new SessionDto(data.session, new UserDto(user)),
                 accessToken: data.session.access_token,
                 refreshToken: data.session.refresh_token,
             };
@@ -187,8 +197,20 @@ export class AuthService {
                 throw new UnauthorizedException('No session data returned');
             }
 
+            const decodedToken = jwtDecode(data.session.access_token);
+
+            const user = await this.prismaService.user.findUnique({
+                where: {
+                    supabaseUserId: decodedToken?.sub,
+                },
+            });
+
+            if (!user) {
+                throw new UnauthorizedException('User not found');
+            }
+
             return {
-                session: new SessionDto(data.session),
+                session: new SessionDto(data.session, new UserDto(user)),
                 accessToken: data.session.access_token,
                 refreshToken: data.session.refresh_token,
             };
@@ -267,7 +289,19 @@ export class AuthService {
                 throw new UnauthorizedException('No session data returned');
             }
 
-            return new SessionDto(data.session);
+            const decodedToken = jwtDecode(data.session.access_token);
+
+            const user = await this.prismaService.user.findUnique({
+                where: {
+                    supabaseUserId: decodedToken?.sub,
+                },
+            });
+
+            if (!user) {
+                throw new UnauthorizedException('User not found');
+            }
+
+            return new SessionDto(data.session, new UserDto(user));
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);
@@ -306,7 +340,9 @@ export class AuthService {
      */
     private handleAuthError(error: unknown, operation: string): void {
         if (error instanceof AuthError) {
-            const message = this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] || error.message;
+            const message =
+                this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] ||
+                error.message;
             throw new UnauthorizedException(message);
         }
         throw new UnauthorizedException(`Authentication ${operation} failed`);

@@ -22,13 +22,17 @@ export class SessionDto {
     @ApiProperty({ description: 'Token type', example: 'bearer' })
     public readonly token_type: string;
 
-    @ApiProperty({ description: 'User information', type: UserDto })
+    @ApiProperty({
+        description: 'User metadata',
+        type: UserDto,
+    })
     public readonly user: UserDto;
 
-    public constructor(entity: Session) {
+    public constructor(entity: Session, entityUser: UserDto) {
         this.expires_in = entity.expires_in;
         this.expires_at = entity.expires_at?.toString() ?? '';
         this.token_type = entity.token_type;
+        this.user = entityUser;
     }
 }
 
