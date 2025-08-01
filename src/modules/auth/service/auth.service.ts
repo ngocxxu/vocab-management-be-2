@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { AuthError, createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
+import { AuthError, createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PrismaService } from '../../common/provider';
 import { jwtDecode } from '../../common/util/jwt.util';
@@ -163,7 +163,7 @@ export class AuthService {
     /**
      * Verify and get user information from access token
      */
-    public async verifyToken(accessToken: string): Promise<UserResponse['data']> {
+    public async verifyToken(accessToken: string): Promise<UserDto> {
         try {
             const { data, error } = await this.supabase.auth.getUser(accessToken);
 
@@ -171,7 +171,17 @@ export class AuthService {
                 this.handleAuthError(error, 'verifyToken');
             }
 
-            return data;
+            const user = await this.prismaService.user.findUnique({
+                where: {
+                    supabaseUserId: data.user?.id,
+                },
+            });
+
+            if (!user) {
+                throw new UnauthorizedException('User not found');
+            }
+
+            return new UserDto(user);
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);

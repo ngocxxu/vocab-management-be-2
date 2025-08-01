@@ -1,19 +1,17 @@
 import {
-    BadRequestException,
     Body,
     Controller,
     Get,
-    Headers,
     HttpStatus,
     Post,
+    Req,
     Res,
     UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserResponse } from '@supabase/supabase-js';
-import { FastifyReply } from 'fastify';
+import { FastifyReply, FastifyRequest } from 'fastify';
 
-import { LoggerService, CookieUtil } from '../../common';
+import { CookieUtil, LoggerService } from '../../common';
 import { Public } from '../../common/decorator';
 import { UserDto } from '../../user/model';
 import {
@@ -85,7 +83,10 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Authentication failed',
     })
-    public async signIn(@Body(SignInPipe) input: SignInInput, @Res({ passthrough: true }) response: FastifyReply): Promise<SessionDto> {
+    public async signIn(
+        @Body(SignInPipe) input: SignInInput,
+        @Res({ passthrough: true }) response: FastifyReply,
+    ): Promise<SessionDto> {
         const { email, password } = input;
 
         const result = await this.authService.signIn(email, password);
@@ -119,24 +120,26 @@ export class AuthController {
 
     @Get('verify')
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Verify and get user information from access token' })
+    @ApiOperation({ summary: 'Verify and get user information from access token cookie' })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'Token verified successfully',
     })
     @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
-        description: 'Invalid access token',
+        description: 'Invalid or missing access token',
     })
-    public async verifyToken(
-        @Headers('authorization') authorization: string,
-    ): Promise<UserResponse['data']> {
-        if (!authorization) {
-            throw new BadRequestException('Authorization header is required');
+    public async verifyToken(@Req() request: FastifyRequest): Promise<UserDto> {
+        // Extract access token from cookies using the same approach as AuthGuard
+        const accessToken = this.extractTokenFromCookies(request.headers.cookie);
+
+        if (!accessToken) {
+            throw new UnauthorizedException('Access token not found in cookies');
         }
 
-        const token = authorization.replace('Bearer ', '');
-        const result = await this.authService.verifyToken(token);
+        const result = await this.authService.verifyToken(accessToken);
+
+        this.logger.info(`Token verified successfully for user: ${result.email}`);
 
         return result;
     }
@@ -180,24 +183,18 @@ export class AuthController {
         status: HttpStatus.OK,
         description: 'User signed out successfully',
     })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description: 'Sign out failed',
-    })
     public async signOut(@Res({ passthrough: true }) response: FastifyReply) {
-        const result = await this.authService.signOut();
+        await this.authService.signOut();
 
-        // Clear authentication cookies using the utility
+        // Clear authentication cookies
         CookieUtil.clearAuthCookie(response);
 
         this.logger.info('User signed out successfully');
-
-        return result;
     }
 
     @Post('reset-password')
     @Public()
-    @ApiOperation({ summary: 'Send password reset email' })
+    @ApiOperation({ summary: 'Reset user password' })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'Password reset email sent successfully',
@@ -209,10 +206,9 @@ export class AuthController {
     public async resetPassword(@Body(ResetPasswordPipe) input: ResetPasswordInput) {
         const { email } = input;
 
-        const result = await this.authService.resetPassword(email);
-        this.logger.info(`Password reset email sent successfully to: ${email}`);
+        await this.authService.resetPassword(email);
 
-        return result;
+        this.logger.info(`Password reset email sent to: ${email}`);
     }
 
     @Post('verify-otp')
@@ -237,21 +233,44 @@ export class AuthController {
 
     @Post('resend-confirmation')
     @Public()
-    @ApiOperation({ summary: 'Resend confirmation email' })
+    @ApiOperation({ summary: 'Resend email confirmation' })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: 'Confirmation email resent successfully',
+        description: 'Confirmation email sent successfully',
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: 'Resend confirmation failed',
+        description: 'Failed to send confirmation email',
     })
     public async resendConfirmation(@Body(ResendConfirmationPipe) input: ResendConfirmationInput) {
         const { email } = input;
 
-        const result = await this.authService.resendConfirmation(email);
-        this.logger.info(`Confirmation email resent successfully to: ${email}`);
+        await this.authService.resendConfirmation(email);
 
-        return result;
+        this.logger.info(`Confirmation email resent to: ${email}`);
+    }
+
+    // Add helper method to get cookie name
+    private getAccessTokenCookieName(): string {
+        return CookieUtil.getAccessTokenCookieName();
+    }
+
+    // Add helper method to extract token from cookies (same as AuthGuard)
+    private extractTokenFromCookies(cookieHeader: string | undefined): string | null {
+        if (!cookieHeader) {
+            return null;
+        }
+
+        const cookies = this.parseCookies(cookieHeader);
+        return cookies[this.getAccessTokenCookieName()] || null;
+    }
+
+    private parseCookies(cookieHeader: string): Record<string, string> {
+        return Object.fromEntries(
+            cookieHeader.split(';').map((cookie) => {
+                const [key, ...v] = cookie.trim().split('=');
+                return [key, decodeURIComponent(v.join('='))];
+            }),
+        );
     }
 }
