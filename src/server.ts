@@ -24,6 +24,30 @@ const SWAGGER_DESCRIPTION = 'API used for passenger management';
 const SWAGGER_PREFIX = '/docs';
 
 /**
+ * Get CORS configuration based on environment
+ */
+function getCorsOptions() {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || [];
+
+    if (isDevelopment) {
+        return {
+            origin: true, // Allow all origins in development
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+        };
+    }
+
+    return {
+        origin: allowedOrigins.length > 0 ? allowedOrigins : false,
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    };
+}
+
+/**
  * Register a Swagger module in the NestJS application.
  * This method mutates the given `app` to register a new module dedicated to
  * Swagger API documentation. Any request performed on `SWAGGER_PREFIX` will
@@ -33,7 +57,6 @@ const SWAGGER_PREFIX = '/docs';
  *       code below with API keys, security requirements, tags and more.
  */
 function createSwagger(app: INestApplication) {
-
     const options = new DocumentBuilder()
         .setTitle(SWAGGER_TITLE)
         .setDescription(SWAGGER_DESCRIPTION)
@@ -51,10 +74,9 @@ function createSwagger(app: INestApplication) {
  * parsing middleware.
  */
 async function bootstrap(): Promise<void> {
-
     const app = await NestFactory.create<NestFastifyApplication>(
         ApplicationModule,
-        new FastifyAdapter()
+        new FastifyAdapter(),
     );
 
     // @todo Enable Helmet for better API security headers
@@ -67,6 +89,9 @@ async function bootstrap(): Promise<void> {
 
     const logInterceptor = app.select(CommonModule).get(LogInterceptor);
     app.useGlobalInterceptors(logInterceptor);
+
+    // Enable CORS with environment-based configuration
+    app.enableCors(getCorsOptions());
 
     const port = process.env.API_PORT || API_DEFAULT_PORT;
     const host = '0.0.0.0';
@@ -84,8 +109,7 @@ async function bootstrap(): Promise<void> {
  * @todo It is often advised to enhance the code below with an exception-catching
  *       service for better error handling in production environments.
  */
-bootstrap().catch(err => {
-
+bootstrap().catch((err) => {
     // eslint-disable-next-line no-console
     console.error(err);
 
