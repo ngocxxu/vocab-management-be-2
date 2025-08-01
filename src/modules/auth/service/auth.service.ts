@@ -110,6 +110,7 @@ export class AuthService {
 
             return {
                 session: new SessionDto(data.session),
+                accessToken: data.session.access_token,
                 refreshToken: data.session.refresh_token,
             };
         } catch (error) {
@@ -188,6 +189,7 @@ export class AuthService {
 
             return {
                 session: new SessionDto(data.session),
+                accessToken: data.session.access_token,
                 refreshToken: data.session.refresh_token,
             };
         } catch (error) {
