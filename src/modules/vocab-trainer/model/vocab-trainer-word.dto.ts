@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { VocabTrainerWord } from '@prisma/client';
+import { VocabTrainerWord, Vocab, Language, TextTarget } from '@prisma/client';
 import { VocabDto } from '../../vocab/model';
+
 export class VocabTrainerWordDto {
     @ApiProperty({ description: 'Unique identifier for the trainer-word assignment' })
     public id: string;
@@ -25,7 +26,11 @@ export class VocabTrainerWordDto {
 
     public constructor(
         entity: VocabTrainerWord & {
-            vocab?: VocabDto;
+            vocab?: Vocab & {
+                sourceLanguage?: Language;
+                targetLanguage?: Language;
+                textTargets?: TextTarget[];
+            };
         },
     ) {
         this.id = entity.id;
@@ -34,7 +39,7 @@ export class VocabTrainerWordDto {
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.vocab = entity.vocab
-            ? new VocabDto({ ...entity.vocab})
+            ? new VocabDto(entity.vocab)
             : undefined;
     }
 }

@@ -34,7 +34,7 @@ export class VocabInput extends PickType(VocabDto, [
 
 export class CreateTextTargetInput {
     @ApiProperty({ description: 'ID of the word type' })
-    public wordTypeId: string;
+    public wordTypeId?: string;
 
     @ApiProperty({ description: 'Target text (translation/definition)', example: 'Hello' })
     public textTarget: string;

@@ -9,8 +9,8 @@ export class TextTargetDto {
     @ApiProperty({ description: 'ID of the vocabulary' })
     public vocabId: string;
 
-    @ApiProperty({ description: 'ID of the word type' })
-    public wordTypeId: string;
+    @ApiProperty({ description: 'ID of the word type', required: false })
+    public wordTypeId?: string;
 
     @ApiProperty({ description: 'Target text (translation/definition)', example: 'Hello' })
     public textTarget: string;
@@ -61,7 +61,7 @@ export class TextTargetDto {
     ) {
         this.id = entity.id;
         this.vocabId = entity.vocabId;
-        this.wordTypeId = entity.wordTypeId;
+        this.wordTypeId = entity.wordTypeId ?? undefined;
         this.textTarget = entity.textTarget;
         this.grammar = entity.grammar;
         this.explanationSource = entity.explanationSource;
@@ -69,7 +69,8 @@ export class TextTargetDto {
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.wordType = entity.wordType ? new WordTypeDto(entity.wordType) : undefined;
-        this.vocabExamples = entity.vocabExamples?.map((example) => new VocabExampleDto(example)) ?? [];
+        this.vocabExamples =
+            entity.vocabExamples?.map((example) => new VocabExampleDto(example)) ?? [];
         this.textTargetSubjects =
             entity.textTargetSubjects?.map((assignment) => new TextTargetSubjectDto(assignment)) ??
             [];

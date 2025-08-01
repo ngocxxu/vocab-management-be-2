@@ -49,24 +49,28 @@ export class VocabService {
             const orderBy = getOrderBy(
                 query.sortBy,
                 query.sortOrder,
-                'createdAt'
+                'createdAt',
             ) as Prisma.VocabOrderByWithRelationInput;
 
             const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
                 stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId'],
                 customMap: (input, w) => {
-                    if (input.subjectIds && Array.isArray(input.subjectIds) && input.subjectIds.length > 0) {
+                    if (
+                        input.subjectIds &&
+                        Array.isArray(input.subjectIds) &&
+                        input.subjectIds.length > 0
+                    ) {
                         (w as Prisma.VocabWhereInput).textTargets = {
                             some: {
                                 textTargetSubjects: {
                                     some: {
-                                        subjectId: { in: input.subjectIds }
-                                    }
-                                }
-                            }
+                                        subjectId: { in: input.subjectIds },
+                                    },
+                                },
+                            },
                         };
                     }
-                }
+                },
             });
 
             const [totalItems, vocabs] = await Promise.all([
@@ -110,7 +114,10 @@ export class VocabService {
      */
     public async findOne(id: string): Promise<VocabDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<Vocab>(RedisPrefix.VOCAB, `id:${id}`);
+            const cached = await this.redisService.getObjectWithPrefix<Vocab>(
+                RedisPrefix.VOCAB,
+                `id:${id}`,
+            );
             if (cached) {
                 return new VocabDto(cached);
             }
@@ -138,11 +145,7 @@ export class VocabService {
                 throw new NotFoundException(`Vocabulary with ID ${id} not found`);
             }
 
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.VOCAB,
-                `id:${id}`,
-                vocab
-            );
+            await this.redisService.setObjectWithPrefix(RedisPrefix.VOCAB, `id:${id}`, vocab);
 
             return new VocabDto(vocab);
         } catch (error: unknown) {
@@ -178,26 +181,28 @@ export class VocabService {
                     targetLanguageCode,
                     textTargets: {
                         create: textTargets.map((target) => ({
-                            wordTypeId: target.wordTypeId,
                             textTarget: target.textTarget,
                             grammar: target.grammar,
                             explanationSource: target.explanationSource,
                             explanationTarget: target.explanationTarget,
-                            vocabExamples: target.vocabExamples
-                                ? {
-                                      create: target.vocabExamples.map((example) => ({
-                                          source: example.source,
-                                          target: example.target,
-                                      })),
-                                  }
-                                : undefined,
-                            textTargetSubjects: target.subjectIds
-                                ? {
-                                      create: target.subjectIds.map((subjectId: string) => ({
-                                          subjectId,
-                                      })),
-                                  }
-                                : undefined,
+                            textTargetSubjects: {
+                                create: target.subjectIds.map((subjectId: string) => ({
+                                    subjectId,
+                                })),
+                            },
+
+                            ...(target.wordTypeId && {
+                                wordType: { connect: { id: target.wordTypeId } },
+                            }),
+
+                            ...(target.vocabExamples && {
+                                vocabExamples: {
+                                    create: target.vocabExamples.map((example) => ({
+                                        source: example.source,
+                                        target: example.target,
+                                    })),
+                                },
+                            }),
                         })),
                     },
                     userId,
@@ -227,7 +232,7 @@ export class VocabService {
             await this.redisService.jsonSetWithPrefix(
                 RedisPrefix.VOCAB,
                 `id:${vocabDto.id}`,
-                vocabDto
+                vocabDto,
             );
 
             return vocabDto;
@@ -238,7 +243,9 @@ export class VocabService {
 
     public async createBulk(createVocabData: VocabInput[], userId: string): Promise<VocabDto[]> {
         try {
-            const vocabDtos = await Promise.all(createVocabData.map(async (data) => this.create(data, userId)));
+            const vocabDtos = await Promise.all(
+                createVocabData.map(async (data) => this.create(data, userId)),
+            );
 
             if (vocabDtos.length !== createVocabData.length) {
                 throw new Error('Failed to create all vocabularies');
@@ -278,8 +285,10 @@ export class VocabService {
             }
 
             // Validate that source and target languages are different if both are provided
-            const finalSourceLangCode: string = sourceLanguageCode ?? existingVocab.sourceLanguageCode;
-            const finalTargetLangCode: string = targetLanguageCode ?? existingVocab.targetLanguageCode;
+            const finalSourceLangCode: string =
+                sourceLanguageCode ?? existingVocab.sourceLanguageCode;
+            const finalTargetLangCode: string =
+                targetLanguageCode ?? existingVocab.targetLanguageCode;
 
             if (finalSourceLangCode === finalTargetLangCode) {
                 throw new Error('Source and target languages must be different');
@@ -314,11 +323,7 @@ export class VocabService {
             });
 
             // Update cache as RedisJSON
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.VOCAB,
-                `id:${id}`,
-                vocabDto
-            );
+            await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, `id:${id}`, vocabDto);
 
             return vocabDto;
         } catch (error: unknown) {
@@ -406,11 +411,10 @@ export class VocabService {
     /**
      * Update specific fields in cached vocab object
      */
-    public async updateVocabCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
-        await this.redisService.updateObjectFieldsWithPrefix(
-            RedisPrefix.VOCAB,
-            `id:${id}`,
-            fields
-        );
+    public async updateVocabCacheFields(
+        id: string,
+        fields: Record<string, unknown>,
+    ): Promise<void> {
+        await this.redisService.updateObjectFieldsWithPrefix(RedisPrefix.VOCAB, `id:${id}`, fields);
     }
 }

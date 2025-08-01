@@ -165,8 +165,8 @@ model TextTarget {
   id                 String              @id @default(cuid())
   vocabId            String
   vocab              Vocab               @relation(fields: [vocabId], references: [id], onDelete: Cascade)
-  wordTypeId         String
-  wordType           WordType            @relation(fields: [wordTypeId], references: [id], onDelete: Cascade)
+  wordTypeId         String?
+  wordType           WordType?           @relation(fields: [wordTypeId], references: [id], onDelete: SetNull)
   textTarget         String
   grammar            String
   explanationSource  String
