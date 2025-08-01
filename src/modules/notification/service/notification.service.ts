@@ -285,6 +285,22 @@ export class NotificationService {
         }
     }
 
+    public async markAsRead(notificationId: string, userId: string): Promise<NotificationDto> {
+        try {
+            await this.prismaService.notificationRecipient.update({
+                where: { notificationId_userId: { notificationId, userId } },
+                data: {
+                    isRead: true,
+                },
+            });
+
+            return this.findOne(notificationId);
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'update', this.notificationErrorMapping);
+            throw error;
+        }
+    }
+
     /**
      * Mark all notifications as read for a user
      * @param userId - The user ID

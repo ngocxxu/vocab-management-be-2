@@ -12,14 +12,10 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator';
-import {
-    NotificationDto,
-    NotificationInput,
-    UpdateNotificationStatusInput
-} from '../model';
+import { CurrentUser, Roles } from '../../common/decorator';
+import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../model';
 import { NotificationService } from '../service';
 
 @Controller('notifications')
@@ -47,10 +43,19 @@ export class NotificationController {
     @ApiQuery({ name: 'includeDeleted', required: false, type: Boolean })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
     public async getMyNotifications(
-        @Param('id') userId: string,
+        @CurrentUser() user: User,
         @Query('includeDeleted') includeDeleted?: boolean,
     ): Promise<NotificationDto[]> {
-        return this.notificationService.findByUser(userId, includeDeleted === true);
+        return this.notificationService.findByUser(user.id, includeDeleted === true);
+    }
+
+    @Get('my/unread')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @ApiOperation({ summary: 'Get unread notifications for current user' })
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
+    public async getMyUnreadNotifications(@CurrentUser() user: User): Promise<NotificationDto[]> {
+        return this.notificationService.findByUser(user.id, false);
     }
 
     @Get('my/unread-count')
@@ -64,8 +69,39 @@ export class NotificationController {
             properties: { count: { type: 'number' } },
         },
     })
-    public async getUnreadCount(@Param('id') userId: string): Promise<{ count: number }> {
-        const count = await this.notificationService.getUnreadCount(userId);
+    public async getUnreadCount(@CurrentUser() user: User): Promise<{ count: number }> {
+        const count = await this.notificationService.getUnreadCount(user.id);
+        return { count };
+    }
+
+    @Patch(':id/my/mark-as-read')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @ApiOperation({ summary: 'Mark notification as read for current user' })
+    @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
+    public async markAsRead(
+        @Param('id') notificationId: string,
+        @CurrentUser() user: User,
+    ): Promise<NotificationDto> {
+        return this.notificationService.markAsRead(notificationId, user.id);
+    }
+
+    @Patch('my/mark-all-as-read')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @ApiOperation({ summary: 'Mark all notifications as read for current user' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        schema: {
+            type: 'object',
+            properties: {
+                count: { type: 'number', description: 'Number of notifications marked as read' },
+            },
+        },
+    })
+    public async markAllAsRead(@Param('id') userId: string): Promise<{ count: number }> {
+        const count = await this.notificationService.markAllAsRead(userId);
+        this.logger.info(`Marked ${count} notifications as read for user ${userId}`);
         return { count };
     }
 
@@ -131,23 +167,13 @@ export class NotificationController {
         return notification;
     }
 
-    @Patch('my/mark-all-read')
+    @Delete(':id/my')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
-    @ApiOperation({ summary: 'Mark all notifications as read for current user' })
-    @ApiResponse({
-        status: HttpStatus.OK,
-        schema: {
-            type: 'object',
-            properties: {
-                count: { type: 'number', description: 'Number of notifications marked as read' },
-            },
-        },
-    })
-    public async markAllAsRead(@Param('id') userId: string): Promise<{ count: number }> {
-        const count = await this.notificationService.markAllAsRead(userId);
-        this.logger.info(`Marked ${count} notifications as read for user ${userId}`);
-        return { count };
+    @ApiOperation({ summary: 'Delete notification for current user' })
+    @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
+    public async deleteMy(@Param('id') notificationId: string): Promise<NotificationDto> {
+        return this.notificationService.delete(notificationId);
     }
 
     @Delete(':id')
