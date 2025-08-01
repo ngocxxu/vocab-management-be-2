@@ -107,9 +107,9 @@ export class SubjectService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createSubjectData: CreateSubjectInput): Promise<SubjectDto> {
+    public async create(createSubjectData: CreateSubjectInput, userId: string): Promise<SubjectDto> {
         try {
-            const { name, userId } = createSubjectData;
+            const { name } = createSubjectData;
 
             // Take the subject with the highest order
             const lastSubject = await this.prismaService.subject.findFirst({

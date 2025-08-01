@@ -311,7 +311,7 @@ export class VocabTrainerService {
     /**
      * Create a new vocab trainer
      */
-    public async create(input: VocabTrainerInput): Promise<VocabTrainerDto> {
+    public async create(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
         try {
             const { vocabAssignmentIds = [], ...trainerData } = input;
             const trainer = await this.prismaService.vocabTrainer.create({
@@ -325,7 +325,7 @@ export class VocabTrainerService {
                     reminderDisabled: trainerData.reminderDisabled ?? false,
                     reminderRepeat: trainerData.reminderRepeat ?? 2,
                     reminderLastRemind: trainerData.reminderLastRemind ?? new Date(),
-                    userId: trainerData.userId,
+                    userId,
                 },
                 include: {
                     vocabAssignments: true,

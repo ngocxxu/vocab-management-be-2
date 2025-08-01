@@ -82,8 +82,8 @@ export class VocabTrainerController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create vocab trainer' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabTrainerDto })
-    public async create(@Body() input: VocabTrainerInput): Promise<VocabTrainerDto> {
-        const trainer = await this.vocabTrainerService.create(input);
+    public async create(@Body() input: VocabTrainerInput, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+        const trainer = await this.vocabTrainerService.create(input, user.id);
         this.logger.info(`Created new vocab trainer with ID ${trainer.id}`);
         return trainer;
     }

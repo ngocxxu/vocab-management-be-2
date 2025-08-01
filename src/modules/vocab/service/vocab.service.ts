@@ -161,9 +161,9 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createVocabData: VocabInput): Promise<VocabDto> {
+    public async create(createVocabData: VocabInput, userId: string): Promise<VocabDto> {
         try {
-            const { textSource, sourceLanguageCode, targetLanguageCode, textTargets, userId }: VocabInput =
+            const { textSource, sourceLanguageCode, targetLanguageCode, textTargets }: VocabInput =
                 createVocabData;
 
             // Validate that source and target languages are different
@@ -236,9 +236,9 @@ export class VocabService {
         }
     }
 
-    public async createBulk(createVocabData: VocabInput[]): Promise<VocabDto[]> {
+    public async createBulk(createVocabData: VocabInput[], userId: string): Promise<VocabDto[]> {
         try {
-            const vocabDtos = await Promise.all(createVocabData.map(async (data) => this.create(data)));
+            const vocabDtos = await Promise.all(createVocabData.map(async (data) => this.create(data, userId)));
 
             if (vocabDtos.length !== createVocabData.length) {
                 throw new Error('Failed to create all vocabularies');

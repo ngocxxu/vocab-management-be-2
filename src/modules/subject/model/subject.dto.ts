@@ -5,7 +5,7 @@ export class SubjectDto {
     @ApiProperty({ description: 'Unique identifier for the subject' })
     public readonly id: string;
 
-    @ApiProperty({ description: 'Name of the subject', example: 'Mathematics' })
+    @ApiProperty({ description: 'Name of the subject', example: 'Game' })
     public readonly name: string;
 
     @ApiProperty({ description: 'Display order of the subject', example: 1 })

@@ -11,9 +11,9 @@ import {
     Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator';
+import { CurrentUser, Roles } from '../../common/decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabDto, VocabInput } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
@@ -52,9 +52,8 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create vocab' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
-    public async create(@Body() input: VocabInput): Promise<VocabDto> {
-        // In a real application, you would get the userId from the authentication context
-        const vocab = await this.vocabService.create(input);
+    public async create(@Body() input: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
+        const vocab = await this.vocabService.create(input, user.id);
         this.logger.info(`Created new vocab with ID ${vocab.id}`);
         return vocab;
     }
@@ -64,8 +63,8 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create multiple vocabs' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
-    public async createBulk(@Body() input: VocabInput[]): Promise<VocabDto[]> {
-        return this.vocabService.createBulk(input);
+    public async createBulk(@Body() input: VocabInput[], @CurrentUser() user: User): Promise<VocabDto[]> {
+        return this.vocabService.createBulk(input, user.id);
     }
 
     @Put(':id')

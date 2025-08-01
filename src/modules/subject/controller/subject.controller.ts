@@ -7,13 +7,12 @@ import {
     Param,
     Post,
     Put,
-    Query,
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
-import { Roles } from '../../common/decorator';
+import { CurrentUser, Roles } from '../../common/decorator';
 import { SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
 import { SubjectService } from '../service';
@@ -32,8 +31,8 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all subjects' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
-    public async find(@Query('userId') userId: string): Promise<SubjectDto[]> {
-        return this.subjectService.find(userId);
+    public async find(@CurrentUser() user: User): Promise<SubjectDto[]> {
+        return this.subjectService.find(user.id);
     }
 
     @Get(':id')
@@ -51,8 +50,8 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create subject' })
     @ApiResponse({ status: HttpStatus.CREATED, type: SubjectDto })
-    public async create(@Body() input: CreateSubjectInput): Promise<SubjectDto> {
-        const subject = await this.subjectService.create(input);
+    public async create(@Body() input: CreateSubjectInput, @CurrentUser() user: User): Promise<SubjectDto> {
+        const subject = await this.subjectService.create(input, user.id);
         this.logger.info(`Created new subject with ID ${subject.id}`);
         return subject;
     }

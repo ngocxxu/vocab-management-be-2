@@ -21,10 +21,10 @@ export class SSEController {
         const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || ['http://localhost:5173'];
 
         // Get the requesting origin
-        const requestOrigin = request.headers.origin || '';
+        const requestOrigin = request.headers.origin || 'http://localhost:5173';
 
         // Find the matching domain from allowed origins
-        const corsOrigin = allowedOrigins.find(origin => origin === requestOrigin) || '*';
+        const corsOrigin = allowedOrigins.find(origin => origin === requestOrigin) || 'http://localhost:5173';
 
         // Set SSE headers with proper CORS for cookie-based authentication
         response.raw.writeHead(HttpStatus.OK, {
