@@ -185,11 +185,13 @@ export class VocabService {
                             grammar: target.grammar,
                             explanationSource: target.explanationSource,
                             explanationTarget: target.explanationTarget,
-                            textTargetSubjects: {
-                                create: target.subjectIds.map((subjectId: string) => ({
-                                    subjectId,
-                                })),
-                            },
+                            ...(target.subjectIds && {
+                                textTargetSubjects: {
+                                    create: target.subjectIds.map((subjectId: string) => ({
+                                        subjectId,
+                                    })),
+                                },
+                            }),
 
                             ...(target.wordTypeId && {
                                 wordType: { connect: { id: target.wordTypeId } },
@@ -300,6 +302,36 @@ export class VocabService {
                     ...(textSource !== undefined && { textSource }),
                     ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
                     ...(targetLanguageCode !== undefined && { targetLanguageCode }),
+
+                    ...(updateVocabData.textTargets && {
+                        textTargets: {
+                            deleteMany: {},
+                            create: updateVocabData.textTargets.map((target) => ({
+                                textTarget: target.textTarget,
+                                grammar: target.grammar,
+                                explanationSource: target.explanationSource,
+                                explanationTarget: target.explanationTarget,
+                                textTargetSubjects: {
+                                    create: target.subjectIds?.map((subjectId: string) => ({
+                                        subjectId,
+                                    })) || [],
+                                },
+
+                                ...(target.wordTypeId && {
+                                    wordType: { connect: { id: target.wordTypeId } },
+                                }),
+
+                                ...(target.vocabExamples && {
+                                    vocabExamples: {
+                                        create: target.vocabExamples.map((example) => ({
+                                            source: example.source,
+                                            target: example.target,
+                                        })),
+                                    },
+                                }),
+                            })),
+                        },
+                    }),
                 },
                 include: {
                     sourceLanguage: true,
