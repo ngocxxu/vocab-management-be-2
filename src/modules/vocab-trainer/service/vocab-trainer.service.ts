@@ -418,4 +418,19 @@ export class VocabTrainerService {
             PrismaErrorHandler.handle(error, 'delete', this.errorMapping);
         }
     }
+
+    public async deleteBulk(ids: string[]): Promise<VocabTrainerDto[]> {
+        try {
+            const trainerDtos = await Promise.all(ids.map(async (id) => this.delete(id)));
+
+            if (trainerDtos.length !== ids.length) {
+                throw new Error('Failed to delete all vocab trainers');
+            }
+
+            return trainerDtos;
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'deleteBulk', this.errorMapping);
+            throw error;
+        }
+    }
 }

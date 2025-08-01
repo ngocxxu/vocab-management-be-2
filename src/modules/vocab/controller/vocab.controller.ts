@@ -59,6 +59,15 @@ export class VocabController {
         return vocab;
     }
 
+    @Post('bulk/create')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Create multiple vocabs' })
+    @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
+    public async createBulk(@Body() input: VocabInput[]): Promise<VocabDto[]> {
+        return this.vocabService.createBulk(input);
+    }
+
     @Put(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
@@ -84,5 +93,14 @@ export class VocabController {
         const vocab = await this.vocabService.delete(id);
         this.logger.info(`Deleted vocab with ID ${id}`);
         return vocab;
+    }
+
+    @Delete('bulk/delete')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Delete multiple vocabs' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    public async deleteBulk(@Body() ids: string[]): Promise<VocabDto[]> {
+        return this.vocabService.deleteBulk(ids);
     }
 }

@@ -21,6 +21,8 @@ export class VocabService {
             findOne: 'Vocabulary not found',
             create: 'One or more related entities not found (language, word type, or subject)',
             find: 'Vocabulary not found',
+            createBulk: 'One or more related entities not found (language, word type, or subject)',
+            deleteBulk: 'One or more related entities not found (language, word type, or subject)',
         },
         P2003: 'Invalid language ID, word type ID, or subject ID provided',
     };
@@ -234,6 +236,24 @@ export class VocabService {
         }
     }
 
+    public async createBulk(createVocabData: VocabInput[]): Promise<VocabDto[]> {
+        try {
+            const vocabDtos = await Promise.all(createVocabData.map(async (data) => this.create(data)));
+
+            if (vocabDtos.length !== createVocabData.length) {
+                throw new Error('Failed to create all vocabularies');
+            }
+
+            await this.clearVocabCache();
+
+            return vocabDtos;
+        } catch (error: unknown) {
+            await this.clearVocabCache();
+            PrismaErrorHandler.handle(error, 'createBulk', this.vocabErrorMapping);
+            throw error;
+        }
+    }
+
     /**
      * Update a vocabulary record
      * @param id - The vocabulary ID to update
@@ -348,6 +368,24 @@ export class VocabService {
             return vocabDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.vocabErrorMapping);
+        }
+    }
+
+    public async deleteBulk(ids: string[]): Promise<VocabDto[]> {
+        try {
+            const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id)));
+
+            if (vocabDtos.length !== ids.length) {
+                throw new Error('Failed to delete all vocabularies');
+            }
+
+            await this.clearVocabCache();
+
+            return vocabDtos;
+        } catch (error: unknown) {
+            await this.clearVocabCache();
+            PrismaErrorHandler.handle(error, 'deleteBulk', this.vocabErrorMapping);
+            throw error;
         }
     }
 

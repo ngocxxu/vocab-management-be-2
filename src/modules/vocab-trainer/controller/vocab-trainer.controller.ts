@@ -114,4 +114,13 @@ export class VocabTrainerController {
         this.logger.info(`Deleted vocab trainer with ID ${id}`);
         return trainer;
     }
+
+    @Delete('bulk/delete')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Delete multiple vocab trainers' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
+    public async deleteBulk(@Body() ids: string[]): Promise<VocabTrainerDto[]> {
+        return this.vocabTrainerService.deleteBulk(ids);
+    }
 }

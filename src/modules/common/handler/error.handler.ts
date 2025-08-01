@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 // Define context types for better type safety
-export type ErrorContext = 'find' | 'findOne' | 'create' | 'update' | 'delete' | 'findOneAndExam' | 'submitExam';
+export type ErrorContext = 'find' | 'findOne' | 'create' | 'update' | 'delete' | 'findOneAndExam' | 'submitExam' | 'createBulk' | 'deleteBulk';
 
 // Define error mapping interface
 interface PrismaErrorMapping {
@@ -24,6 +24,8 @@ export class PrismaErrorHandler {
             find: 'Record not found',
             findOneAndExam: 'Exam of vocab trainer not found',
             submitExam: 'Exam of vocab trainer not found',
+            createBulk: 'One or more related entities not found (language, word type, or subject)',
+            deleteBulk: 'One or more related entities not found (language, word type, or subject)',
         },
         P2003: 'Foreign key constraint failed',
         P2014: 'Invalid ID provided',
