@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
-import { LoggerService, RolesGuard } from '../../common';
+import { IResponse, LoggerService, RolesGuard } from '../../common';
 import { CurrentUser, Roles } from '../../common/decorator';
 import { SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
@@ -31,7 +31,7 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all subjects' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
-    public async find(@CurrentUser() user: User): Promise<SubjectDto[]> {
+    public async find(@CurrentUser() user: User): Promise<IResponse<SubjectDto[]>> {
         return this.subjectService.find(user.id);
     }
 

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { LoggerService, RolesGuard } from '../../common';
+import { IResponse, LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator';
 import { LanguageDto, LanguageInput } from '../model';
 import { LanguageService } from '../service';
@@ -30,7 +30,7 @@ export class LanguageController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all languages' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageDto })
-    public async find(): Promise<LanguageDto[]> {
+    public async find(): Promise<IResponse<LanguageDto[]>> {
         return this.languageService.find();
     }
 

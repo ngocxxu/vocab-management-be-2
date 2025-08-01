@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { WordType } from '@prisma/client';
-import { PrismaService } from '../../common';
+import { IResponse, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { RedisService } from '../../common/provider/redis.provider';
 import { RedisPrefix } from '../../common/util/redis-key.util';
@@ -31,11 +31,14 @@ export class WordTypeService {
      * @returns Promise<WordTypeDto[]> Array of word type DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(): Promise<WordTypeDto[]> {
+    public async find(): Promise<IResponse<WordTypeDto[]>> {
         try {
             const cached = await this.redisService.jsonGetWithPrefix<WordType[]>(RedisPrefix.WORD_TYPE, 'all');
             if (cached) {
-                return cached.map((wordType) => new WordTypeDto(wordType));
+                return {
+                    items: cached.map((wordType) => new WordTypeDto(wordType)),
+                    statusCode: HttpStatus.OK,
+                };
             }
 
             const wordTypes = await this.prismaService.wordType.findMany({
@@ -50,7 +53,10 @@ export class WordTypeService {
                 wordTypes
             );
 
-            return wordTypes.map((wordType) => new WordTypeDto(wordType));
+            return {
+                items: wordTypes.map((wordType) => new WordTypeDto(wordType)),
+                statusCode: HttpStatus.OK,
+            };
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.wordTypeErrorMapping);
         }

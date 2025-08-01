@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Language } from '@prisma/client';
-import { PrismaService } from '../../common';
+import { IResponse, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { RedisService } from '../../common/provider/redis.provider';
 import { RedisPrefix } from '../../common/util/redis-key.util';
@@ -31,11 +31,14 @@ export class LanguageService {
      * @returns Promise<LanguageDto[]> Array of language DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(): Promise<LanguageDto[]> {
+    public async find(): Promise<IResponse<LanguageDto[]>> {
         try {
             const cached = await this.redisService.jsonGetWithPrefix<Language[]>(RedisPrefix.LANGUAGE, 'all');
             if (cached) {
-                return cached.map((language) => new LanguageDto(language));
+                return {
+                    items: cached.map((language) => new LanguageDto(language)),
+                    statusCode: HttpStatus.OK,
+                };
             }
 
             const languages = await this.prismaService.language.findMany({
@@ -50,7 +53,10 @@ export class LanguageService {
                 languages
             );
 
-            return languages.map((language) => new LanguageDto(language));
+            return {
+                items: languages.map((language) => new LanguageDto(language)),
+                statusCode: HttpStatus.OK,
+            };
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.languageErrorMapping);
         }

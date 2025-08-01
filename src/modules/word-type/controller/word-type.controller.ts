@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { LoggerService, RolesGuard } from '../../common';
+import { IResponse, LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator';
 import { WordTypeDto, WordTypeInput } from '../model';
 import { WordTypeService } from '../service';
@@ -30,7 +30,7 @@ export class WordTypeController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all word types' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: WordTypeDto })
-    public async find(): Promise<WordTypeDto[]> {
+    public async find(): Promise<IResponse<WordTypeDto[]>> {
         return this.wordTypeService.find();
     }
 

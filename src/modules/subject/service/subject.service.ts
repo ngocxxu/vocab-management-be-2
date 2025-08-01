@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Subject } from '@prisma/client';
-import { PrismaService } from '../../common';
+import { IResponse, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { RedisService } from '../../common/provider/redis.provider';
 import { RedisPrefix } from '../../common/util/redis-key.util';
@@ -32,11 +32,14 @@ export class SubjectService {
      * @returns Promise<SubjectDto[]> Array of subject DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(userId: string): Promise<SubjectDto[]> {
+    public async find(userId: string): Promise<IResponse<SubjectDto[]>> {
         try {
             const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(RedisPrefix.SUBJECT, `userId:${userId}`);
             if (cached) {
-                return cached.map((subject) => new SubjectDto(subject));
+                return {
+                    items: cached.map((subject) => new SubjectDto(subject)),
+                    statusCode: HttpStatus.OK,
+                };
             }
 
             const subjects = await this.prismaService.subject.findMany({
@@ -54,7 +57,10 @@ export class SubjectService {
                 subjects
             );
 
-            return subjects.map((subject) => new SubjectDto(subject));
+            return {
+                items: subjects.map((subject) => new SubjectDto(subject)),
+                statusCode: HttpStatus.OK,
+            };
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.subjectErrorMapping);
         }

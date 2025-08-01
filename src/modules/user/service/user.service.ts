@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { PrismaService } from '../../common';
+import { IResponse, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { UserDto, UserInput } from '../model';
 
@@ -31,12 +31,15 @@ export class UserService {
     /**
      * Find all users in the database
      */
-    public async find(): Promise<UserDto[]> {
+    public async find(): Promise<IResponse<UserDto[]>> {
         try {
             const users = await this.prismaService.user.findMany(
             );
 
-            return users.map((user) => new UserDto({ ...user }));
+            return {
+                items: users.map((user) => new UserDto({ ...user })),
+                statusCode: HttpStatus.OK,
+            };
         } catch (error) {
             PrismaErrorHandler.handle(error, 'find', this.userErrorMapping);
         }

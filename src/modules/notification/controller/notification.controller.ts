@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
-import { LoggerService, RolesGuard } from '../../common';
+import { IResponse, LoggerService, RolesGuard } from '../../common';
 import { CurrentUser, Roles } from '../../common/decorator';
 import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../model';
 import { NotificationService } from '../service';
@@ -32,7 +32,7 @@ export class NotificationController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all notifications (Admin only)' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
-    public async find(): Promise<NotificationDto[]> {
+    public async find(): Promise<IResponse<NotificationDto[]>> {
         return this.notificationService.find();
     }
 
@@ -45,7 +45,7 @@ export class NotificationController {
     public async getMyNotifications(
         @CurrentUser() user: User,
         @Query('includeDeleted') includeDeleted?: boolean,
-    ): Promise<NotificationDto[]> {
+    ): Promise<IResponse<NotificationDto[]>> {
         return this.notificationService.findByUser(user.id, includeDeleted === true);
     }
 
@@ -54,7 +54,9 @@ export class NotificationController {
     @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
     @ApiOperation({ summary: 'Get unread notifications for current user' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
-    public async getMyUnreadNotifications(@CurrentUser() user: User): Promise<NotificationDto[]> {
+    public async getMyUnreadNotifications(
+        @CurrentUser() user: User,
+    ): Promise<IResponse<NotificationDto[]>> {
         return this.notificationService.findByUser(user.id, false);
     }
 

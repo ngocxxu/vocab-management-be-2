@@ -9,4 +9,10 @@ export interface RequestWithUser extends FastifyRequest {
 
 export interface TemplateData {
     [key: string]: string | number;
-  }
+}
+
+export interface IResponse<T> {
+    items: T;
+    message?: string;
+    statusCode?: number;
+}

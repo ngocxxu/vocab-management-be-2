@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../common';
+import { ForbiddenException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { IResponse, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../model';
 
@@ -25,7 +25,7 @@ export class NotificationService {
      * @returns Promise<NotificationDto[]> Array of notification DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(): Promise<NotificationDto[]> {
+    public async find(): Promise<IResponse<NotificationDto[]>> {
         try {
             const notifications = await this.prismaService.notification.findMany({
                 include: {
@@ -40,7 +40,10 @@ export class NotificationService {
                 },
             });
 
-            return notifications.map((notification) => new NotificationDto(notification));
+            return {
+                items: notifications.map((notification) => new NotificationDto(notification)),
+                statusCode: HttpStatus.OK,
+            };
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.notificationErrorMapping);
         }
@@ -55,7 +58,7 @@ export class NotificationService {
     public async findByUser(
         userId: string,
         includeDeleted: boolean = false,
-    ): Promise<NotificationDto[]> {
+    ): Promise<IResponse<NotificationDto[]>> {
         try {
             const notifications = await this.prismaService.notification.findMany({
                 where: {
@@ -83,7 +86,10 @@ export class NotificationService {
                 orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
             });
 
-            return notifications.map((notification) => new NotificationDto(notification));
+            return {
+                items: notifications.map((notification) => new NotificationDto(notification)),
+                statusCode: HttpStatus.OK,
+            };
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.notificationErrorMapping);
         }
