@@ -12,7 +12,8 @@ export type ErrorContext =
     | 'submitExam'
     | 'createBulk'
     | 'deleteBulk'
-    | 'findRandom';
+    | 'findRandom'
+    | 'reorder';
 
 // Define error mapping interface
 interface PrismaErrorMapping {
@@ -37,6 +38,7 @@ export class PrismaErrorHandler {
             createBulk: 'One or more related entities not found (language, word type, or subject)',
             deleteBulk: 'One or more related entities not found (language, word type, or subject)',
             findRandom: 'One or more related entities not found (language, word type, or subject)',
+            reorder: 'One or more related entities not found (language, word type, or subject)',
         },
         P2003: 'Foreign key constraint failed',
         P2014: 'Invalid ID provided',

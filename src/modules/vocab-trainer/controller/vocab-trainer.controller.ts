@@ -43,8 +43,9 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.OK, type: PaginationDto })
     public async find(
         @Query() query: VocabTrainerQueryParamsInput,
+        @CurrentUser() user: User,
     ): Promise<PaginationDto<VocabTrainerDto>> {
-        return this.vocabTrainerService.find(query);
+        return this.vocabTrainerService.find(query, user.id);
     }
 
     @Get(':id')
@@ -53,8 +54,11 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Find vocab trainer by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
-    public async findOne(@Param('id') id: string): Promise<VocabTrainerDto> {
-        return this.vocabTrainerService.findOne(id);
+    public async findOne(
+        @Param('id') id: string,
+        @CurrentUser() user: User,
+    ): Promise<VocabTrainerDto> {
+        return this.vocabTrainerService.findOne(id, user.id);
     }
 
     @Get(':id/exam')
@@ -63,8 +67,11 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Find vocab trainer by ID and exam' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
-    public async findOneAndExam(@Param('id') id: string): Promise<VocabTrainerDto> {
-        return this.vocabTrainerService.findOneAndExam(id);
+    public async findOneAndExam(
+        @Param('id') id: string,
+        @CurrentUser() user: User,
+    ): Promise<VocabTrainerDto> {
+        return this.vocabTrainerService.findOneAndExam(id, user.id);
     }
 
     @Patch(':id/exam')
@@ -108,8 +115,9 @@ export class VocabTrainerController {
     public async update(
         @Param('id') id: string,
         @Body() updateTrainerData: UpdateVocabTrainerInput,
+        @CurrentUser() user: User,
     ): Promise<VocabTrainerDto> {
-        const trainer = await this.vocabTrainerService.update(id, updateTrainerData);
+        const trainer = await this.vocabTrainerService.update(id, updateTrainerData, user.id);
         this.logger.info(`Updated vocab trainer with ID ${id}`);
         return trainer;
     }
@@ -120,8 +128,11 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Delete vocab trainer' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
-    public async delete(@Param('id') id: string): Promise<VocabTrainerDto> {
-        const trainer = await this.vocabTrainerService.delete(id);
+    public async delete(
+        @Param('id') id: string,
+        @CurrentUser() user: User,
+    ): Promise<VocabTrainerDto> {
+        const trainer = await this.vocabTrainerService.delete(id, user.id);
         this.logger.info(`Deleted vocab trainer with ID ${id}`);
         return trainer;
     }
@@ -131,7 +142,10 @@ export class VocabTrainerController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Delete multiple vocab trainers' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
-    public async deleteBulk(@Body() ids: string[]): Promise<VocabTrainerDto[]> {
-        return this.vocabTrainerService.deleteBulk(ids);
+    public async deleteBulk(
+        @Body() ids: string[],
+        @CurrentUser() user: User,
+    ): Promise<VocabTrainerDto[]> {
+        return this.vocabTrainerService.deleteBulk(ids, user.id);
     }
 }

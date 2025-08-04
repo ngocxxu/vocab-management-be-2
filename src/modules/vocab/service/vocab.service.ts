@@ -38,7 +38,10 @@ export class VocabService {
      * @returns Promise<PaginationDto<VocabDto>> Paginated vocabulary DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(query: VocabQueryParamsInput): Promise<PaginationDto<VocabDto>> {
+    public async find(
+        query: VocabQueryParamsInput,
+        userId?: string,
+    ): Promise<PaginationDto<VocabDto>> {
         try {
             const { page, pageSize, skip, take } = getPagination({
                 page: query.page,
@@ -56,6 +59,10 @@ export class VocabService {
             const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
                 stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId'],
                 customMap: (input, w) => {
+                    // Add user filter if userId provided
+                    if (userId) {
+                        (w as Prisma.VocabWhereInput).userId = userId;
+                    }
                     if (
                         input.subjectIds &&
                         Array.isArray(input.subjectIds) &&
@@ -109,11 +116,20 @@ export class VocabService {
     /**
      * Find random vocabularies
      * @param count - The number of vocabularies to find
+     * @param userId - Optional user ID to filter by
      * @returns Promise<VocabDto[]> The random vocabularies DTOs
      */
-    public async findRandom(count: number): Promise<VocabDto[]> {
+    public async findRandom(count: number, userId?: string): Promise<VocabDto[]> {
         try {
-            const allIds = await this.prismaService.vocab.findMany({ select: { id: true } });
+            const where: Prisma.VocabWhereInput = {};
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const allIds = await this.prismaService.vocab.findMany({
+                where,
+                select: { id: true },
+            });
 
             if (allIds.length < count) {
                 throw new Error('Not enough vocabularies to select from');
@@ -149,22 +165,32 @@ export class VocabService {
     /**
      * Find a single vocabulary by ID
      * @param id - The vocabulary ID to search for
+     * @param userId - Optional user ID to filter by
      * @returns Promise<VocabDto> The vocabulary DTO
      * @throws NotFoundException when vocabulary is not found
      * @throws PrismaError when database operation fails
      */
-    public async findOne(id: string): Promise<VocabDto> {
+    public async findOne(id: string, userId?: string): Promise<VocabDto> {
         try {
             const cached = await this.redisService.getObjectWithPrefix<Vocab>(
                 RedisPrefix.VOCAB,
                 `id:${id}`,
             );
             if (cached) {
+                // Verify ownership if userId provided
+                if (userId && cached.userId !== userId) {
+                    throw new NotFoundException(`Vocabulary with ID ${id} not found`);
+                }
                 return new VocabDto(cached);
             }
 
-            const vocab = await this.prismaService.vocab.findUnique({
-                where: { id },
+            const where: Prisma.VocabWhereUniqueInput & Prisma.VocabWhereInput = { id };
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const vocab = await this.prismaService.vocab.findFirst({
+                where,
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
@@ -423,14 +449,20 @@ export class VocabService {
     /**
      * Delete a vocabulary record
      * @param id - The vocabulary ID to delete
+     * @param userId - Optional user ID to filter by
      * @returns Promise<VocabDto> The deleted vocabulary DTO
      * @throws NotFoundException when vocabulary is not found
      * @throws PrismaError when database operation fails or vocabulary not found
      */
-    public async delete(id: string): Promise<VocabDto> {
+    public async delete(id: string, userId?: string): Promise<VocabDto> {
         try {
+            const where: Prisma.VocabWhereUniqueInput & Prisma.VocabWhereInput = { id };
+            if (userId) {
+                where.userId = userId;
+            }
+
             const vocab = await this.prismaService.vocab.delete({
-                where: { id },
+                where,
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
@@ -461,9 +493,9 @@ export class VocabService {
         }
     }
 
-    public async deleteBulk(ids: string[]): Promise<VocabDto[]> {
+    public async deleteBulk(ids: string[], userId?: string): Promise<VocabDto[]> {
         try {
-            const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id)));
+            const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
 
             if (vocabDtos.length !== ids.length) {
                 throw new Error('Failed to delete all vocabularies');

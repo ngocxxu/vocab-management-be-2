@@ -51,6 +51,7 @@ export class VocabTrainerService {
      */
     public async find(
         query: VocabTrainerQueryParamsInput,
+        userId?: string,
     ): Promise<PaginationDto<VocabTrainerDto>> {
         try {
             const { page, pageSize, skip, take } = getPagination({
@@ -73,6 +74,10 @@ export class VocabTrainerService {
                 stringFields: ['name', 'userId'],
                 enumFields: ['questionType'],
                 customMap: (input, w) => {
+                    // Add user filter if userId provided
+                    if (userId) {
+                        (w as Prisma.VocabTrainerWhereInput).userId = userId;
+                    }
                     // Handle status array filtering
                     if (input.status && Array.isArray(input.status) && input.status.length > 0) {
                         (w as Prisma.VocabTrainerWhereInput).status = {
@@ -105,10 +110,17 @@ export class VocabTrainerService {
     /**
      * Find a single vocab trainer by ID
      */
-    public async findOne(id: string): Promise<VocabTrainerDto> {
+    public async findOne(id: string, userId?: string): Promise<VocabTrainerDto> {
         try {
-            const trainer = await this.prismaService.vocabTrainer.findUnique({
-                where: { id },
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const trainer = await this.prismaService.vocabTrainer.findFirst({
+                where,
                 include: {
                     vocabAssignments: true,
                     results: true,
@@ -126,10 +138,17 @@ export class VocabTrainerService {
     /**
      * Find a single vocab trainer by ID and exam
      */
-    public async findOneAndExam(id: string): Promise<VocabTrainerDto> {
+    public async findOneAndExam(id: string, userId?: string): Promise<VocabTrainerDto> {
         try {
-            const trainer = await this.prismaService.vocabTrainer.findUnique({
-                where: { id },
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const trainer = await this.prismaService.vocabTrainer.findFirst({
+                where,
                 include: {
                     vocabAssignments: {
                         include: {
@@ -197,8 +216,15 @@ export class VocabTrainerService {
         user: User,
     ): Promise<VocabTrainerDto> {
         try {
-            const trainer = (await this.prismaService.vocabTrainer.findUnique({
-                where: { id },
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (user.id) {
+                where.userId = user.id;
+            }
+
+            const trainer = (await this.prismaService.vocabTrainer.findFirst({
+                where,
             })) as unknown as VocabTrainerWithTypedAnswers;
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
@@ -395,9 +421,20 @@ export class VocabTrainerService {
     /**
      * Update a vocab trainer
      */
-    public async update(id: string, input: UpdateVocabTrainerInput): Promise<VocabTrainerDto> {
+    public async update(
+        id: string,
+        input: UpdateVocabTrainerInput,
+        userId?: string,
+    ): Promise<VocabTrainerDto> {
         try {
-            const existing = await this.prismaService.vocabTrainer.findUnique({ where: { id } });
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const existing = await this.prismaService.vocabTrainer.findFirst({ where });
             if (!existing) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
@@ -428,10 +465,17 @@ export class VocabTrainerService {
     /**
      * Delete a vocab trainer
      */
-    public async delete(id: string): Promise<VocabTrainerDto> {
+    public async delete(id: string, userId?: string): Promise<VocabTrainerDto> {
         try {
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (userId) {
+                where.userId = userId;
+            }
+
             const trainer = await this.prismaService.vocabTrainer.delete({
-                where: { id },
+                where,
                 include: {
                     vocabAssignments: true,
                     results: true,
@@ -443,9 +487,9 @@ export class VocabTrainerService {
         }
     }
 
-    public async deleteBulk(ids: string[]): Promise<VocabTrainerDto[]> {
+    public async deleteBulk(ids: string[], userId?: string): Promise<VocabTrainerDto[]> {
         try {
-            const trainerDtos = await Promise.all(ids.map(async (id) => this.delete(id)));
+            const trainerDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
 
             if (trainerDtos.length !== ids.length) {
                 throw new Error('Failed to delete all vocab trainers');

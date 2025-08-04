@@ -4,7 +4,7 @@ import { IResponse, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { RedisService } from '../../common/provider/redis.provider';
 import { RedisPrefix } from '../../common/util/redis-key.util';
-import { SubjectDto, SubjectInput } from '../model';
+import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
 
 @Injectable()
@@ -18,6 +18,7 @@ export class SubjectService {
             findOne: 'Subject not found',
             create: 'Subject creation failed',
             find: 'Subject not found',
+            reorder: 'Subject reordering failed',
         },
         P2003: 'Invalid subject data provided',
     };
@@ -34,7 +35,10 @@ export class SubjectService {
      */
     public async find(userId: string): Promise<IResponse<SubjectDto[]>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(RedisPrefix.SUBJECT, `userId:${userId}`);
+            const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(
+                RedisPrefix.SUBJECT,
+                `userId:${userId}`,
+            );
             if (cached) {
                 return {
                     items: cached.map((subject) => new SubjectDto(subject)),
@@ -51,11 +55,7 @@ export class SubjectService {
                 },
             });
 
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.SUBJECT,
-                'all',
-                subjects
-            );
+            await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, 'all', subjects);
 
             return {
                 items: subjects.map((subject) => new SubjectDto(subject)),
@@ -69,19 +69,33 @@ export class SubjectService {
     /**
      * Find a single subject by ID
      * @param id - The subject ID to search for
+     * @param userId - Optional user ID to filter by
      * @returns Promise<SubjectDto> The subject DTO
      * @throws NotFoundException when subject is not found
      * @throws PrismaError when database operation fails
      */
-    public async findOne(id: string): Promise<SubjectDto> {
+    public async findOne(id: string, userId?: string): Promise<SubjectDto> {
         try {
             // Try to get from cache first using hash
-            const cached = await this.redisService.getObjectWithPrefix<Subject>(RedisPrefix.SUBJECT, `id:${id}`);
+            const cached = await this.redisService.getObjectWithPrefix<Subject>(
+                RedisPrefix.SUBJECT,
+                `id:${id}`,
+            );
             if (cached) {
+                // Verify ownership if userId provided
+                if (userId && cached.userId !== userId) {
+                    throw new NotFoundException(`Subject with ID ${id} not found`);
+                }
                 return new SubjectDto(cached);
             }
-            const subject = await this.prismaService.subject.findUnique({
-                where: { id },
+
+            const where: { id: string; userId?: string } = { id };
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const subject = await this.prismaService.subject.findFirst({
+                where,
             });
 
             if (!subject) {
@@ -89,11 +103,7 @@ export class SubjectService {
             }
 
             // Cache the result as hash
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.SUBJECT,
-                `id:${id}`,
-                subject
-            );
+            await this.redisService.setObjectWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
 
             const subjectDto = new SubjectDto(subject);
             return subjectDto;
@@ -113,7 +123,10 @@ export class SubjectService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createSubjectData: CreateSubjectInput, userId: string): Promise<SubjectDto> {
+    public async create(
+        createSubjectData: CreateSubjectInput,
+        userId: string,
+    ): Promise<SubjectDto> {
         try {
             const { name } = createSubjectData;
 
@@ -139,7 +152,7 @@ export class SubjectService {
             await this.redisService.setObjectWithPrefix(
                 RedisPrefix.SUBJECT,
                 `id:${subject.id}`,
-                subject
+                subject,
             );
 
             const subjectDto = new SubjectDto(subject);
@@ -154,78 +167,54 @@ export class SubjectService {
      * Update a subject record
      * @param id - The subject ID to update
      * @param updateSubjectData - Partial subject input data
+     * @param userId - Optional user ID to filter by
      * @returns Promise<SubjectDto> The updated subject DTO
      * @throws NotFoundException when subject is not found
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async update(id: string, updateSubjectData: SubjectInput): Promise<SubjectDto> {
+    public async update(
+        id: string,
+        updateSubjectData: SubjectInput,
+        userId?: string,
+    ): Promise<SubjectDto> {
         try {
-            const { name, order } = updateSubjectData;
+            // First, verify the subject exists and belongs to the user
+            const where: { id: string; userId?: string } = { id };
+            if (userId) {
+                where.userId = userId;
+            }
 
-            // Check if subject exists
-            const existingSubject = await this.prismaService.subject.findUnique({
-                where: { id },
+            const existingSubject = await this.prismaService.subject.findFirst({
+                where,
             });
 
             if (!existingSubject) {
-                throw new NotFoundException(`Subject with ID ${id} not found`);
+                throw new Error('Subject not found or unauthorized');
             }
 
-            // If order is updated, need to adjust the order of other subjects
-            if (order !== undefined && order !== existingSubject.order) {
-                await this.prismaService.$transaction(async (prisma) => {
-                    const oldOrder = existingSubject.order;
-                    const newOrder = order;
-
-                    if (newOrder > oldOrder) {
-                        // Move down: decrease order of subjects in between
-                        await prisma.subject.updateMany({
-                            where: {
-                                order: {
-                                    gt: oldOrder,
-                                    lte: newOrder,
-                                },
-                                id: { not: id },
-                            },
-                            data: {
-                                order: { decrement: 1 },
-                            },
-                        });
-                    } else {
-                        // Move up: increase order of subjects in between
-                        await prisma.subject.updateMany({
-                            where: {
-                                order: {
-                                    gte: newOrder,
-                                    lt: oldOrder,
-                                },
-                                id: { not: id },
-                            },
-                            data: {
-                                order: { increment: 1 },
-                            },
-                        });
-                    }
-                });
-            }
-
-            // Update subject
             const subject = await this.prismaService.subject.update({
                 where: { id },
                 data: {
-                    ...(name !== undefined && { name }),
-                    ...(order !== undefined && { order }),
+                    name: updateSubjectData.name,
+                    order: updateSubjectData.order,
                 },
             });
 
-            // Update cache as hash
-            await this.redisService.setObjectWithPrefix(
+            const subjectDto = new SubjectDto({
+                ...subject,
+            });
+
+            // Update the cache
+            await this.redisService.jsonSetWithPrefix(
                 RedisPrefix.SUBJECT,
-                `id:${id}`,
-                subject
+                `id:${subjectDto.id}`,
+                subjectDto,
             );
-            const subjectDto = new SubjectDto(subject);
+
+            // Clear the user's subject list cache
+            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
+
             return subjectDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
@@ -235,45 +224,60 @@ export class SubjectService {
         }
     }
 
+    public async reorder(input: ReorderSubjectInput, userId: string): Promise<SubjectDto[]> {
+        try {
+            const { subjectIds } = input;
+
+            const subjects = await this.prismaService.subject.findMany({
+                where: {
+                    id: { in: subjectIds.map((subject) => subject.id) },
+                    userId,
+                },
+            });
+
+            const updatedSubjects = await Promise.all(
+                subjects.map(async (subject, index) =>
+                    this.prismaService.subject.update({
+                        where: { id: subject.id },
+                        data: { order: subjectIds[index].order },
+                    }),
+                ),
+            );
+
+            return updatedSubjects.map((subject) => new SubjectDto(subject));
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'reorder', this.subjectErrorMapping);
+            throw error;
+        }
+    }
+
     /**
-     * Delete a subject from the database
+     * Delete a subject record
      * @param id - The subject ID to delete
+     * @param userId - Optional user ID to filter by
      * @returns Promise<SubjectDto> The deleted subject DTO
+     * @throws NotFoundException when subject is not found
      * @throws PrismaError when database operation fails or subject not found
      */
-    public async delete(id: string): Promise<SubjectDto> {
+    public async delete(id: string, userId?: string): Promise<SubjectDto> {
         try {
-            const deletedSubject = await this.prismaService.$transaction(async (prisma) => {
-                const subjectToDelete = await prisma.subject.findUnique({
-                    where: { id },
-                });
+            const where: { id: string; userId?: string } = { id };
+            if (userId) {
+                where.userId = userId;
+            }
 
-                if (!subjectToDelete) {
-                    throw new NotFoundException(`Subject with ID ${id} not found`);
-                }
-
-                // Delete subject
-                const deleted = await prisma.subject.delete({
-                    where: { id },
-                });
-
-                // Update order of subjects with order greater than the deleted subject
-                await prisma.subject.updateMany({
-                    where: {
-                        order: {
-                            gt: subjectToDelete.order,
-                        },
-                    },
-                    data: {
-                        order: { decrement: 1 },
-                    },
-                });
-
-                return deleted;
+            const subject = await this.prismaService.subject.delete({
+                where,
             });
-            const subjectDto = new SubjectDto(deletedSubject);
+
+            const subjectDto = new SubjectDto({
+                ...subject,
+            });
+
             // Remove from cache
             await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
+            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
+
             return subjectDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {

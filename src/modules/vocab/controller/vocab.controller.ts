@@ -33,8 +33,11 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async find(@Query() query: VocabQueryParamsInput): Promise<PaginationDto<VocabDto>> {
-        return this.vocabService.find(query);
+    public async find(
+        @Query() query: VocabQueryParamsInput,
+        @CurrentUser() user: User,
+    ): Promise<PaginationDto<VocabDto>> {
+        return this.vocabService.find(query, user.id);
     }
 
     @Get('random/:count')
@@ -42,8 +45,11 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find random vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async findRandom(@Param('count') count: number): Promise<VocabDto[]> {
-        return this.vocabService.findRandom(count);
+    public async findRandom(
+        @Param('count') count: number,
+        @CurrentUser() user: User,
+    ): Promise<VocabDto[]> {
+        return this.vocabService.findRandom(count, user.id);
     }
 
     @Get(':id')
@@ -52,8 +58,8 @@ export class VocabController {
     @ApiOperation({ summary: 'Find vocab by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
-    public async findOne(@Param('id') id: string): Promise<VocabDto> {
-        return this.vocabService.findOne(id);
+    public async findOne(@Param('id') id: string, @CurrentUser() user: User): Promise<VocabDto> {
+        return this.vocabService.findOne(id, user.id);
     }
 
     @Post()
@@ -101,8 +107,8 @@ export class VocabController {
     @ApiOperation({ summary: 'Delete vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
-    public async delete(@Param('id') id: string): Promise<VocabDto> {
-        const vocab = await this.vocabService.delete(id);
+    public async delete(@Param('id') id: string, @CurrentUser() user: User): Promise<VocabDto> {
+        const vocab = await this.vocabService.delete(id, user.id);
         this.logger.info(`Deleted vocab with ID ${id}`);
         return vocab;
     }
@@ -112,7 +118,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Delete multiple vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async deleteBulk(@Body() ids: string[]): Promise<VocabDto[]> {
-        return this.vocabService.deleteBulk(ids);
+    public async deleteBulk(@Body() ids: string[], @CurrentUser() user: User): Promise<VocabDto[]> {
+        return this.vocabService.deleteBulk(ids, user.id);
     }
 }
