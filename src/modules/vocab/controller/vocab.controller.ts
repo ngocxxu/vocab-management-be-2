@@ -37,6 +37,15 @@ export class VocabController {
         return this.vocabService.find(query);
     }
 
+    @Get('random/:count')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Find random vocab' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    public async findRandom(@Param('count') count: number): Promise<VocabDto[]> {
+        return this.vocabService.findRandom(count);
+    }
+
     @Get(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
@@ -63,7 +72,10 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create multiple vocabs' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
-    public async createBulk(@Body() input: VocabInput[], @CurrentUser() user: User): Promise<VocabDto[]> {
+    public async createBulk(
+        @Body() input: VocabInput[],
+        @CurrentUser() user: User,
+    ): Promise<VocabDto[]> {
         return this.vocabService.createBulk(input, user.id);
     }
 

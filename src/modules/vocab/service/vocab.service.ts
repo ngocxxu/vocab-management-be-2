@@ -23,6 +23,7 @@ export class VocabService {
             find: 'Vocabulary not found',
             createBulk: 'One or more related entities not found (language, word type, or subject)',
             deleteBulk: 'One or more related entities not found (language, word type, or subject)',
+            findRandom: 'One or more related entities not found (language, word type, or subject)',
         },
         P2003: 'Invalid language ID, word type ID, or subject ID provided',
     };
@@ -102,6 +103,46 @@ export class VocabService {
             return new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.vocabErrorMapping);
+        }
+    }
+
+    /**
+     * Find random vocabularies
+     * @param count - The number of vocabularies to find
+     * @returns Promise<VocabDto[]> The random vocabularies DTOs
+     */
+    public async findRandom(count: number): Promise<VocabDto[]> {
+        try {
+            const allIds = await this.prismaService.vocab.findMany({ select: { id: true } });
+
+            if (allIds.length < count) {
+                throw new Error('Not enough vocabularies to select from');
+            }
+
+            if (allIds.length === 0) return [];
+            const shuffled = allIds.sort(() => 0.5 - Math.random());
+            const selectedIds = shuffled.slice(0, Math.min(count, allIds.length)).map((x) => x.id);
+
+            const vocabs = await this.prismaService.vocab.findMany({
+                where: { id: { in: selectedIds } },
+                include: {
+                    sourceLanguage: true,
+                    targetLanguage: true,
+                    textTargets: {
+                        include: {
+                            wordType: true,
+                            vocabExamples: true,
+                            textTargetSubjects: {
+                                include: { subject: true },
+                            },
+                        },
+                    },
+                },
+            });
+            return vocabs.map((vocab) => new VocabDto({ ...vocab }));
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'findRandom', this.vocabErrorMapping);
+            throw error;
         }
     }
 
