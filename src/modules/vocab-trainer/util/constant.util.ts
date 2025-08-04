@@ -3,10 +3,10 @@ import { Prisma } from '@prisma/client';
 import { EvaluateResult, QuestionAnswer, VocabWithTextTargets, WordTestSelect } from './type.util';
 
 export function getRandomElements<T extends { id: string }>(arr: T[], n: number, exclude: T): T[] {
-    const filtered = arr.filter(item => item.id !== exclude.id);
+    const filtered = arr.filter((item) => item.id !== exclude.id);
     const shuffled = [...filtered].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, n);
-  }
+}
 
 // Helper functions
 const getRandomTextTarget = (vocab: VocabWithTextTargets): string => {
@@ -15,19 +15,23 @@ const getRandomTextTarget = (vocab: VocabWithTextTargets): string => {
     return vocab.textTargets[randomIndex]?.textTarget ?? '';
 };
 
-export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongVocabs: VocabWithTextTargets[]) => {
+export const createQuestion = (
+    vocab: VocabWithTextTargets,
+    type: string,
+    wrongVocabs: VocabWithTextTargets[],
+) => {
     const isSourceType = type === 'source';
 
     const content = [isSourceType ? vocab.textSource : getRandomTextTarget(vocab)];
 
     const systemSelected = {
         label: isSourceType ? getRandomTextTarget(vocab) : vocab.textSource,
-        value: vocab.id
+        value: vocab.id,
     };
 
     const wrongOptions = wrongVocabs.map((item: VocabWithTextTargets) => ({
         label: isSourceType ? getRandomTextTarget(item) : item.textSource ?? '',
-        value: item.id
+        value: item.id,
     }));
 
     const options = [systemSelected, ...wrongOptions].sort(() => 0.5 - Math.random());
@@ -36,44 +40,44 @@ export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongV
 };
 
 export function evaluateMultipleChoiceAnswers(
-  trainerId: string,
-  wordTestSelects: WordTestSelect[],
-  questionAnswers: QuestionAnswer[]
+    trainerId: string,
+    wordTestSelects: WordTestSelect[],
+    questionAnswers: QuestionAnswer[],
 ): EvaluateResult {
-  const wordResults: VocabTrainerResult[] = [];
-  const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
-  let correctAnswers = 0;
+    const wordResults: VocabTrainerResult[] = [];
+    const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
+    let correctAnswers = 0;
 
-  for (const wordTest of wordTestSelects) {
-    let isCorrect = false;
+    for (const wordTest of wordTestSelects) {
+        let isCorrect = false;
 
-    const questionAnswer = questionAnswers.find(
-      (answer) => answer.vocabId === wordTest.vocabId,
-    );
+        const questionAnswer = questionAnswers.find(
+            (answer) => answer.vocabId === wordTest.vocabId,
+        );
 
-    isCorrect = questionAnswer?.systemSelected === wordTest.userSelect;
+        isCorrect = questionAnswer?.systemSelected === wordTest.userSelected;
 
-    if (isCorrect) correctAnswers++;
+        if (isCorrect) correctAnswers++;
 
-    // Prepare data for batch insert
-    createResults.push({
-      vocabTrainerId: trainerId,
-      status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
-      userSelected: wordTest.userSelect,
-      systemSelected: questionAnswer?.systemSelected ?? '',
-    });
+        // Prepare data for batch insert
+        createResults.push({
+            vocabTrainerId: trainerId,
+            status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+            userSelected: wordTest.userSelected,
+            systemSelected: questionAnswer?.systemSelected ?? '',
+        });
 
-    // Add to response
-    wordResults.push({
-      id: '',
-      vocabTrainerId: trainerId,
-      status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
-      userSelected: wordTest.userSelect,
-      systemSelected: questionAnswer?.systemSelected ?? '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  }
+        // Add to response
+        wordResults.push({
+            id: '',
+            vocabTrainerId: trainerId,
+            status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+            userSelected: wordTest.userSelected,
+            systemSelected: questionAnswer?.systemSelected ?? '',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
+    }
 
-  return { wordResults, createResults, correctAnswers };
+    return { wordResults, createResults, correctAnswers };
 }
