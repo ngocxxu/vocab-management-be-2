@@ -228,6 +228,9 @@ export class SubjectService {
         try {
             const { subjectIds } = input;
 
+            // Create a map of subject ID to new order for efficient lookup
+            const orderMap = new Map(subjectIds.map((item) => [item.id, item.order]));
+
             const subjects = await this.prismaService.subject.findMany({
                 where: {
                     id: { in: subjectIds.map((subject) => subject.id) },
@@ -235,16 +238,27 @@ export class SubjectService {
                 },
             });
 
-            const updatedSubjects = await Promise.all(
-                subjects.map(async (subject, index) =>
+            await Promise.all(
+                subjects.map(async (subject) =>
                     this.prismaService.subject.update({
                         where: { id: subject.id },
-                        data: { order: subjectIds[index].order },
+                        data: { order: orderMap.get(subject.id) },
                     }),
                 ),
             );
 
-            return updatedSubjects.map((subject) => new SubjectDto(subject));
+            // Fetch the updated subjects in the correct order using Prisma
+            const sortedSubjects = await this.prismaService.subject.findMany({
+                where: {
+                    id: { in: subjectIds.map((subject) => subject.id) },
+                    userId,
+                },
+                orderBy: {
+                    order: 'asc',
+                },
+            });
+
+            return sortedSubjects.map((subject) => new SubjectDto(subject));
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'reorder', this.subjectErrorMapping);
             throw error;
