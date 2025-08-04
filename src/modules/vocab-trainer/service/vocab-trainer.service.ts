@@ -191,9 +191,8 @@ export class VocabTrainerService {
             );
 
             // Batch insert all results
-            await this.prismaService.vocabTrainerResult.createMany({
-                data: createResults,
-            });
+            await this.prismaService.vocabTrainerResult.deleteMany({ where: { vocabTrainerId: trainer.id } });
+            await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
 
             // Calculate overall status
             const totalQuestions = wordTestSelects.length;
