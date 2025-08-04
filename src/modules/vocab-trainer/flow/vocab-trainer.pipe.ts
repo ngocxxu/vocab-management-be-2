@@ -1,44 +1,23 @@
-import { Injectable } from '@nestjs/common';
-import * as Joi from 'joi';
-import { JoiValidationPipe } from '../../common/flow/joi-validation.pipe';
+import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
+import { TrainerStatus } from '@prisma/client';
 
 @Injectable()
-export class VocabTrainerPipe extends JoiValidationPipe {
-    public buildSchema(): Joi.ObjectSchema {
-        return Joi.object({
-            name: Joi.string().required().max(255).trim().min(1).messages({
-                'string.empty': 'Name is required',
-                'string.min': 'Name cannot be empty',
-                'string.max': 'Name cannot exceed 255 characters',
-                'any.required': 'Name is required',
-            }),
-            status: Joi.string().required().valid(
-                'PENDING',
-                'IN_PROCESS',
-                'COMPLETED',
-                'CANCELLED',
-                'FAILED',
-                'PASSED',
-            ).messages({
-                'any.only': 'Invalid status',
-                'any.required': 'Status is required',
-            }),
-            questionType: Joi.string().required().valid(
-                'MULTIPLE_CHOICE',
-                'FILL_IN_THE_BLANK',
-                'MATCHING',
-                'TRUE_OR_FALSE',
-                'SHORT_ANSWER',
-            ).messages({
-                'any.only': 'Invalid question type',
-                'any.required': 'Question type is required',
-            }),
-            reminderTime: Joi.number().integer().min(0).optional(),
-            countTime: Joi.number().integer().min(0).optional(),
-            setCountTime: Joi.number().integer().min(0).optional(),
-            reminderDisabled: Joi.boolean().optional(),
-            reminderRepeat: Joi.number().integer().min(0).optional(),
-            reminderLastRemind: Joi.date().optional(),
-        });
+export class VocabTrainerPipe implements PipeTransform {
+    transform(value: any) {
+        if (value.status) {
+            const statuses = Array.isArray(value.status) ? value.status : [value.status];
+            const validStatuses = Object.values(TrainerStatus);
+
+            for (const status of statuses) {
+                if (!validStatuses.includes(status)) {
+                    throw new BadRequestException(
+                        `Invalid status: ${status}. Valid statuses are: ${validStatuses.join(
+                            ', ',
+                        )}`,
+                    );
+                }
+            }
+        }
+        return value;
     }
 }

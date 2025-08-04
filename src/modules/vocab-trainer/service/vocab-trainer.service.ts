@@ -1,5 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import {
+    NotificationAction,
+    NotificationType,
+    PriorityLevel,
+    Prisma,
+    QuestionType,
+    TrainerStatus,
+    User,
+    VocabTrainer,
+} from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler';
 import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
@@ -7,7 +16,13 @@ import { getOrderBy, getPagination } from '../../common/util';
 import { buildPrismaWhere } from '../../common/util';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
-import { SubmitMultipleChoiceInput, UpdateVocabTrainerInput, VocabTrainerDto, VocabTrainerInput, VocabTrainerQueryParamsInput } from '../model';
+import {
+    SubmitMultipleChoiceInput,
+    UpdateVocabTrainerInput,
+    VocabTrainerDto,
+    VocabTrainerInput,
+    VocabTrainerQueryParamsInput,
+} from '../model';
 import { EReminderRepeat, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util';
 import { createQuestion, evaluateMultipleChoiceAnswers, getRandomElements } from '../util';
 
@@ -56,7 +71,15 @@ export class VocabTrainerService {
                 Prisma.VocabTrainerWhereInput
             >(query, {
                 stringFields: ['name', 'userId'],
-                enumFields: ['status', 'questionType'],
+                enumFields: ['questionType'],
+                customMap: (input, w) => {
+                    // Handle status array filtering
+                    if (input.status && Array.isArray(input.status) && input.status.length > 0) {
+                        (w as Prisma.VocabTrainerWhereInput).status = {
+                            in: input.status as TrainerStatus[],
+                        };
+                    }
+                },
             });
 
             const [totalItems, trainers] = await Promise.all([
@@ -191,7 +214,9 @@ export class VocabTrainerService {
             );
 
             // Batch insert all results
-            await this.prismaService.vocabTrainerResult.deleteMany({ where: { vocabTrainerId: trainer.id } });
+            await this.prismaService.vocabTrainerResult.deleteMany({
+                where: { vocabTrainerId: trainer.id },
+            });
             await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
 
             // Calculate overall status

@@ -11,6 +11,7 @@ import {
     Query,
     BadRequestException,
     Patch,
+    UsePipes,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { QuestionType, User, UserRole } from '@prisma/client';
@@ -23,6 +24,7 @@ import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice.dto';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerService } from '../service';
+import { VocabTrainerPipe } from '../flow/vocab-trainer.pipe';
 
 @Controller('vocab-trainers')
 @ApiTags('vocab-trainer')
@@ -36,9 +38,12 @@ export class VocabTrainerController {
     @Get()
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @UsePipes(VocabTrainerPipe)
     @ApiOperation({ summary: 'Find all vocab trainers' })
     @ApiResponse({ status: HttpStatus.OK, type: PaginationDto })
-    public async find(@Query() query: VocabTrainerQueryParamsInput): Promise<PaginationDto<VocabTrainerDto>> {
+    public async find(
+        @Query() query: VocabTrainerQueryParamsInput,
+    ): Promise<PaginationDto<VocabTrainerDto>> {
         return this.vocabTrainerService.find(query);
     }
 
@@ -50,7 +55,7 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
     public async findOne(@Param('id') id: string): Promise<VocabTrainerDto> {
         return this.vocabTrainerService.findOne(id);
-    };
+    }
 
     @Get(':id/exam')
     @UseGuards(RolesGuard)
@@ -68,11 +73,14 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Submit exam' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
-    public async submitExam(@Param('id') id: string, @Body() input: SubmitMultipleChoiceInput, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+    public async submitExam(
+        @Param('id') id: string,
+        @Body() input: SubmitMultipleChoiceInput,
+        @CurrentUser() user: User,
+    ): Promise<VocabTrainerDto> {
         if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
             return this.vocabTrainerService.submitMultipleChoice(id, input, user);
-        }
-        else {
+        } else {
             throw new BadRequestException('Question type is not suitable');
         }
     }
@@ -82,7 +90,10 @@ export class VocabTrainerController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Create vocab trainer' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabTrainerDto })
-    public async create(@Body() input: VocabTrainerInput, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+    public async create(
+        @Body() input: VocabTrainerInput,
+        @CurrentUser() user: User,
+    ): Promise<VocabTrainerDto> {
         const trainer = await this.vocabTrainerService.create(input, user.id);
         this.logger.info(`Created new vocab trainer with ID ${trainer.id}`);
         return trainer;
