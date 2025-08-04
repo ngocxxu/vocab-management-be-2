@@ -19,12 +19,12 @@ import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator';
 import { CurrentUser } from '../../common/decorator/user.decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
+import { VocabTrainerPipe } from '../flow/vocab-trainer.pipe';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
 import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice.dto';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
 import { VocabTrainerService } from '../service';
-import { VocabTrainerPipe } from '../flow/vocab-trainer.pipe';
 
 @Controller('vocab-trainers')
 @ApiTags('vocab-trainer')
@@ -126,7 +126,7 @@ export class VocabTrainerController {
         return trainer;
     }
 
-    @Delete('bulk/delete')
+    @Post('bulk/delete')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Delete multiple vocab trainers' })

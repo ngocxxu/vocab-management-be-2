@@ -107,7 +107,7 @@ export class VocabController {
         return vocab;
     }
 
-    @Delete('bulk/delete')
+    @Post('bulk/delete')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Delete multiple vocabs' })
