@@ -76,7 +76,7 @@ export class VocabTrainerService {
                     // Handle status array filtering
                     if (input.status && Array.isArray(input.status) && input.status.length > 0) {
                         (w as Prisma.VocabTrainerWhereInput).status = {
-                            in: input.status as TrainerStatus[],
+                            in: input.status,
                         };
                     }
                 },

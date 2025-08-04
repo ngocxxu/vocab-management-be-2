@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { QuestionType, TrainerStatus } from '@prisma/client';
-import { QueryParamsInput } from '../../common/model/query-params.input';
-import { IsOptional, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { IsOptional, IsArray } from 'class-validator';
+import { QueryParamsInput } from '../../common/model/query-params.input';
 
 export class VocabTrainerQueryParamsInput extends QueryParamsInput {
     @ApiProperty({ description: 'Name of the vocab trainer', required: false })
@@ -19,7 +19,7 @@ export class VocabTrainerQueryParamsInput extends QueryParamsInput {
         ],
     })
     @IsOptional()
-    @Transform(({ value }) => {
+    @Transform(({ value }: { value: string | string[] | undefined }) => {
         if (typeof value === 'string') {
             return value.split(',').map((s) => s.trim());
         }
