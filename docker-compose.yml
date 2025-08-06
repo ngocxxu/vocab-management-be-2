@@ -1,7 +1,7 @@
 services:
   postgres:
     container_name: postgres_container
-    image: postgres:17.0
+    image: postgres:17.5-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vocab_db}
       POSTGRES_USER: ${POSTGRES_USER:-admin}

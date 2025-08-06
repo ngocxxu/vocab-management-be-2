@@ -16,12 +16,14 @@ export class CookieUtil {
     ): void {
         const cookieValue = `${this.REFRESH_TOKEN_COOKIE_NAME}=${refreshToken}; HttpOnly; Secure=${
             process.env.NODE_ENV === 'production'
-        }; SameSite=Strict; Max-Age=${maxAge || this.DEFAULT_MAX_AGE}; Path=/`;
+        }; SameSite=None; Max-Age=${maxAge || this.DEFAULT_MAX_AGE}; Path=/`;
 
         // Get existing Set-Cookie headers
         const existingCookies = response.raw.getHeader('Set-Cookie');
         const newCookies = existingCookies
-            ? (Array.isArray(existingCookies) ? existingCookies : [existingCookies])
+            ? Array.isArray(existingCookies)
+                ? existingCookies
+                : [existingCookies]
             : [];
 
         newCookies.push(cookieValue);
@@ -38,12 +40,14 @@ export class CookieUtil {
     ): void {
         const cookieValue = `${this.ACCESS_TOKEN_COOKIE_NAME}=${accessToken}; HttpOnly; Secure=${
             process.env.NODE_ENV === 'production'
-        }; SameSite=Strict; Max-Age=${maxAge || this.ACCESS_TOKEN_MAX_AGE}; Path=/`;
+        }; SameSite=None; Max-Age=${maxAge || this.ACCESS_TOKEN_MAX_AGE}; Path=/`;
 
         // Get existing Set-Cookie headers
         const existingCookies = response.raw.getHeader('Set-Cookie');
         const newCookies = existingCookies
-            ? (Array.isArray(existingCookies) ? existingCookies : [existingCookies])
+            ? Array.isArray(existingCookies)
+                ? existingCookies
+                : [existingCookies]
             : [];
 
         newCookies.push(cookieValue);
@@ -70,16 +74,18 @@ export class CookieUtil {
     public static clearAuthCookie(response: FastifyReply): void {
         const refreshCookieValue = `${this.REFRESH_TOKEN_COOKIE_NAME}=; HttpOnly; Secure=${
             process.env.NODE_ENV === 'production'
-        }; SameSite=Strict; Max-Age=0; Path=/`;
+        }; SameSite=None; Max-Age=0; Path=/`;
 
         const accessCookieValue = `${this.ACCESS_TOKEN_COOKIE_NAME}=; HttpOnly; Secure=${
             process.env.NODE_ENV === 'production'
-        }; SameSite=Strict; Max-Age=0; Path=/`;
+        }; SameSite=None; Max-Age=0; Path=/`;
 
         // Get existing Set-Cookie headers
         const existingCookies = response.raw.getHeader('Set-Cookie');
         const newCookies = existingCookies
-            ? (Array.isArray(existingCookies) ? existingCookies : [existingCookies])
+            ? Array.isArray(existingCookies)
+                ? existingCookies
+                : [existingCookies]
             : [];
 
         newCookies.push(refreshCookieValue, accessCookieValue);
