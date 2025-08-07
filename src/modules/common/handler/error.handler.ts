@@ -13,7 +13,11 @@ export type ErrorContext =
     | 'createBulk'
     | 'deleteBulk'
     | 'findRandom'
-    | 'reorder';
+    | 'reorder'
+    | 'registerToken'
+    | 'unregisterToken'
+    | 'getUserTokens'
+    | 'getTokensForUsers';
 
 // Define error mapping interface
 interface PrismaErrorMapping {
@@ -39,6 +43,10 @@ export class PrismaErrorHandler {
             deleteBulk: 'One or more related entities not found (language, word type, or subject)',
             findRandom: 'One or more related entities not found (language, word type, or subject)',
             reorder: 'One or more related entities not found (language, word type, or subject)',
+            registerToken: 'FCM token already registered for this user',
+            unregisterToken: 'FCM token not found',
+            getUserTokens: 'FCM token not found',
+            getTokensForUsers: 'FCM token not found',
         },
         P2003: 'Foreign key constraint failed',
         P2014: 'Invalid ID provided',

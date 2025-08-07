@@ -36,6 +36,14 @@ export class LoggerService {
         this.instance.error(message);
     }
 
+    public warn(message: string) {
+        this.instance.warn(message);
+    }
+
+    public debug(message: string) {
+        this.instance.debug(message);
+    }
+
     private isTestEnv(): boolean {
         return process.env.NODE_ENV === 'test';
     }

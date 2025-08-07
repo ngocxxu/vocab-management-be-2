@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
 import { EmailModule } from './email/email.module';
+import { FcmModule } from './fcm/fcm.module';
 import { LanguageModule } from './language/language.module';
 import { NotificationModule } from './notification/notification.module';
 import { ReminderModule } from './reminder/reminder.module';
@@ -42,6 +43,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         ReminderModule,
         EmailModule,
         SSEModule,
+        FcmModule,
     ],
     providers: [
         {
