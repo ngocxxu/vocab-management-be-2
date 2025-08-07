@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_vol:/data/postgres
     ports:
-      - '5432:5432'
+      - '5433:5432'
     restart: unless-stopped
 
   pgadmin:
@@ -32,9 +32,9 @@ services:
   redis:
     container_name: redis_container
     image: redis/redis-stack:7.2.0-v18
-    command: [ "/entrypoint.sh", "./redis-stack.conf" ]
+    command: ['/entrypoint.sh', './redis-stack.conf']
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
     ports:
       - '${REDIS_PORT:-6379}:6379'
       - '${REDIS_INSIGHT_PORT:-8001}:8001'

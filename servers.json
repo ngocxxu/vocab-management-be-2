@@ -4,7 +4,7 @@
       "Name": "postgres",
       "Group": "Servers",
       "Host": "postgres",
-      "Port": 5432,
+      "Port": 5433,
       "MaintenanceDB": "vocab_db",
       "Username": "admin",
       "SSLMode": "prefer",
