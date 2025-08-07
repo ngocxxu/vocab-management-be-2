@@ -1,10 +1,16 @@
 export enum EReminderType {
     EMAIL_REMINDER = 'email_reminder',
     NOTIFICATION = 'notification',
+    NOTIFICATION_FCM = 'notification_fcm',
 }
 
 export enum EReminderTitle {
     VOCAB_TRAINER = 'Vocab Trainer',
+    NOTIFICATION = 'Notification',
+}
+
+export enum ENotificationFcmType {
+    SEND_NOTIFICATION = 'send_notification',
 }
 
 export enum EEmailReminderType {

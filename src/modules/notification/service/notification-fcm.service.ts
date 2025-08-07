@@ -1,13 +1,14 @@
-import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Injectable } from '@nestjs/common';
+import { JobsOptions, Queue } from 'bullmq';
 import { LoggerService } from '../../common';
+import { EReminderType } from '../../reminder/util';
 import { NotificationFcmJob } from '../processor/notification-fcm.processor';
 
 @Injectable()
 export class NotificationFcmService {
     public constructor(
-        @InjectQueue('notification-fcm') private readonly notificationFcmQueue: Queue,
+        @InjectQueue(EReminderType.NOTIFICATION_FCM) private readonly notificationFcmQueue: Queue,
         private readonly logger: LoggerService,
     ) {}
 
@@ -33,7 +34,7 @@ export class NotificationFcmService {
                 priority,
             };
 
-            const jobOptions: any = {
+            const jobOptions: JobsOptions = {
                 attempts: 3,
                 backoff: {
                     type: 'exponential',
@@ -135,7 +136,7 @@ export class NotificationFcmService {
      */
     public async clearQueue(): Promise<void> {
         try {
-            await this.notificationFcmQueue.empty();
+            await this.notificationFcmQueue.drain();
             this.logger.info('FCM notification queue cleared');
         } catch (error) {
             this.logger.error(

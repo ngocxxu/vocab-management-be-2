@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { FirebaseService } from '../../../firebase';
 import { LoggerService } from '../../common';
 import { FcmService } from '../../fcm/service';
+import { ENotificationFcmType, EReminderType } from '../../reminder/util';
 
 export interface NotificationFcmJob {
     notificationId: string;
@@ -15,7 +16,7 @@ export interface NotificationFcmJob {
 }
 
 @Injectable()
-@Processor('notification-fcm')
+@Processor(EReminderType.NOTIFICATION_FCM)
 export class NotificationFcmProcessor {
     public constructor(
         private readonly logger: LoggerService,
@@ -23,7 +24,7 @@ export class NotificationFcmProcessor {
         private readonly firebaseService: FirebaseService,
     ) {}
 
-    @Process('send-notification')
+    @Process(ENotificationFcmType.SEND_NOTIFICATION)
     public async sendNotification(job: Job<NotificationFcmJob>): Promise<void> {
         const { notificationId, userIds, title, body, data, priority } = job.data;
 
