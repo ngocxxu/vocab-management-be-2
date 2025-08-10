@@ -1,15 +1,4 @@
-# NestJS 10 API project template
-
-[![License](https://img.shields.io/github/license/saluki/nestjs-template.svg)](https://github.com/saluki/nestjs-template/blob/master/LICENSE)
-
-Scaffold quickly your next [NestJS 10](https://nestjs.com/) API project with
-❤️ using this template
-
-- Crafted for Docker environments (Dockerfile support and environment variables)
-- REST API with [Prisma](https://www.prisma.io/) support
-- Swagger documentation, [Joi](https://github.com/hapijs/joi) validation, Winston logger, ...
-- Folder structure, code samples and best practices
-- Fast HTTP server with [Fastify](https://fastify.dev/)
+# Vocab API project template
 
 ## 1. Getting started
 
@@ -23,15 +12,6 @@ Before starting, make sure you have at least those components on your workstatio
 [Docker](https://www.docker.com/) may also be useful for advanced testing and image building, although it is not required for development.
 
 ### 1.2 Project configuration
-
-Start by cloning this project on your workstation or click on ["Use this template"](https://github.com/new?template_name=nestjs-template&template_owner=Saluki) in Github.
-
-```sh
-git clone https://github.com/saluki/nestjs-template my-project
-```
-
-The next thing will be to install all the dependencies of the project.
-
 ```sh
 cd ./my-project
 pnpm install
