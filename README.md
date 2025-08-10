@@ -12,6 +12,7 @@ Before starting, make sure you have at least those components on your workstatio
 [Docker](https://www.docker.com/) may also be useful for advanced testing and image building, although it is not required for development.
 
 ### 1.2 Project configuration
+
 ```sh
 cd ./my-project
 pnpm install
@@ -152,9 +153,59 @@ The Prisma diff command is used to compare the database schema with the Prisma s
 npx prisma migrate diff
 ```
 
-## 9. Flow control
+## 9. Redis
+
+This project uses Redis for caching, session management, and background job processing.
+
+### 9.1 Redis Usage
+
+Redis serves as the project's performance backbone, handling:
+
+- **Caching**: Store frequently accessed data (vocab words, user sessions, etc.)
+- **Session Management**: JWT token storage and validation
+- **Rate Limiting**: API request throttling
+- **Queue Management**: Background job processing with Bull queues
+
+### 9.2 Configuration
+
+```bash
+# Environment variables
+REDIS_HOST=localhost
+REDIS_PORT=6379
+```
+
+### 9.3 Key Features
+
+- **Bull Queues**: Email reminders, notifications, and background tasks
+- **Caching Layer**: Fast data retrieval for frequently accessed resources
+- **Session Storage**: Secure token management
+- **Real-time Updates**: SSE (Server-Sent Events) support
+
+### 9.4 Common Redis Operations
+
+```typescript
+// Cache operations
+await this.cacheManager.set(key, value, ttl);
+await this.cacheManager.get(key);
+
+// Queue operations
+await this.emailQueue.add(jobData);
+await this.notificationQueue.process(jobHandler);
+```
+
+### 9.5 Benefits
+
+- **Performance**: Faster response times for cached data
+- **Scalability**: Handle high concurrent requests
+- **Reliability**: Background job processing
+- **Real-time**: Live notifications and updates
+
+## 10. Flow control
+
 ### 9.1 Request & Response flow
+
 The request & response flow is the flow of the request from the client to the server.
+
 ```sh
 sequenceDiagram
     Client->>Controller: HTTP Request
@@ -166,8 +217,11 @@ sequenceDiagram
     Service->>Controller: Business Logic Result
     Controller->>Client: HTTP Response
 ```
+
 ### 9.2 Order of execution
+
 The order of execution is the order in which the code is executed.
+
 ```sh
 graph TD
     A[1. Prisma Schema] --> B[2. Generate Prisma Client]
