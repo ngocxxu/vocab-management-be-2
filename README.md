@@ -43,7 +43,7 @@ npx prisma migrate dev
 pnpm run dev
 ```
 
-You can now head to `http://localhost:3000/docs` and see your API Swagger docs. The example passenger API is located at the `http://localhost:3000/api/v1/passengers` endpoint.
+You can now head to `http://localhost:3002/docs` and see your API Swagger docs. The example passenger API is located at the `http://localhost:3002/api/v1/passengers` endpoint.
 
 For restricted routes, for testing you can use the below JWT
 
@@ -106,7 +106,7 @@ A healthcheck API is a REST endpoint that can be used to validate the status of 
 The example healthcheck endpoint can be request with the token located in the `HEALTH_TOKEN` environment variable.
 
 ```sh
-curl -H 'Authorization: Bearer ThisMustBeChanged' http://localhost:3000/api/v1/health
+curl -H 'Authorization: Bearer ThisMustBeChanged' http://localhost:3002/api/v1/health
 ```
 
 ## 6. Project goals
@@ -171,7 +171,7 @@ Redis serves as the project's performance backbone, handling:
 ```bash
 # Environment variables
 REDIS_HOST=localhost
-REDIS_PORT=6379
+REDIS_PORT=6380
 ```
 
 ### 9.3 Key Features
