@@ -55,6 +55,44 @@ enum QuestionType {
   SHORT_ANSWER
 }
 
+model Language {
+  id        String   @id @default(cuid()) @map("id")
+  code      String   @unique @map("code")
+  name      String   @map("name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sourceVocabs Vocab[] @relation("VocabSourceLanguage")
+  targetVocabs Vocab[] @relation("VocabTargetLanguage")
+
+  sourceLanguageFolders LanguageFolder[] @relation("SourceLanguageFolders")
+  targetLanguageFolders LanguageFolder[] @relation("TargetLanguageFolders")
+
+  @@index([name])
+  @@index([code])
+  @@map("language")
+}
+
+model LanguageFolder {
+  id          String   @id @default(cuid()) @map("id")
+  name        String   @map("name")
+  folderColor String   @map("folder_color")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sourceLanguageCode String   @map("source_language_code")
+  sourceLanguage     Language @relation("SourceLanguageFolders", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
+
+  targetLanguageCode String   @map("target_language_code")
+  targetLanguage     Language @relation("TargetLanguageFolders", fields: [targetLanguageCode], references: [code], onDelete: Cascade)
+
+  @@index([name])
+  @@map("language_folder")
+}
+
 model Vocab {
   id                 String   @id @default(cuid()) @map("id")
   textSource         String   @map("text_source")
@@ -78,21 +116,6 @@ model Vocab {
   @@index([targetLanguageCode])
   @@index([sourceLanguageCode, targetLanguageCode])
   @@map("vocab")
-}
-
-model Language {
-  id        String   @id @default(cuid()) @map("id")
-  code      String   @unique @map("code")
-  name      String   @map("name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  sourceVocabs Vocab[] @relation("VocabSourceLanguage")
-  targetVocabs Vocab[] @relation("VocabTargetLanguage")
-
-  @@index([name])
-  @@index([code])
-  @@map("language")
 }
 
 model VocabTrainer {
@@ -300,6 +323,7 @@ model User {
   vocabTrainers          VocabTrainer[]
   subjects               Subject[]
   UserFcmToken           UserFcmToken[]
+  LanguageFolder         LanguageFolder[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])

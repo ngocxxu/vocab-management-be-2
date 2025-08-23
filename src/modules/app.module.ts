@@ -7,6 +7,7 @@ import { AuthGuard, CommonModule } from './common';
 import { EmailModule } from './email/email.module';
 import { FcmModule } from './fcm/fcm.module';
 import { LanguageModule } from './language/language.module';
+import { LanguageFolderModule } from './language-folder/language-folder.module';
 import { NotificationModule } from './notification/notification.module';
 import { ReminderModule } from './reminder/reminder.module';
 import { EReminderType } from './reminder/util';
@@ -35,6 +36,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         AuthModule,
         UserModule,
         LanguageModule,
+        LanguageFolderModule,
         SubjectModule,
         WordTypeModule,
         VocabModule,

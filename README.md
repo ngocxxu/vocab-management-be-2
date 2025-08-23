@@ -171,7 +171,7 @@ Redis serves as the project's performance backbone, handling:
 ```bash
 # Environment variables
 REDIS_HOST=localhost
-REDIS_PORT=6380
+REDIS_PORT=6379
 ```
 
 ### 9.3 Key Features

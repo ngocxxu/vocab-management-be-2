@@ -10,6 +10,7 @@ export enum RedisPrefix {
     SUBJECT = 'subject:',
     WORD_TYPE = 'word-type:',
     LANGUAGE = 'language:',
+    LANGUAGE_FOLDER = 'language-folder:',
 }
 
 export class RedisKeyManager {

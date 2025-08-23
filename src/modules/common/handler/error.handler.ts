@@ -17,7 +17,8 @@ export type ErrorContext =
     | 'registerToken'
     | 'unregisterToken'
     | 'getUserTokens'
-    | 'getTokensForUsers';
+    | 'getTokensForUsers'
+    | 'findByUserId';
 
 // Define error mapping interface
 interface PrismaErrorMapping {
@@ -47,6 +48,7 @@ export class PrismaErrorHandler {
             unregisterToken: 'FCM token not found',
             getUserTokens: 'FCM token not found',
             getTokensForUsers: 'FCM token not found',
+            findByUserId: 'Record not found',
         },
         P2003: 'Foreign key constraint failed',
         P2014: 'Invalid ID provided',
