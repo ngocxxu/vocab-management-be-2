@@ -41,14 +41,14 @@ jobs:
             # Update deployment image
             kubectl set image deployment/vocab-be \
               vocab-be=${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ github.sha }} \
-              -n default --record
+              -n vocab-be --record
 
             # Wait for rollout to complete
-            kubectl rollout status deployment/vocab-be -n default --timeout=300s
+            kubectl rollout status deployment/vocab-be -n vocab-be --timeout=300s
 
             # Verify deployment
             echo "Current pods status:"
-            kubectl get pods -n default -l app=vocab-be
+            kubectl get pods -n vocab-be -l app=vocab-be
 
             # Clean up old images
             docker image prune -af --filter "until=24h"
