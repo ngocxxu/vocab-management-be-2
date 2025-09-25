@@ -83,6 +83,8 @@ model LanguageFolder {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  vocabs Vocab[]
+
   sourceLanguageCode String   @map("source_language_code")
   sourceLanguage     Language @relation("SourceLanguageFolders", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
 
@@ -94,16 +96,18 @@ model LanguageFolder {
 }
 
 model Vocab {
-  id                 String   @id @default(cuid()) @map("id")
-  textSource         String   @map("text_source")
-  sourceLanguageCode String   @map("source_language_code")
-  sourceLanguage     Language @relation("VocabSourceLanguage", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
-  targetLanguageCode String   @map("target_language_code")
-  targetLanguage     Language @relation("VocabTargetLanguage", fields: [targetLanguageCode], references: [code], onDelete: Cascade)
-  userId             String   @map("user_id")
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                 String         @id @default(cuid()) @map("id")
+  textSource         String         @map("text_source")
+  sourceLanguageCode String         @map("source_language_code")
+  sourceLanguage     Language       @relation("VocabSourceLanguage", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
+  targetLanguageCode String         @map("target_language_code")
+  targetLanguage     Language       @relation("VocabTargetLanguage", fields: [targetLanguageCode], references: [code], onDelete: Cascade)
+  userId             String         @map("user_id")
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  languageFolderId   String         @map("language_folder_id")
+  LanguageFolder     LanguageFolder @relation(fields: [languageFolderId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
 
   vocabTrainerWords VocabTrainerWord[]
   textTargets       TextTarget[]
@@ -115,6 +119,7 @@ model Vocab {
   @@index([sourceLanguageCode])
   @@index([targetLanguageCode])
   @@index([sourceLanguageCode, targetLanguageCode])
+  @@index([languageFolderId, sourceLanguageCode, targetLanguageCode])
   @@map("vocab")
 }
 

@@ -11,6 +11,9 @@ export class VocabQueryParamsInput extends QueryParamsInput {
     @ApiProperty({ description: 'Code of the target language', example: 'en', required: false })
     public readonly targetLanguageCode: string;
 
+    @ApiProperty({ description: 'Language folder id', example: 'string', required: false })
+    public readonly languageFolderId: string;
+
     @ApiProperty({
         description: 'List of subject ids',
         type: 'array',

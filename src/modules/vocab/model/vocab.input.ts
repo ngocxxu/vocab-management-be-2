@@ -7,6 +7,7 @@ export class VocabInput extends PickType(VocabDto, [
     'textSource',
     'sourceLanguageCode',
     'targetLanguageCode',
+    'languageFolderId',
 ] as const) {
     @ApiProperty({
         description: 'List of text targets for this vocabulary',

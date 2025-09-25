@@ -23,14 +23,14 @@ export class LanguageFolderInput extends PickType(LanguageFolderDto, [
 
     @ApiProperty({
         description: 'Source language code',
-        example: 'en-US',
+        example: 'en',
         pattern: '^[a-z]{2,3}(-[A-Z]{2})?$',
     })
     public readonly sourceLanguageCode: string;
 
     @ApiProperty({
         description: 'Target language code',
-        example: 'es-ES',
+        example: 'ko',
         pattern: '^[a-z]{2,3}(-[A-Z]{2})?$',
     })
     public readonly targetLanguageCode: string;

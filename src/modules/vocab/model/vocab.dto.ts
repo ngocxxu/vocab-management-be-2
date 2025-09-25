@@ -13,17 +13,28 @@ export class VocabDto {
     @ApiProperty({ description: 'Code of the source language', example: 'vi' })
     public readonly sourceLanguageCode: string;
 
-    @ApiProperty({ description: 'Source language details', required: false, type: () => LanguageDto  })
+    @ApiProperty({
+        description: 'Source language details',
+        required: false,
+        type: () => LanguageDto,
+    })
     public readonly sourceLanguage?: LanguageDto;
 
     @ApiProperty({ description: 'Code of the target language', example: 'en' })
     public readonly targetLanguageCode: string;
 
-    @ApiProperty({ description: 'Target language details', required: false , type: () => LanguageDto })
+    @ApiProperty({
+        description: 'Target language details',
+        required: false,
+        type: () => LanguageDto,
+    })
     public readonly targetLanguage?: LanguageDto;
 
     @ApiProperty({ description: 'User ID', example: 'string' })
     public readonly userId: string;
+
+    @ApiProperty({ description: 'Language folder id', example: 'string' })
+    public readonly languageFolderId: string;
 
     @ApiProperty({ description: 'Date when the vocabulary was created' })
     public readonly createdAt: Date;
@@ -51,6 +62,7 @@ export class VocabDto {
         this.sourceLanguageCode = entity.sourceLanguageCode;
         this.targetLanguageCode = entity.targetLanguageCode;
         this.userId = entity.userId;
+        this.languageFolderId = entity.languageFolderId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.sourceLanguage = entity.sourceLanguage

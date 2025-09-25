@@ -57,7 +57,13 @@ export class VocabService {
             ) as Prisma.VocabOrderByWithRelationInput;
 
             const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
-                stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId'],
+                stringFields: [
+                    'textSource',
+                    'sourceLanguageCode',
+                    'targetLanguageCode',
+                    'userId',
+                    'languageFolderId',
+                ],
                 customMap: (input, w) => {
                     // Add user filter if userId provided
                     if (userId) {
@@ -233,8 +239,13 @@ export class VocabService {
      */
     public async create(createVocabData: VocabInput, userId: string): Promise<VocabDto> {
         try {
-            const { textSource, sourceLanguageCode, targetLanguageCode, textTargets }: VocabInput =
-                createVocabData;
+            const {
+                textSource,
+                sourceLanguageCode,
+                targetLanguageCode,
+                textTargets,
+                languageFolderId,
+            }: VocabInput = createVocabData;
 
             // Validate that source and target languages are different
             if (sourceLanguageCode === targetLanguageCode) {
@@ -246,6 +257,7 @@ export class VocabService {
                     textSource,
                     sourceLanguageCode,
                     targetLanguageCode,
+                    languageFolderId,
                     textTargets: {
                         create: textTargets.map((target) => ({
                             textTarget: target.textTarget,

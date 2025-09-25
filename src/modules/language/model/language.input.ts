@@ -4,7 +4,7 @@ import { LanguageDto } from './language.dto';
 export class LanguageInput extends PickType(LanguageDto, ['code', 'name'] as const) {
     @ApiProperty({
         description: 'Language code in ISO format',
-        example: 'en-US',
+        example: 'en',
         pattern: '^[a-z]{2,3}(-[A-Z]{2})?$',
     })
     public readonly code: string;
