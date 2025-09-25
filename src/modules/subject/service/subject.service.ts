@@ -55,7 +55,11 @@ export class SubjectService {
                 },
             });
 
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, 'all', subjects);
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.SUBJECT,
+                `userId:${userId}`,
+                subjects,
+            );
 
             return {
                 items: subjects.map((subject) => new SubjectDto(subject)),
@@ -76,8 +80,8 @@ export class SubjectService {
      */
     public async findOne(id: string, userId?: string): Promise<SubjectDto> {
         try {
-            // Try to get from cache first using hash
-            const cached = await this.redisService.getObjectWithPrefix<Subject>(
+            // Try to get from cache first using JSON
+            const cached = await this.redisService.jsonGetWithPrefix<Subject>(
                 RedisPrefix.SUBJECT,
                 `id:${id}`,
             );
@@ -102,8 +106,22 @@ export class SubjectService {
                 throw new NotFoundException(`Subject with ID ${id} not found`);
             }
 
-            // Cache the result as hash
-            await this.redisService.setObjectWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
+            // Cache the result as JSON
+            try {
+                await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
+            } catch (error) {
+                // If Redis type conflict, clear the specific key and retry
+                if (error instanceof Error && error.message.includes('wrong Redis type')) {
+                    await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
+                    await this.redisService.jsonSetWithPrefix(
+                        RedisPrefix.SUBJECT,
+                        `id:${id}`,
+                        subject,
+                    );
+                } else {
+                    throw error;
+                }
+            }
 
             const subjectDto = new SubjectDto(subject);
             return subjectDto;
@@ -148,12 +166,26 @@ export class SubjectService {
                 },
             });
 
-            // Cache the new subject as hash
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.SUBJECT,
-                `id:${subject.id}`,
-                subject,
-            );
+            // Cache the new subject as JSON
+            try {
+                await this.redisService.jsonSetWithPrefix(
+                    RedisPrefix.SUBJECT,
+                    `id:${subject.id}`,
+                    subject,
+                );
+            } catch (error) {
+                // If Redis type conflict, clear the specific key and retry
+                if (error instanceof Error && error.message.includes('wrong Redis type')) {
+                    await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${subject.id}`);
+                    await this.redisService.jsonSetWithPrefix(
+                        RedisPrefix.SUBJECT,
+                        `id:${subject.id}`,
+                        subject,
+                    );
+                } else {
+                    throw error;
+                }
+            }
 
             const subjectDto = new SubjectDto(subject);
 
@@ -205,12 +237,29 @@ export class SubjectService {
                 ...subject,
             });
 
-            // Update the cache
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.SUBJECT,
-                `id:${subjectDto.id}`,
-                subjectDto,
-            );
+            // Update the cache using JSON storage for individual objects
+            try {
+                await this.redisService.jsonSetWithPrefix(
+                    RedisPrefix.SUBJECT,
+                    `id:${subjectDto.id}`,
+                    subjectDto,
+                );
+            } catch (error) {
+                // If Redis type conflict, clear the specific key and retry
+                if (error instanceof Error && error.message.includes('wrong Redis type')) {
+                    await this.redisService.delWithPrefix(
+                        RedisPrefix.SUBJECT,
+                        `id:${subjectDto.id}`,
+                    );
+                    await this.redisService.jsonSetWithPrefix(
+                        RedisPrefix.SUBJECT,
+                        `id:${subjectDto.id}`,
+                        subjectDto,
+                    );
+                } else {
+                    throw error;
+                }
+            }
 
             // Clear the user's subject list cache
             await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
@@ -262,6 +311,32 @@ export class SubjectService {
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'reorder', this.subjectErrorMapping);
             throw error;
+        }
+    }
+
+    /**
+     * Clear all subject cache for a user
+     * @param userId - The user ID to clear cache for
+     */
+    public async clearUserCache(userId: string): Promise<void> {
+        try {
+            // Clear all subject-related cache for this user
+            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
+
+            // Get all subject IDs for this user and clear individual caches
+            const subjects = await this.prismaService.subject.findMany({
+                where: { userId },
+                select: { id: true },
+            });
+
+            for (const subject of subjects) {
+                await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${subject.id}`);
+            }
+        } catch (error) {
+            // Log error but don't throw - cache clearing is not critical
+            // Using console.warn for non-critical cache operations
+            // eslint-disable-next-line no-console
+            console.warn('Failed to clear subject cache:', error);
         }
     }
 
