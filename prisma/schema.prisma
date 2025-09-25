@@ -105,7 +105,7 @@ model Vocab {
   userId             String         @map("user_id")
   user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   languageFolderId   String         @map("language_folder_id")
-  LanguageFolder     LanguageFolder @relation(fields: [languageFolderId], references: [id], onDelete: Cascade)
+  languageFolder     LanguageFolder @relation(fields: [languageFolderId], references: [id], onDelete: Cascade)
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
 
@@ -327,8 +327,8 @@ model User {
   vocabs                 Vocab[]
   vocabTrainers          VocabTrainer[]
   subjects               Subject[]
-  UserFcmToken           UserFcmToken[]
-  LanguageFolder         LanguageFolder[]
+  userFcmTokens           UserFcmToken[]
+  languageFolders         LanguageFolder[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])

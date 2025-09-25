@@ -94,6 +94,7 @@ export class VocabService {
                     include: {
                         sourceLanguage: true,
                         targetLanguage: true,
+                        languageFolder: true,
                         textTargets: {
                             include: {
                                 wordType: true,
