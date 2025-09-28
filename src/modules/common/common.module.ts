@@ -8,28 +8,23 @@ import { RedisService } from './provider/redis.provider';
 import { CacheManagerService } from './service/cache-manager.service';
 
 @Module({
-  imports: [
-    TerminusModule,
-    ConfigModule
-  ],
-  providers: [
-    configProvider,
-    LoggerService,
-    LogInterceptor,
-    PrismaService,
-    RedisService,
-    CacheManagerService,
-  ],
-  exports: [
-    configProvider,
-    LoggerService,
-    LogInterceptor,
-    PrismaService,
-    RedisService,
-    CacheManagerService,
-  ],
-  controllers: [
-    HealthController
-  ],
+    imports: [TerminusModule, ConfigModule],
+    providers: [
+        configProvider,
+        LoggerService,
+        LogInterceptor,
+        PrismaService,
+        RedisService,
+        CacheManagerService,
+    ],
+    exports: [
+        configProvider,
+        LoggerService,
+        LogInterceptor,
+        PrismaService,
+        RedisService,
+        CacheManagerService,
+    ],
+    controllers: [HealthController],
 })
 export class CommonModule {}

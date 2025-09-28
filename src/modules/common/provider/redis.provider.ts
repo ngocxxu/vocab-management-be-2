@@ -14,13 +14,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     public async onModuleInit() {
         try {
             // Check if we should use Upstash (production) or local Redis
-            const useUpstash = process.env.SWITCH_REDIS === 'true' || process.env.NODE_ENV === 'production';
+            const useUpstash =
+                process.env.SWITCH_REDIS === 'true' || process.env.NODE_ENV === 'production';
 
             if (useUpstash) {
                 // Use Upstash Redis (production)
                 const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
                 if (!redisUrl) {
-                    throw new Error('REDIS_URL or UPSTASH_REDIS_URL environment variable is required for production');
+                    throw new Error(
+                        'REDIS_URL or UPSTASH_REDIS_URL environment variable is required for production',
+                    );
                 }
 
                 this.redisClient = new Redis(redisUrl, {
@@ -362,12 +365,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    public async jsonGetWithPrefix<T>(
-        prefix: RedisPrefix,
-        key: string,
-    ): Promise<T | null> {
+    public async jsonGetWithPrefix<T>(prefix: RedisPrefix, key: string): Promise<T | null> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
-        const result = await this.redisClient.call('JSON.GET', fullKey, '$') as string;
+        const result = (await this.redisClient.call('JSON.GET', fullKey, '$')) as string;
         if (!result) return null;
 
         const parsed = JSON.parse(result) as T;
@@ -376,5 +376,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     public getClient(): Redis {
         return this.redisClient;
+    }
+
+    // Pub/Sub operations
+    public async publish(
+        channel: string,
+        message: string | Record<string, unknown>,
+    ): Promise<number> {
+        const messageStr = typeof message === 'string' ? message : JSON.stringify(message);
+        return this.redisClient.publish(channel, messageStr);
+    }
+
+    public async subscribe(channel: string, callback: (message: string) => void): Promise<void> {
+        const subscriber = this.redisClient.duplicate();
+        await subscriber.subscribe(channel);
+
+        subscriber.on('message', (receivedChannel: string, message: string) => {
+            if (receivedChannel === channel) {
+                callback(message);
+            }
+        });
     }
 }

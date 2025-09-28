@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
 import { EmailModule } from './email/email.module';
+import { EventsModule } from './event/module';
 import { FcmModule } from './fcm/fcm.module';
 import { LanguageModule } from './language/language.module';
 import { LanguageFolderModule } from './language-folder/language-folder.module';
@@ -46,6 +47,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         EmailModule,
         SSEModule,
         FcmModule,
+        EventsModule,
     ],
     providers: [
         {
