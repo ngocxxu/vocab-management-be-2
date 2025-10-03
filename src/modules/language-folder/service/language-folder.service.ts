@@ -1,10 +1,12 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { LanguageFolder } from '@prisma/client';
-import { IResponse, PrismaService } from '../../common';
+import { LanguageFolder, Prisma } from '@prisma/client';
+import { getOrderBy, getPagination, IResponse, PaginationDto, PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { RedisService } from '../../common/provider/redis.provider';
+import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { RedisPrefix } from '../../common/util/redis-key.util';
 import { LanguageFolderDto, LanguageFolderInput } from '../model';
+import { LanguageFolderParamsInput } from '../model/language-folder-params.input';
 
 @Injectable()
 export class LanguageFolderService {
@@ -72,37 +74,57 @@ export class LanguageFolderService {
     }
 
     /**
-     * Find all language folders in the database (admin only)
-     * @returns Promise<IResponse<LanguageFolderDto[]>> Array of language folder DTOs
+     * Find all language folders in the database (paginated)
+     * @returns Promise<PaginationDto<LanguageFolderDto>> Paginated language folder DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(): Promise<IResponse<LanguageFolderDto[]>> {
+    public async find(
+        query: LanguageFolderParamsInput,
+        userId: string,
+    ): Promise<PaginationDto<LanguageFolderDto>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<LanguageFolder[]>(
-                RedisPrefix.LANGUAGE_FOLDER,
-                'all',
-            );
-            if (cached) {
-                return {
-                    items: cached.map((folder) => new LanguageFolderDto(folder)),
-                    statusCode: HttpStatus.OK,
-                };
-            }
+            const { page, pageSize, skip, take } = getPagination({
+                page: query.page,
+                pageSize: query.pageSize,
+                defaultPage: PaginationDto.DEFAULT_PAGE,
+                defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
+            });
 
-            const folders = await this.prismaService.languageFolder.findMany({
-                orderBy: [{ userId: 'asc' }, { name: 'asc' }],
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
+            const orderBy = getOrderBy(
+                query.sortBy,
+                query.sortOrder,
+                'createdAt',
+            ) as Prisma.LanguageFolderOrderByWithRelationInput;
+
+            const where = buildPrismaWhere<
+                LanguageFolderParamsInput,
+                Prisma.LanguageFolderWhereInput
+            >(query, {
+                stringFields: ['name', 'sourceLanguageCode', 'targetLanguageCode'],
+                customMap: (input, w) => {
+                    // Add user filter if userId provided
+                    if (userId) {
+                        (w as Prisma.LanguageFolderWhereInput).userId = userId;
+                    }
                 },
             });
 
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.LANGUAGE_FOLDER, 'all', folders);
+            const [totalItems, folders] = await Promise.all([
+                this.prismaService.languageFolder.count({ where }),
+                this.prismaService.languageFolder.findMany({
+                    where,
+                    include: {
+                        sourceLanguage: true,
+                        targetLanguage: true,
+                    },
+                    orderBy,
+                    skip,
+                    take,
+                }),
+            ]);
 
-            return {
-                items: folders.map((folder) => new LanguageFolderDto(folder)),
-                statusCode: HttpStatus.OK,
-            };
+            const items = folders.map((folder) => new LanguageFolderDto(folder));
+            return new PaginationDto<LanguageFolderDto>(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.languageFolderErrorMapping);
         }
@@ -111,22 +133,34 @@ export class LanguageFolderService {
     /**
      * Find a single language folder by ID
      * @param id - The language folder ID to search for
+     * @param userId - Optional user ID to filter by
      * @returns Promise<LanguageFolderDto> The language folder DTO
      * @throws NotFoundException when language folder is not found
      * @throws PrismaError when database operation fails
      */
-    public async findOne(id: string): Promise<LanguageFolderDto> {
+    public async findOne(id: string, userId?: string): Promise<LanguageFolderDto> {
         try {
             const cached = await this.redisService.getObjectWithPrefix<LanguageFolder>(
                 RedisPrefix.LANGUAGE_FOLDER,
                 `id:${id}`,
             );
             if (cached) {
+                // Verify ownership if userId provided
+                if (userId && cached.userId !== userId) {
+                    throw new NotFoundException(`Language folder with ID ${id} not found`);
+                }
                 return new LanguageFolderDto(cached);
             }
 
-            const folder = await this.prismaService.languageFolder.findUnique({
-                where: { id },
+            const where: Prisma.LanguageFolderWhereUniqueInput & Prisma.LanguageFolderWhereInput = {
+                id,
+            };
+            if (userId) {
+                where.userId = userId;
+            }
+
+            const folder = await this.prismaService.languageFolder.findFirst({
+                where,
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
@@ -187,11 +221,19 @@ export class LanguageFolderService {
                 },
             });
 
+            const folderDto = new LanguageFolderDto(folder);
+
+            // Cache the new folder as RedisJSON
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.LANGUAGE_FOLDER,
+                `id:${folderDto.id}`,
+                folderDto,
+            );
+
             // Clear cache for this user
             await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `user:${userId}`);
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, 'all');
 
-            return new LanguageFolderDto(folder);
+            return folderDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.languageFolderErrorMapping);
         }
@@ -213,6 +255,18 @@ export class LanguageFolderService {
         userId: string,
     ): Promise<LanguageFolderDto> {
         try {
+            // First, verify the folder exists and belongs to the user
+            const existingFolder = await this.prismaService.languageFolder.findFirst({
+                where: {
+                    id,
+                    userId,
+                },
+            });
+
+            if (!existingFolder) {
+                throw new Error('Language folder not found or unauthorized');
+            }
+
             const {
                 name,
                 folderColor,
@@ -220,42 +274,33 @@ export class LanguageFolderService {
                 targetLanguageCode,
             }: Partial<LanguageFolderInput> = updateFolderData;
 
-            // Check if folder exists and belongs to the user
-            const existingFolder = await this.prismaService.languageFolder.findUnique({
-                where: { id },
-            });
-
-            if (!existingFolder) {
-                throw new NotFoundException(`Language folder with ID ${id} not found`);
-            }
-
-            if (existingFolder.userId !== userId) {
-                throw new NotFoundException('You can only update your own language folders');
-            }
-
-            // Prepare update data
-            const updateData = {
-                ...(name !== undefined && { name }),
-                ...(folderColor !== undefined && { folderColor }),
-                ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
-                ...(targetLanguageCode !== undefined && { targetLanguageCode }),
-            };
-
             const folder = await this.prismaService.languageFolder.update({
                 where: { id },
-                data: updateData,
+                data: {
+                    ...(name !== undefined && { name }),
+                    ...(folderColor !== undefined && { folderColor }),
+                    ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
+                    ...(targetLanguageCode !== undefined && { targetLanguageCode }),
+                },
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
                 },
             });
 
-            // Clear cache
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `user:${userId}`);
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, 'all');
+            const folderDto = new LanguageFolderDto(folder);
 
-            return new LanguageFolderDto(folder);
+            // Update the cache
+            await this.redisService.jsonSetWithPrefix(
+                RedisPrefix.LANGUAGE_FOLDER,
+                `id:${folderDto.id}`,
+                folderDto,
+            );
+
+            // Clear user cache
+            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `user:${userId}`);
+
+            return folderDto;
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -265,48 +310,72 @@ export class LanguageFolderService {
     }
 
     /**
-     * Delete a language folder from the database
+     * Delete a language folder record
      * @param id - The language folder ID to delete
-     * @param userId - The user ID who owns this folder (for authorization)
+     * @param userId - Optional user ID to filter by
      * @returns Promise<LanguageFolderDto> The deleted language folder DTO
-     * @throws NotFoundException when language folder is not found or doesn't belong to user
-     * @throws PrismaError when database operation fails
+     * @throws NotFoundException when language folder is not found
+     * @throws PrismaError when database operation fails or language folder not found
      */
-    public async delete(id: string, userId: string): Promise<LanguageFolderDto> {
+    public async delete(id: string, userId?: string): Promise<LanguageFolderDto> {
         try {
-            // Check if folder exists and belongs to the user
-            const existingFolder = await this.prismaService.languageFolder.findUnique({
-                where: { id },
-            });
-
-            if (!existingFolder) {
-                throw new NotFoundException(`Language folder with ID ${id} not found`);
-            }
-
-            if (existingFolder.userId !== userId) {
-                throw new NotFoundException('You can only delete your own language folders');
+            const where: Prisma.LanguageFolderWhereUniqueInput & Prisma.LanguageFolderWhereInput = {
+                id,
+            };
+            if (userId) {
+                where.userId = userId;
             }
 
             const folder = await this.prismaService.languageFolder.delete({
-                where: { id },
+                where,
                 include: {
                     sourceLanguage: true,
                     targetLanguage: true,
                 },
             });
 
-            // Clear cache
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `user:${userId}`);
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, 'all');
+            const folderDto = new LanguageFolderDto(folder);
 
-            return new LanguageFolderDto(folder);
-        } catch (error: unknown) {
-            if (error instanceof NotFoundException) {
-                throw error;
+            // Remove from cache
+            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+            if (userId) {
+                await this.redisService.delWithPrefix(
+                    RedisPrefix.LANGUAGE_FOLDER,
+                    `user:${userId}`,
+                );
             }
+
+            return folderDto;
+        } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.languageFolderErrorMapping);
         }
     }
-}
 
+    /**
+     * Clear language folder cache
+     */
+    public async clearLanguageFolderCache(): Promise<void> {
+        await this.redisService.clearByPrefix(RedisPrefix.LANGUAGE_FOLDER);
+    }
+
+    /**
+     * Clear specific language folder cache by ID
+     */
+    public async clearLanguageFolderCacheById(id: string): Promise<void> {
+        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+    }
+
+    /**
+     * Update specific fields in cached language folder object
+     */
+    public async updateLanguageFolderCacheFields(
+        id: string,
+        fields: Record<string, unknown>,
+    ): Promise<void> {
+        await this.redisService.updateObjectFieldsWithPrefix(
+            RedisPrefix.LANGUAGE_FOLDER,
+            `id:${id}`,
+            fields,
+        );
+    }
+}

@@ -40,7 +40,7 @@ export class VocabService {
      */
     public async find(
         query: VocabQueryParamsInput,
-        userId?: string,
+        userId: string,
     ): Promise<PaginationDto<VocabDto>> {
         try {
             const { page, pageSize, skip, take } = getPagination({

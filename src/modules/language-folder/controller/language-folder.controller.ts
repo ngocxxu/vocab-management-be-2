@@ -7,6 +7,7 @@ import {
     Param,
     Post,
     Put,
+    Query,
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ import { IResponse, LoggerService, RolesGuard } from '../../common';
 import { Roles, CurrentUser } from '../../common/decorator';
 import { LanguageFolderPipe } from '../flow';
 import { LanguageFolderDto, LanguageFolderInput } from '../model';
+import { LanguageFolderParamsInput } from '../model/language-folder-params.input';
 import { LanguageFolderService } from '../service';
 
 @Controller('language-folders')
@@ -31,8 +33,11 @@ export class LanguageFolderController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find all language folders (admin only)' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageFolderDto })
-    public async find(): Promise<IResponse<LanguageFolderDto[]>> {
-        return this.languageFolderService.find();
+    public async find(
+        @Query() query: LanguageFolderParamsInput,
+        @CurrentUser() user: User,
+    ): Promise<IResponse<LanguageFolderDto[]>> {
+        return this.languageFolderService.find(query, user.id);
     }
 
     @Get('my')
