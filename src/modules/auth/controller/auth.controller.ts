@@ -56,19 +56,7 @@ export class AuthController {
         description: 'Registration failed',
     })
     public async signUp(@Body(SignUpPipe) input: SignUpInput): Promise<UserDto> {
-        const { email, password, firstName, lastName, phone, avatar, role } = input;
-
-        const result = await this.authService.signUp(
-            email,
-            password,
-            firstName,
-            lastName,
-            phone,
-            avatar,
-            role,
-        );
-
-        this.logger.info(`User registered successfully with email: ${email}`);
+        const result = await this.authService.signUp(input);
         return result;
     }
 

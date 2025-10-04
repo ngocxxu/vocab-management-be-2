@@ -6,7 +6,7 @@ import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PrismaService } from '../../common/provider';
 import { jwtDecode } from '../../common/util/jwt.util';
 import { UserDto } from '../../user/model';
-import { OAuthResponseDto, SessionDto } from '../model';
+import { OAuthResponseDto, SessionDto, SignUpInput } from '../model';
 import { SignInResponse } from '../util';
 
 @Injectable()
@@ -31,16 +31,10 @@ export class AuthService {
     /**
      * Register user with email and password
      */
-    public async signUp(
-        email: string,
-        password: string,
-        firstName?: string,
-        lastName?: string,
-        phone?: string,
-        avatar?: string,
-        role?: UserRole, // Use enum type for role
-    ): Promise<UserDto> {
+    public async signUp(input: SignUpInput): Promise<UserDto> {
         try {
+            const { email, password, firstName, lastName, phone, avatar, role } = input;
+
             // 1. Create user in Supabase
             const { data, error } = await this.supabase.auth.signUp({
                 email,
@@ -65,11 +59,11 @@ export class AuthService {
                 data: {
                     email: email ?? supabaseUser.email,
                     supabaseUserId: supabaseUser.id,
-                    firstName: firstName ?? '',
-                    lastName: lastName ?? '',
-                    phone: phone ?? supabaseUser.phone,
-                    avatar,
-                    role: role ?? UserRole.STAFF, // Use enum value
+                    firstName: firstName && firstName.trim() !== '' ? firstName : '',
+                    lastName: lastName && lastName.trim() !== '' ? lastName : '',
+                    phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
+                    avatar: avatar && avatar.trim() !== '' ? avatar : null,
+                    role: role ?? UserRole.STAFF,
                     isActive: true,
                 },
             });

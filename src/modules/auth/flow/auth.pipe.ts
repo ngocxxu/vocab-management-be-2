@@ -26,22 +26,23 @@ export class SignUpPipe extends JoiValidationPipe {
                 'any.required': 'Password is required',
             }),
 
-            firstName: Joi.string().max(50).optional().messages({
+            firstName: Joi.string().max(50).allow('', null).optional().messages({
                 'string.max': 'First name cannot exceed 50 characters',
             }),
 
-            lastName: Joi.string().max(50).optional().messages({
+            lastName: Joi.string().max(50).allow('', null).optional().messages({
                 'string.max': 'Last name cannot exceed 50 characters',
             }),
 
             phone: Joi.string()
                 .pattern(/^[+]?[0-9\s\-()]+$/)
+                .allow('', null)
                 .optional()
                 .messages({
                     'string.pattern.base': 'Please provide a valid phone number',
                 }),
 
-            avatar: Joi.string().uri().optional().messages({
+            avatar: Joi.string().uri().allow('', null).optional().messages({
                 'string.uri': 'Avatar must be a valid URL',
             }),
 
