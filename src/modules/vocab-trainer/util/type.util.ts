@@ -1,4 +1,4 @@
-import { Prisma, QuestionType, VocabTrainer, VocabTrainerResult } from '@prisma/client';
+import { Prisma, VocabTrainer } from '@prisma/client';
 
 export enum EReminderRepeat {
     MAX_REPEAT = 32,
@@ -49,13 +49,11 @@ export interface QuestionAnswer {
 }
 
 export interface WordTestSelect {
-    vocabId: string;
     userSelected: string;
-    questionType: QuestionType;
+    systemSelected: string;
 }
 
 export interface EvaluateResult {
-    wordResults: VocabTrainerResult[];
     createResults: Prisma.VocabTrainerResultCreateManyInput[];
     correctAnswers: number;
 }

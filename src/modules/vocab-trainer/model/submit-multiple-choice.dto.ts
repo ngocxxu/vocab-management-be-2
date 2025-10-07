@@ -8,7 +8,7 @@ export class SubmitMultipleChoiceInput extends SubmitExamInput {
         type: [Object],
         example: [
             {
-                vocabId: 'string',
+                systemSelected: 'string',
                 userSelected: 'string',
             },
         ],

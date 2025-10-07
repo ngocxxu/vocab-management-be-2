@@ -217,7 +217,6 @@ export class VocabTrainerService {
             const { createResults, correctAnswers } = evaluateMultipleChoiceAnswers(
                 trainer.id,
                 wordTestSelects,
-                trainer.questionAnswers,
             );
 
             // Batch insert all results

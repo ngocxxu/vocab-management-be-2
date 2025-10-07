@@ -2,6 +2,31 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
 
+// Configuration interface for AI service
+export interface AiServiceConfig {
+    modelName: string;
+    questionCount: number;
+    passingScore: number;
+    sourceQuestionProbability: number;
+    maxRetries: number;
+    retryDelayMs: number;
+}
+
+// Constants for AI service configuration
+const AI_CONFIG: AiServiceConfig = {
+    modelName: 'gemini-2.0-flash',
+    questionCount: 4,
+    passingScore: 70,
+    sourceQuestionProbability: 0.5,
+    maxRetries: 2,
+    retryDelayMs: 1000,
+} as const;
+
+const QUESTION_TYPES = {
+    SOURCE: 'textSource',
+    TARGET: 'textTarget',
+} as const;
+
 export interface MultipleChoiceQuestion {
     correctAnswer: string;
     type: 'textSource' | 'textTarget';
@@ -53,10 +78,11 @@ export class AiService {
      */
     private async generateQuestionForVocab(
         vocab: VocabWithTextTargets,
+        retryCount = 0,
     ): Promise<MultipleChoiceQuestion | null> {
         try {
             // Randomly choose whether to ask about source or target
-            const isAskingSource = Math.random() < 0.5;
+            const isAskingSource = Math.random() < AI_CONFIG.sourceQuestionProbability;
 
             if (isAskingSource) {
                 return await this.generateSourceQuestion(vocab);
@@ -64,39 +90,69 @@ export class AiService {
                 return await this.generateTargetQuestion(vocab);
             }
         } catch (error) {
-            this.logger.error(`Error generating question for vocab ${vocab.id}:`, error);
+            this.logger.error(
+                `Error generating question for vocab ${vocab.id} (attempt ${retryCount + 1}):`,
+                error,
+            );
+
+            // Retry logic for transient errors
+            if (retryCount < AI_CONFIG.maxRetries) {
+                this.logger.warn(`Retrying question generation for vocab ${vocab.id}...`);
+                await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1)); // Exponential backoff
+                return this.generateQuestionForVocab(vocab, retryCount + 1);
+            }
+
             return null;
         }
     }
 
     /**
-     * Generate question asking for source text (answer is target)
+     * Utility method for delay
      */
-    private async generateSourceQuestion(
-        vocab: VocabWithTextTargets,
-    ): Promise<MultipleChoiceQuestion> {
-        const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    private async delay(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
 
-        // Randomly select one target text as the correct answer
-        const correctTarget =
-            vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
+    /**
+     * Common method to generate question with prompt template
+     */
+    private async generateQuestionWithPrompt(promptData: {
+        questionType: 'source' | 'target';
+        sourceLanguage: string;
+        targetLanguage: string;
+        sourceText: string;
+        targetText: string;
+        correctAnswer: string;
+        correctAnswerLabel: string;
+    }): Promise<{
+        content: string;
+        options: Array<{ label: string; value: string }>;
+        correctAnswer: string;
+    }> {
+        const model = this.genAI.getGenerativeModel({ model: AI_CONFIG.modelName });
+
+        const isSourceQuestion = promptData.questionType === 'source';
+        const questionText = isSourceQuestion
+            ? `What is the translation of '${promptData.sourceText}' in [target_language]?`
+            : `What is the translation of '${promptData.targetText}' in [source_language]?`;
 
         const prompt = `
 You are a language learning assistant. Generate a multiple choice question for vocabulary practice.
 
 Context:
-- Source language: ${vocab.sourceLanguageCode}
-- Target language: ${vocab.targetLanguageCode}
-- Source text: "${vocab.textSource}"
-- Target text (correct answer): "${correctTarget.textTarget}"
+- Source language: ${promptData.sourceLanguage}
+- Target language: ${promptData.targetLanguage}
+- Source text: "${promptData.sourceText}"
+- Target text: "${promptData.targetText}"
+- Correct answer: "${promptData.correctAnswer}"
 
-Task: Create a question asking "What is the translation of '[source_text]' in [target_language]?"
+Task: Create a question asking "${questionText}"
 
 Requirements:
-1. The question should ask for the translation of the source text
-2. Provide 4 options (A, B, C, D)
-3. One option should be the correct target text: "${correctTarget.textTarget}"
-4. Generate 3 plausible but incorrect options that are:
+1. The question should ask for the translation
+2. Provide ${AI_CONFIG.questionCount} options (A, B, C, D)
+3. One option should be the correct answer: "${promptData.correctAnswerLabel}"
+4. Generate ${AI_CONFIG.questionCount - 1} plausible but incorrect options that are:
    - Similar length to the correct answer
    - Related to the same topic/context
    - Common words in the target language
@@ -104,14 +160,14 @@ Requirements:
 
 Format your response as JSON:
 {
-    "content": "What is the translation of '[source_text]' in [target_language]?",
+    "content": "${questionText}",
     "options": [
-        {"label": "${correctTarget.textTarget}", "value": "${correctTarget.textTarget}"},
+        {"label": "${promptData.correctAnswerLabel}", "value": "${promptData.correctAnswerLabel}"},
         {"label": "wrong_option_1", "value": "wrong_option_1"},
         {"label": "wrong_option_2", "value": "wrong_option_2"},
         {"label": "wrong_option_3", "value": "wrong_option_3"}
     ],
-    correctAnswer: "${correctTarget.textTarget}"
+    "correctAnswer": "${promptData.correctAnswerLabel}"
 }
 
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
@@ -122,6 +178,25 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const text = response.text();
 
         // Parse JSON response - handle markdown code blocks
+        const parsedResponse = this.parseJsonResponse(text);
+
+        // Shuffle options to randomize correct answer position
+        const shuffledOptions = shuffleArray(parsedResponse.options);
+
+        return {
+            ...parsedResponse,
+            options: shuffledOptions,
+        };
+    }
+
+    /**
+     * Parse JSON response from AI model
+     */
+    private parseJsonResponse(text: string): {
+        content: string;
+        options: Array<{ label: string; value: string }>;
+        correctAnswer: string;
+    } {
         let jsonText = text.trim();
         if (jsonText.startsWith('```json')) {
             jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
@@ -129,20 +204,40 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
         }
 
-        const parsedResponse = JSON.parse(jsonText) as {
+        return JSON.parse(jsonText) as {
             content: string;
             options: Array<{ label: string; value: string }>;
             correctAnswer: string;
         };
+    }
 
-        // Shuffle options to randomize correct answer position
-        const shuffledOptions = shuffleArray(parsedResponse.options);
+    /**
+     * Generate question asking for source text (answer is target)
+     */
+    private async generateSourceQuestion(
+        vocab: VocabWithTextTargets,
+    ): Promise<MultipleChoiceQuestion> {
+        // Randomly select one target text as the correct answer
+        const correctTarget =
+            vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
+
+        const promptData = {
+            questionType: 'source' as const,
+            sourceLanguage: vocab.sourceLanguageCode,
+            targetLanguage: vocab.targetLanguageCode,
+            sourceText: vocab.textSource,
+            targetText: correctTarget.textTarget,
+            correctAnswer: correctTarget.textTarget,
+            correctAnswerLabel: correctTarget.textTarget,
+        };
+
+        const parsedResponse = await this.generateQuestionWithPrompt(promptData);
 
         return {
             correctAnswer: parsedResponse.correctAnswer,
-            type: 'textTarget',
+            type: QUESTION_TYPES.TARGET,
             content: parsedResponse.content,
-            options: shuffledOptions,
+            options: parsedResponse.options,
         };
     }
 
@@ -152,74 +247,27 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     private async generateTargetQuestion(
         vocab: VocabWithTextTargets,
     ): Promise<MultipleChoiceQuestion> {
-        const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
         // Randomly select one target text
         const selectedTarget =
             vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
 
-        const prompt = `
-You are a language learning assistant. Generate a multiple choice question for vocabulary practice.
-
-Context:
-- Source language: ${vocab.sourceLanguageCode}
-- Target language: ${vocab.targetLanguageCode}
-- Source text (correct answer): "${vocab.textSource}"
-- Target text: "${selectedTarget.textTarget}"
-
-Task: Create a question asking "What is the translation of '[target_text]' in [source_language]?"
-
-Requirements:
-1. The question should ask for the translation of the target text
-2. Provide 4 options (A, B, C, D)
-3. One option should be the correct source text: "${vocab.textSource}"
-4. Generate 3 plausible but incorrect options that are:
-   - Similar length to the correct answer
-   - Related to the same topic/context
-   - Common words in the source language
-   - Not obviously wrong
-
-Format your response as JSON:
-{
-    "content": "What is the translation of '[target_text]' in [source_language]?",
-    "options": [
-        {"label": "${vocab.textSource}", "value": "${vocab.textSource}"},
-        {"label": "wrong_option_1", "value": "wrong_option_1"},
-        {"label": "wrong_option_2", "value": "wrong_option_2"},
-        {"label": "wrong_option_3", "value": "wrong_option_3"}
-    ],
-    correctAnswer: "${vocab.textSource}"
-}
-
-Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
-        `;
-
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
-
-        // Parse JSON response - handle markdown code blocks
-        let jsonText = text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        const parsedResponse = JSON.parse(jsonText) as {
-            content: string;
-            options: Array<{ label: string; value: string }>;
-            correctAnswer: string;
+        const promptData = {
+            questionType: 'target' as const,
+            sourceLanguage: vocab.sourceLanguageCode,
+            targetLanguage: vocab.targetLanguageCode,
+            sourceText: vocab.textSource,
+            targetText: selectedTarget.textTarget,
+            correctAnswer: vocab.textSource,
+            correctAnswerLabel: vocab.textSource,
         };
 
-        // Shuffle options to randomize correct answer position
-        const shuffledOptions = shuffleArray(parsedResponse.options);
+        const parsedResponse = await this.generateQuestionWithPrompt(promptData);
 
         return {
             correctAnswer: parsedResponse.correctAnswer,
-            type: 'textSource',
+            type: QUESTION_TYPES.SOURCE,
             content: parsedResponse.content,
-            options: shuffledOptions,
+            options: parsedResponse.options,
         };
     }
 }

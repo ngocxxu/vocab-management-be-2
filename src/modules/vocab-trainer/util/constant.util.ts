@@ -1,6 +1,5 @@
-import { TrainerStatus, VocabTrainerResult } from '@prisma/client';
-import { Prisma } from '@prisma/client';
-import { EvaluateResult, QuestionAnswer, VocabWithTextTargets, WordTestSelect } from './type.util';
+import { Prisma, TrainerStatus } from '@prisma/client';
+import { EvaluateResult, VocabWithTextTargets, WordTestSelect } from './type.util';
 
 export function getRandomElements<T extends { id: string }>(arr: T[], n: number, exclude: T): T[] {
     const filtered = arr.filter((item) => item.id !== exclude.id);
@@ -42,17 +41,15 @@ export const createQuestion = (
 export function evaluateMultipleChoiceAnswers(
     trainerId: string,
     wordTestSelects: WordTestSelect[],
-    questionAnswers: QuestionAnswer[],
 ): EvaluateResult {
-    const wordResults: VocabTrainerResult[] = [];
     const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
     let correctAnswers = 0;
 
     for (const wordTest of wordTestSelects) {
         let isCorrect = false;
 
-        const questionAnswer = questionAnswers.find(
-            (answer) => answer.vocabId === wordTest.vocabId,
+        const questionAnswer = wordTestSelects.find(
+            (answer) => answer.systemSelected === wordTest.userSelected,
         );
 
         isCorrect = questionAnswer?.systemSelected === wordTest.userSelected;
@@ -66,20 +63,9 @@ export function evaluateMultipleChoiceAnswers(
             userSelected: wordTest.userSelected,
             systemSelected: questionAnswer?.systemSelected ?? '',
         });
-
-        // Add to response
-        wordResults.push({
-            id: '',
-            vocabTrainerId: trainerId,
-            status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
-            userSelected: wordTest.userSelected,
-            systemSelected: questionAnswer?.systemSelected ?? '',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        });
     }
 
-    return { wordResults, createResults, correctAnswers };
+    return { createResults, correctAnswers };
 }
 
 export function shuffleArray<T>(array: T[]): T[] {
