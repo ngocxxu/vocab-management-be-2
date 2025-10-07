@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType,  } from '@prisma/client';
+import {
+    TrainerStatus,
+    VocabTrainer,
+    VocabTrainerWord,
+    VocabTrainerResult,
+    QuestionType,
+} from '@prisma/client';
+import { JsonValue } from '@prisma/client/runtime/library';
+import { shuffleArray } from '../util';
 import { MultipleChoiceQuestionDto } from './multiple-choice-question.dto';
 import { VocabTrainerResultDto } from './vocab-trainer-result.dto';
 import { VocabTrainerWordDto } from './vocab-trainer-word.dto';
@@ -59,17 +67,19 @@ export class VocabTrainerDto {
     public results?: VocabTrainerResultDto[];
 
     @ApiProperty({
-        description: 'Questions for this trainer',
+        description: 'AI-generated questions for this trainer',
         type: [MultipleChoiceQuestionDto],
         required: false,
     })
-    public questions?: MultipleChoiceQuestionDto[];
+    public questionAnswers?: MultipleChoiceQuestionDto[];
 
-    public constructor(entity: VocabTrainer & {
-        vocabAssignments?: VocabTrainerWord[];
-        results?: VocabTrainerResult[];
-        questions?: MultipleChoiceQuestionDto[];
-    }) {
+    public constructor(
+        entity: VocabTrainer & {
+            vocabAssignments?: VocabTrainerWord[];
+            results?: VocabTrainerResult[];
+            questionAnswers?: JsonValue[];
+        },
+    ) {
         this.id = entity.id;
         this.name = entity.name;
         this.status = entity.status;
@@ -83,10 +93,12 @@ export class VocabTrainerDto {
         this.userId = entity.userId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
-        this.vocabAssignments = entity.vocabAssignments?.map(
-            (a) => new VocabTrainerWordDto(a),
-        );
+        this.vocabAssignments = entity.vocabAssignments?.map((a) => new VocabTrainerWordDto(a));
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
-        this.questions = entity.questions;
+        this.questionAnswers = shuffleArray(
+            entity.questionAnswers?.map(
+                (q) => new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto),
+            ) ?? [],
+        );
     }
 }

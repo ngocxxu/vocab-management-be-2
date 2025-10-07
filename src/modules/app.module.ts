@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { APP_GUARD } from '@nestjs/core';
+import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
 import { EmailModule } from './email/email.module';
@@ -35,6 +36,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         }),
         CommonModule,
         AuthModule,
+        AiModule,
         UserModule,
         LanguageModule,
         LanguageFolderModule,

@@ -9,11 +9,11 @@ import {
     User,
     VocabTrainer,
 } from '@prisma/client';
+import { AiService, MultipleChoiceQuestion } from '../../ai/service/ai.service';
 import { PrismaErrorHandler } from '../../common/handler';
 import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
-import { getOrderBy, getPagination } from '../../common/util';
-import { buildPrismaWhere } from '../../common/util';
+import { buildPrismaWhere, getOrderBy, getPagination } from '../../common/util';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import {
@@ -22,9 +22,14 @@ import {
     VocabTrainerDto,
     VocabTrainerInput,
     VocabTrainerQueryParamsInput,
+    MultipleChoiceQuestionDto,
 } from '../model';
-import { EReminderRepeat, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../util';
-import { createQuestion, evaluateMultipleChoiceAnswers, getRandomElements } from '../util';
+import {
+    EReminderRepeat,
+    evaluateMultipleChoiceAnswers,
+    VocabTrainerWithTypedAnswers,
+    VocabWithTextTargets,
+} from '../util';
 
 @Injectable()
 export class VocabTrainerService {
@@ -44,6 +49,7 @@ export class VocabTrainerService {
     public constructor(
         private readonly prismaService: PrismaService,
         private readonly reminderService: ReminderService,
+        private readonly aiService: AiService,
     ) {}
 
     /**
@@ -171,40 +177,15 @@ export class VocabTrainerService {
                 const dataVocabAssignments: VocabWithTextTargets[] = trainer.vocabAssignments.map(
                     (vocabAssignment) => vocabAssignment.vocab,
                 );
-                const listVocab = await this.prismaService.vocab.findMany({
-                    include: { textTargets: true },
-                });
-                const questions = await Promise.all(
-                    dataVocabAssignments.map(async (vocab) => {
-                        const type = Math.random() < 0.5 ? 'source' : 'target';
-                        const wrongVocabs = getRandomElements(listVocab, 3, vocab);
 
-                        const { systemSelected, ...data } = createQuestion(
-                            vocab,
-                            type,
-                            wrongVocabs,
-                        );
+                // Generate AI-powered multiple choice questions
+                const aiQuestions: MultipleChoiceQuestion[] =
+                    await this.aiService.generateMultipleChoiceQuestions(dataVocabAssignments);
 
-                        await this.prismaService.vocabTrainer.update({
-                            where: { id: trainer.id },
-                            data: {
-                                questionAnswers: {
-                                    push: {
-                                        systemSelected: systemSelected.label,
-                                        vocabId: vocab.id,
-                                    },
-                                },
-                            },
-                        });
-
-                        return { ...data };
-                    }),
-                );
-
-                return new VocabTrainerDto({ ...trainer, questions });
-            } else {
-                return new VocabTrainerDto(trainer);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                trainer.questionAnswers = JSON.parse(JSON.stringify(aiQuestions));
             }
+            return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
         }
@@ -352,7 +333,11 @@ export class VocabTrainerService {
                 },
             });
 
-            return new VocabTrainerDto(result as unknown as VocabTrainer);
+            return new VocabTrainerDto(
+                result as unknown as VocabTrainer & {
+                    questionAnswers?: MultipleChoiceQuestionDto[];
+                },
+            );
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
         }
@@ -412,7 +397,11 @@ export class VocabTrainerService {
                 );
             }
 
-            return new VocabTrainerDto(trainerWithAssignments);
+            return new VocabTrainerDto(
+                trainerWithAssignments as unknown as VocabTrainer & {
+                    questionAnswers?: MultipleChoiceQuestionDto[];
+                },
+            );
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.errorMapping);
         }
