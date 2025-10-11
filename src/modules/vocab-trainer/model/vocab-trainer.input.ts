@@ -5,10 +5,18 @@ export class VocabTrainerInput {
     @ApiProperty({ description: 'Name of the vocab trainer', example: 'Vocab Trainer 1' })
     public name: string;
 
-    @ApiProperty({ description: 'Status of the trainer', example: TrainerStatus.PENDING, enum: TrainerStatus })
+    @ApiProperty({
+        description: 'Status of the trainer',
+        example: TrainerStatus.PENDING,
+        enum: TrainerStatus,
+    })
     public status: TrainerStatus;
 
-    @ApiProperty({ description: 'Type of questions for this trainer', example: QuestionType.MULTIPLE_CHOICE, enum: QuestionType })
+    @ApiProperty({
+        description: 'Type of questions for this trainer',
+        example: QuestionType.MULTIPLE_CHOICE,
+        enum: QuestionType,
+    })
     public questionType: QuestionType;
 
     @ApiProperty({ description: 'reminderTime of the trainer', required: false })
@@ -29,6 +37,10 @@ export class VocabTrainerInput {
     @ApiProperty({ description: 'Last reminder date', required: false })
     public reminderLastRemind?: Date;
 
-    @ApiProperty({ description: 'IDs of vocabs to assign to this trainer', required: false, type: [String] })
+    @ApiProperty({
+        description: 'IDs of vocabs to assign to this trainer',
+        required: false,
+        type: [String],
+    })
     public vocabAssignmentIds?: string[];
 }
