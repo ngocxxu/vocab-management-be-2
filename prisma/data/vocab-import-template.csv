@@ -1,0 +1,9 @@
+textSource,textTarget,wordType,grammar,explanationSource,explanationTarget,subjects,exampleSource,exampleTarget
+Hello,Xin chào,Noun,N/A,A greeting,Lời chào,Daily,Hello world!,Xin chào thế giới!
+Hello,Chào bạn,Phrase,N/A,Another greeting,Lời chào khác,Daily,Hello friend,Chào bạn
+Run,Chạy,Verb,V,To move fast,Di chuyển nhanh,Sport,I run fast,Tôi chạy nhanh
+Water,Nước,Noun,N/A,Liquid substance,Chất lỏng,Daily,Drink water,Uống nước
+Eat,Ăn,Verb,V,To consume food,Ăn uống,Daily,I eat rice,Tôi ăn cơm
+Book,Sách,Noun,N/A,Written work,Tác phẩm viết,Education,Read a book,Đọc sách
+
+

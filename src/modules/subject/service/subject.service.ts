@@ -189,6 +189,9 @@ export class SubjectService {
 
             const subjectDto = new SubjectDto(subject);
 
+            // Clear user's subject list cache since we added a new subject
+            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
+
             return subjectDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.subjectErrorMapping);
@@ -307,7 +310,12 @@ export class SubjectService {
                 },
             });
 
-            return sortedSubjects.map((subject) => new SubjectDto(subject));
+            const result = sortedSubjects.map((subject) => new SubjectDto(subject));
+
+            // Clear user's subject list cache since we reordered subjects
+            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
+
+            return result;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'reorder', this.subjectErrorMapping);
             throw error;

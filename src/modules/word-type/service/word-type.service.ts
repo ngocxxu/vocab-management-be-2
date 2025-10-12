@@ -33,7 +33,10 @@ export class WordTypeService {
      */
     public async find(): Promise<IResponse<WordTypeDto[]>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<WordType[]>(RedisPrefix.WORD_TYPE, 'all');
+            const cached = await this.redisService.jsonGetWithPrefix<WordType[]>(
+                RedisPrefix.WORD_TYPE,
+                'all',
+            );
             if (cached) {
                 return {
                     items: cached.map((wordType) => new WordTypeDto(wordType)),
@@ -47,11 +50,7 @@ export class WordTypeService {
                 },
             });
 
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.WORD_TYPE,
-                'all',
-                wordTypes
-            );
+            await this.redisService.jsonSetWithPrefix(RedisPrefix.WORD_TYPE, 'all', wordTypes);
 
             return {
                 items: wordTypes.map((wordType) => new WordTypeDto(wordType)),
@@ -71,7 +70,10 @@ export class WordTypeService {
      */
     public async findOne(id: string): Promise<WordTypeDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<WordType>(RedisPrefix.WORD_TYPE, `id:${id}`);
+            const cached = await this.redisService.getObjectWithPrefix<WordType>(
+                RedisPrefix.WORD_TYPE,
+                `id:${id}`,
+            );
             if (cached) {
                 return new WordTypeDto(cached);
             }
@@ -87,7 +89,7 @@ export class WordTypeService {
             await this.redisService.setObjectWithPrefix(
                 RedisPrefix.WORD_TYPE,
                 `id:${id}`,
-                wordType
+                wordType,
             );
 
             return new WordTypeDto(wordType);
@@ -117,6 +119,9 @@ export class WordTypeService {
                     description,
                 },
             });
+
+            // Clear cache since we added a new word type
+            await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {
@@ -160,6 +165,9 @@ export class WordTypeService {
                 data: updateData,
             });
 
+            // Clear cache since we updated a word type
+            await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
+
             return new WordTypeDto(wordType);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
@@ -180,6 +188,9 @@ export class WordTypeService {
             const wordType = await this.prismaService.wordType.delete({
                 where: { id },
             });
+
+            // Clear cache since we deleted a word type
+            await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {

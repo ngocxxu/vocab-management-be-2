@@ -79,6 +79,14 @@ async function bootstrap(): Promise<void> {
         new FastifyAdapter(),
     );
 
+    // Register multipart support for file uploads
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument
+    await app.register(require('@fastify/multipart'), {
+        limits: {
+            fileSize: 10 * 1024 * 1024, // 10MB limit
+        },
+    });
+
     // @todo Enable Helmet for better API security headers
 
     app.setGlobalPrefix(process.env.API_PREFIX || API_DEFAULT_PREFIX);

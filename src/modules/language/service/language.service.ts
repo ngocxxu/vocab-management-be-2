@@ -33,7 +33,10 @@ export class LanguageService {
      */
     public async find(): Promise<IResponse<LanguageDto[]>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<Language[]>(RedisPrefix.LANGUAGE, 'all');
+            const cached = await this.redisService.jsonGetWithPrefix<Language[]>(
+                RedisPrefix.LANGUAGE,
+                'all',
+            );
             if (cached) {
                 return {
                     items: cached.map((language) => new LanguageDto(language)),
@@ -47,11 +50,7 @@ export class LanguageService {
                 },
             });
 
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.LANGUAGE,
-                'all',
-                languages
-            );
+            await this.redisService.jsonSetWithPrefix(RedisPrefix.LANGUAGE, 'all', languages);
 
             return {
                 items: languages.map((language) => new LanguageDto(language)),
@@ -71,7 +70,10 @@ export class LanguageService {
      */
     public async findOne(id: string): Promise<LanguageDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<Language>(RedisPrefix.LANGUAGE, `id:${id}`);
+            const cached = await this.redisService.getObjectWithPrefix<Language>(
+                RedisPrefix.LANGUAGE,
+                `id:${id}`,
+            );
             if (cached) {
                 return new LanguageDto(cached);
             }
@@ -84,11 +86,7 @@ export class LanguageService {
                 throw new NotFoundException(`Language with ID ${id} not found`);
             }
 
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.LANGUAGE,
-                `id:${id}`,
-                language
-            );
+            await this.redisService.setObjectWithPrefix(RedisPrefix.LANGUAGE, `id:${id}`, language);
 
             return new LanguageDto(language);
         } catch (error: unknown) {
@@ -117,6 +115,9 @@ export class LanguageService {
                     name,
                 },
             });
+
+            // Clear cache since we added a new language
+            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
 
             return new LanguageDto(language);
         } catch (error: unknown) {
@@ -160,6 +161,9 @@ export class LanguageService {
                 data: updateData,
             });
 
+            // Clear cache since we updated a language
+            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
+
             return new LanguageDto(language);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
@@ -180,6 +184,9 @@ export class LanguageService {
             const language = await this.prismaService.language.delete({
                 where: { id },
             });
+
+            // Clear cache since we deleted a language
+            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
 
             return new LanguageDto(language);
         } catch (error: unknown) {

@@ -1,5 +1,9 @@
 export * from './vocab.dto';
 export * from './vocab.input';
+export * from './csv-import-query.dto';
+export * from './csv-row.dto';
+export * from './csv-import-error.dto';
+export * from './csv-import-response.dto';
 export { LanguageDto } from './language.dto';
 export { SubjectDto } from './subject.dto';
 export { TextTargetSubjectDto } from './text-target-subject.dto';
