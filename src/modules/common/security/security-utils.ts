@@ -1,9 +1,9 @@
-import { FastifyRequest } from 'fastify';
+import { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
 
 import { Role } from '../../tokens';
 
-export function extractTokenPayload(request: FastifyRequest): { role: Role } | null {
+export function extractTokenPayload(request: Request): { role: Role } | null {
 
     const header = request.headers.authorization;
     if (!header || !header.startsWith('Bearer ')) {

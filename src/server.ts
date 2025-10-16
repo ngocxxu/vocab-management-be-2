@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as multer from 'multer';
 
 import { ApplicationModule } from './modules/app.module';
 import { CommonModule, LogInterceptor } from './modules/common';
@@ -74,6 +75,9 @@ function createSwagger(app: INestApplication) {
  */
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create(ApplicationModule);
+
+    // Configure multer for file uploads
+    app.use(multer().single('file'));
 
     // @todo Enable Helmet for better API security headers
 

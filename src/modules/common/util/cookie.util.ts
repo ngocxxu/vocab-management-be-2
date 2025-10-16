@@ -1,4 +1,4 @@
-import { FastifyReply } from 'fastify';
+import { Response } from 'express';
 
 export class CookieUtil {
     private static readonly REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
@@ -10,7 +10,7 @@ export class CookieUtil {
      * Set authentication cookies with secure settings
      */
     public static setRefreshTokenCookie(
-        response: FastifyReply,
+        response: Response,
         refreshToken: string,
         maxAge?: number,
     ): void {
@@ -19,7 +19,7 @@ export class CookieUtil {
         }; SameSite=None; Max-Age=${maxAge || this.DEFAULT_MAX_AGE}; Path=/`;
 
         // Get existing Set-Cookie headers
-        const existingCookies = response.raw.getHeader('Set-Cookie');
+        const existingCookies = response.getHeader('Set-Cookie');
         const newCookies = existingCookies
             ? Array.isArray(existingCookies)
                 ? existingCookies
@@ -27,14 +27,14 @@ export class CookieUtil {
             : [];
 
         newCookies.push(cookieValue);
-        response.raw.setHeader('Set-Cookie', newCookies as string[]);
+        response.setHeader('Set-Cookie', newCookies as string[]);
     }
 
     /**
      * Set access token cookie
      */
     public static setAccessTokenCookie(
-        response: FastifyReply,
+        response: Response,
         accessToken: string,
         maxAge?: number,
     ): void {
@@ -43,7 +43,7 @@ export class CookieUtil {
         }; SameSite=None; Max-Age=${maxAge || this.ACCESS_TOKEN_MAX_AGE}; Path=/`;
 
         // Get existing Set-Cookie headers
-        const existingCookies = response.raw.getHeader('Set-Cookie');
+        const existingCookies = response.getHeader('Set-Cookie');
         const newCookies = existingCookies
             ? Array.isArray(existingCookies)
                 ? existingCookies
@@ -51,14 +51,14 @@ export class CookieUtil {
             : [];
 
         newCookies.push(cookieValue);
-        response.raw.setHeader('Set-Cookie', newCookies as string[]);
+        response.setHeader('Set-Cookie', newCookies as string[]);
     }
 
     /**
      * Set both access and refresh token cookies
      */
     public static setAuthCookies(
-        response: FastifyReply,
+        response: Response,
         accessToken: string,
         refreshToken: string,
         accessTokenMaxAge?: number,
@@ -71,7 +71,7 @@ export class CookieUtil {
     /**
      * Clear authentication cookies
      */
-    public static clearAuthCookie(response: FastifyReply): void {
+    public static clearAuthCookie(response: Response): void {
         const refreshCookieValue = `${this.REFRESH_TOKEN_COOKIE_NAME}=; HttpOnly; Secure=${
             process.env.NODE_ENV === 'production'
         }; SameSite=None; Max-Age=0; Path=/`;
@@ -81,7 +81,7 @@ export class CookieUtil {
         }; SameSite=None; Max-Age=0; Path=/`;
 
         // Get existing Set-Cookie headers
-        const existingCookies = response.raw.getHeader('Set-Cookie');
+        const existingCookies = response.getHeader('Set-Cookie');
         const newCookies = existingCookies
             ? Array.isArray(existingCookies)
                 ? existingCookies
@@ -89,7 +89,7 @@ export class CookieUtil {
             : [];
 
         newCookies.push(refreshCookieValue, accessCookieValue);
-        response.raw.setHeader('Set-Cookie', newCookies as string[]);
+        response.setHeader('Set-Cookie', newCookies as string[]);
     }
 
     /**

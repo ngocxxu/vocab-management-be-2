@@ -1,4 +1,3 @@
-import { MultipartFile } from '@fastify/multipart';
 import {
     Body,
     Controller,
@@ -15,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
-import { FastifyRequest } from 'fastify';
+import { Request } from 'express';
 import { LoggerService, RolesGuard } from '../../common';
 import { CurrentUser, Roles } from '../../common/decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
@@ -24,10 +23,20 @@ import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 import { VocabService } from '../service';
 import { CsvParserUtil, CsvRowData } from '../util/csv-parser.util';
 
-// Interface for Fastify request with multipart support
-interface FastifyMultipartRequest extends FastifyRequest {
-    file(): Promise<MultipartFile | undefined>;
-}
+// Type for multer file
+type MulterFile = {
+    fieldname: string;
+    originalname: string;
+    encoding: string;
+    mimetype: string;
+    buffer: Buffer;
+    size: number;
+};
+
+// Type for request with multer file
+type RequestWithFile = Request & {
+    file?: MulterFile;
+};
 
 @Controller('vocabs')
 @ApiTags('vocab')
@@ -141,25 +150,25 @@ export class VocabController {
     @ApiResponse({ status: HttpStatus.CREATED, type: CsvImportResponseDto })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid CSV file or parameters' })
     public async importCsv(
-        @Req() request: FastifyMultipartRequest,
+        @Req() request: Request,
         @Query() queryParams: CsvImportQueryDto,
         @CurrentUser() user: User,
     ): Promise<CsvImportResponseDto> {
         try {
-            // Get the multipart data from Fastify
-            const data: MultipartFile | undefined = await request.file();
+            // Get the multipart data from Express/multer
+            const file = (request as RequestWithFile).file;
 
-            if (!data) {
+            if (!file) {
                 throw new BadRequestException('CSV file is required');
             }
 
             // Validate file type
-            if (!data.filename?.toLowerCase().endsWith('.csv')) {
+            if (!file.originalname?.toLowerCase().endsWith('.csv')) {
                 throw new BadRequestException('File must be a CSV file');
             }
 
             // Read file buffer
-            const buffer: Buffer = await data.toBuffer();
+            const buffer: Buffer = file.buffer;
 
             // Validate CSV headers
             if (!CsvParserUtil.validateCsvHeaders(buffer)) {

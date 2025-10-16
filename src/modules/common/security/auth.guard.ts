@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { FastifyRequest } from 'fastify';
+import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorator/public.decorator';
 import { PrismaErrorHandler } from '../handler/error.handler';
 import { LoggerService, PrismaService } from '../provider';
@@ -33,7 +33,7 @@ export class AuthGuard implements CanActivate {
             return true;
         }
 
-        const request = context.switchToHttp().getRequest<RequestWithUser & FastifyRequest>();
+        const request = context.switchToHttp().getRequest<RequestWithUser & Request>();
 
         // Try to get token from cookies first, then from Authorization header
         let token = this.extractTokenFromCookies(request.headers.cookie);

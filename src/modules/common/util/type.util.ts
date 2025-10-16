@@ -1,8 +1,8 @@
 import { User as CurrentUser } from '@prisma/client';
 import { User } from '@supabase/supabase-js';
-import { FastifyRequest } from 'fastify';
+import { Request } from 'express';
 
-export interface RequestWithUser extends FastifyRequest {
+export interface RequestWithUser extends Request {
     user: User;
     currentUser: CurrentUser;
 }

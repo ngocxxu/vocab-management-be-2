@@ -9,7 +9,8 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { Response } from 'express';
+import { Request } from 'express';
 
 import { CookieUtil, LoggerService } from '../../common';
 import { Public } from '../../common/decorator';
@@ -73,7 +74,7 @@ export class AuthController {
     })
     public async signIn(
         @Body(SignInPipe) input: SignInInput,
-        @Res({ passthrough: true }) response: FastifyReply,
+        @Res({ passthrough: true }) response: Response,
     ): Promise<SessionDto> {
         const { email, password } = input;
 
@@ -117,7 +118,7 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Invalid or missing access token',
     })
-    public async verifyToken(@Req() request: FastifyRequest): Promise<UserDto> {
+    public async verifyToken(@Req() request: Request): Promise<UserDto> {
         // Extract access token from cookies using the same approach as AuthGuard
         const accessToken = this.extractTokenFromCookies(request.headers.cookie);
 
@@ -145,7 +146,7 @@ export class AuthController {
     })
     public async refreshSession(
         @Body(RefreshTokenPipe) input: RefreshTokenInput,
-        @Res({ passthrough: true }) response: FastifyReply,
+        @Res({ passthrough: true }) response: Response,
     ): Promise<SessionDto> {
         // Try to get refresh token from request body first, then from cookies
         const refreshToken = input.refreshToken;
@@ -171,7 +172,7 @@ export class AuthController {
         status: HttpStatus.OK,
         description: 'User signed out successfully',
     })
-    public async signOut(@Res({ passthrough: true }) response: FastifyReply) {
+    public async signOut(@Res({ passthrough: true }) response: Response) {
         await this.authService.signOut();
 
         // Clear authentication cookies
