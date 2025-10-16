@@ -1,6 +1,5 @@
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { ApplicationModule } from './modules/app.module';
@@ -74,18 +73,7 @@ function createSwagger(app: INestApplication) {
  * parsing middleware.
  */
 async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create<NestFastifyApplication>(
-        ApplicationModule,
-        new FastifyAdapter(),
-    );
-
-    // Register multipart support for file uploads
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument
-    await app.register(require('@fastify/multipart'), {
-        limits: {
-            fileSize: 10 * 1024 * 1024, // 10MB limit
-        },
-    });
+    const app = await NestFactory.create(ApplicationModule);
 
     // @todo Enable Helmet for better API security headers
 
