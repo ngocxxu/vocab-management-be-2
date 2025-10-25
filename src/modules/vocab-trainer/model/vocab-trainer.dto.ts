@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { shuffleArray } from '../util';
+import { FlipCardQuestionDto } from './flip-card-question.dto';
 import { MultipleChoiceQuestionDto } from './multiple-choice-question.dto';
 import { VocabTrainerResultDto } from './vocab-trainer-result.dto';
 import { VocabTrainerWordDto } from './vocab-trainer-word.dto';
@@ -68,10 +69,10 @@ export class VocabTrainerDto {
 
     @ApiProperty({
         description: 'AI-generated questions for this trainer',
-        type: [MultipleChoiceQuestionDto],
+        type: [MultipleChoiceQuestionDto, FlipCardQuestionDto],
         required: false,
     })
-    public questionAnswers?: MultipleChoiceQuestionDto[];
+    public questionAnswers?: (MultipleChoiceQuestionDto | FlipCardQuestionDto)[];
 
     public constructor(
         entity: VocabTrainer & {
@@ -96,8 +97,10 @@ export class VocabTrainerDto {
         this.vocabAssignments = entity.vocabAssignments?.map((a) => new VocabTrainerWordDto(a));
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
         this.questionAnswers = shuffleArray(
-            entity.questionAnswers?.map(
-                (q) => new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto),
+            entity.questionAnswers?.map((q) =>
+                (q as { type: string } | null)?.type === QuestionType.MULTIPLE_CHOICE
+                    ? new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto)
+                    : new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto),
             ) ?? [],
         );
     }

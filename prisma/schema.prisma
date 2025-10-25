@@ -49,6 +49,7 @@ enum TrainerStatus {
 
 enum QuestionType {
   MULTIPLE_CHOICE
+  FLIP_CARD
   FILL_IN_THE_BLANK
   MATCHING
   TRUE_OR_FALSE

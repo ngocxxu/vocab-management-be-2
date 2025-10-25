@@ -31,6 +31,13 @@ import {
     VocabWithTextTargets,
 } from '../util';
 
+export interface FlipCardQuestion {
+    frontText: string[];
+    backText: string[];
+    frontLanguageCode: string;
+    backLanguageCode: string;
+}
+
 @Injectable()
 export class VocabTrainerService {
     private readonly errorMapping = {
@@ -184,7 +191,35 @@ export class VocabTrainerService {
 
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 trainer.questionAnswers = JSON.parse(JSON.stringify(aiQuestions));
+            } else if (trainer.questionType === QuestionType.FLIP_CARD) {
+                const flipCardQuestions: FlipCardQuestion[] = [];
+
+                trainer.vocabAssignments.forEach((assignment) => {
+                    const vocab = assignment.vocab;
+
+                    // Randomly decide direction for this vocab (true = source->target, false = target->source)
+                    const isSourceToTarget = Math.random() < 0.5;
+
+                    // Extract all textTargets as array
+                    const textTargetsArray = vocab.textTargets.map((tt) => tt.textTarget);
+
+                    // Create ONE card per vocab with all textTargets as arrays
+                    flipCardQuestions.push({
+                        frontText: isSourceToTarget ? [vocab.textSource] : textTargetsArray,
+                        backText: isSourceToTarget ? textTargetsArray : [vocab.textSource],
+                        frontLanguageCode: isSourceToTarget
+                            ? vocab.sourceLanguageCode
+                            : vocab.targetLanguageCode,
+                        backLanguageCode: isSourceToTarget
+                            ? vocab.targetLanguageCode
+                            : vocab.sourceLanguageCode,
+                    });
+                });
+
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                trainer.questionAnswers = JSON.parse(JSON.stringify(flipCardQuestions));
             }
+
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
