@@ -165,6 +165,7 @@ export class VocabService {
             ]);
 
             const items = vocabs.map((vocab) => new VocabDto({ ...vocab }));
+
             const result = new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
 
             // Cache the result
@@ -635,9 +636,14 @@ export class VocabService {
      * Clear vocab list caches (for find and findRandom methods)
      */
     public async clearVocabListCaches(): Promise<void> {
-        // Clear list caches
-        await this.redisService.delWithPrefix(RedisPrefix.VOCAB, 'list:');
-        await this.redisService.delWithPrefix(RedisPrefix.VOCAB, 'random:');
+        const listKeys = await this.redisService.getKeysByPrefix(RedisPrefix.VOCAB);
+        const filteredKeys = listKeys.filter(
+            (key) => key.includes('list:') || key.includes('random:'),
+        );
+
+        if (filteredKeys.length > 0) {
+            await this.redisService.getClient().del(...filteredKeys);
+        }
     }
 
     /**
