@@ -1,5 +1,6 @@
 import * as csv from 'csv-parser';
 import { Readable } from 'stream';
+import { VocabDto } from '../model/vocab.dto';
 
 // Interface for CSV row data to avoid any type issues
 export interface CsvRowData {
@@ -123,5 +124,96 @@ export class CsvParserUtil {
             .split(',')
             .map((subject) => subject.trim())
             .filter((subject) => subject.length > 0);
+    }
+
+    /**
+     * Generate CSV buffer from VocabDto array
+     * @param vocabs Array of VocabDto
+     * @returns Buffer CSV file buffer
+     */
+    public static generateCsvBuffer(vocabs: VocabDto[]): Buffer {
+        const headers = [
+            'textSource',
+            'textTarget',
+            'wordType',
+            'grammar',
+            'explanationSource',
+            'explanationTarget',
+            'subjects',
+            'exampleSource',
+            'exampleTarget',
+        ];
+
+        const rows: string[] = [];
+        rows.push(headers.join(','));
+
+        for (const vocab of vocabs) {
+            const textSource = this.escapeCsvField(vocab.textSource);
+
+            if (!vocab.textTargets || vocab.textTargets.length === 0) {
+                const emptyRow = [textSource, '', '', '', '', '', '', '', ''];
+                rows.push(emptyRow.join(','));
+                continue;
+            }
+
+            for (const textTarget of vocab.textTargets) {
+                const textTargetValue = this.escapeCsvField(textTarget.textTarget);
+                const wordType = this.escapeCsvField(textTarget.wordType?.name || '');
+                const grammar = this.escapeCsvField(textTarget.grammar || '');
+                const explanationSource = this.escapeCsvField(textTarget.explanationSource || '');
+                const explanationTarget = this.escapeCsvField(textTarget.explanationTarget || '');
+
+                const subjects =
+                    textTarget.textTargetSubjects
+                        ?.map((tts) => tts.subject?.name || '')
+                        .filter((name) => name)
+                        .join(', ') || '';
+
+                const subjectsEscaped = this.escapeCsvField(subjects);
+
+                const example =
+                    textTarget.vocabExamples && textTarget.vocabExamples.length > 0
+                        ? textTarget.vocabExamples[0]
+                        : undefined;
+
+                const exampleSource = this.escapeCsvField(example?.source || '');
+                const exampleTarget = this.escapeCsvField(example?.target || '');
+
+                const row = [
+                    textSource,
+                    textTargetValue,
+                    wordType,
+                    grammar,
+                    explanationSource,
+                    explanationTarget,
+                    subjectsEscaped,
+                    exampleSource,
+                    exampleTarget,
+                ];
+
+                rows.push(row.join(','));
+            }
+        }
+
+        return Buffer.from(rows.join('\n'));
+    }
+
+    /**
+     * Escape CSV field values
+     * @param field CSV field value
+     * @returns string Escaped CSV field
+     */
+    private static escapeCsvField(field: string): string {
+        if (!field) {
+            return '';
+        }
+
+        const escaped = field.replace(/"/g, '""');
+
+        if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
+            return `"${escaped}"`;
+        }
+
+        return escaped;
     }
 }

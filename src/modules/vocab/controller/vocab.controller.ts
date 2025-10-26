@@ -11,10 +11,12 @@ import {
     Query,
     BadRequestException,
     Req,
+    Res,
+    StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { LoggerService, RolesGuard } from '../../common';
 import { CurrentUser, Roles } from '../../common/decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
@@ -207,6 +209,40 @@ export class VocabController {
             }
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`CSV import failed for user ${user.id}: ${errorMessage}`);
+            throw new BadRequestException(errorMessage);
+        }
+    }
+
+    @Get('export/csv')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Export vocabs to CSV file' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'CSV file download' })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid query parameters' })
+    public async exportCsv(
+        @Query() query: VocabQueryParamsInput,
+        @CurrentUser() user: User,
+        @Res({ passthrough: true }) res: Response,
+    ): Promise<StreamableFile> {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+            const csvBuffer: Buffer = await this.vocabService.exportToCsv(query, user.id);
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `vocabs-export-${timestamp}.csv`;
+
+            res.set({
+                'Content-Type': 'text/csv',
+                'Content-Disposition': `attachment; filename="${filename}"`,
+            });
+
+            this.logger.info(`CSV export completed for user ${user.id}`);
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            return new StreamableFile(csvBuffer);
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`CSV export failed for user ${user.id}: ${errorMessage}`);
             throw new BadRequestException(errorMessage);
         }
     }

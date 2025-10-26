@@ -991,6 +991,24 @@ export class VocabService {
     }
 
     /**
+     * Export vocabularies to CSV buffer
+     * @param query Query parameters for filtering
+     * @param userId User ID
+     * @returns Promise<Buffer> CSV file buffer
+     */
+    public async exportToCsv(query: VocabQueryParamsInput, userId: string): Promise<Buffer> {
+        try {
+            const queryWithHighLimit = { ...query, pageSize: 10000 };
+            const paginatedResult = await this.find(queryWithHighLimit, userId);
+            const vocabs = paginatedResult.items;
+
+            return CsvParserUtil.generateCsvBuffer(vocabs);
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'exportToCsv', this.vocabErrorMapping);
+        }
+    }
+
+    /**
      * Helper method to safely extract error message
      */
     private getErrorMessage(error: unknown): string {
