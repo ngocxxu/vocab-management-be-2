@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
+import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
 
 // Configuration interface for AI service
@@ -48,6 +49,82 @@ export class AiService {
             throw new Error('GEMINI_API_KEY environment variable is required');
         }
         this.genAI = new GoogleGenerativeAI(apiKey);
+    }
+
+    /**
+     * Translate vocab using AI when textTargets is empty
+     */
+    public async translateVocab(
+        textSource: string,
+        sourceLanguageCode: string,
+        targetLanguageCode: string,
+        subjectIds?: string[],
+        retryCount = 0,
+    ): Promise<CreateTextTargetInput> {
+        try {
+            const model = this.genAI.getGenerativeModel({ model: AI_CONFIG.modelName });
+
+            const prompt = `
+You are a language learning assistant. Translate a vocabulary word from ${sourceLanguageCode} to ${targetLanguageCode}.
+
+Source text: "${textSource}"
+Source language: ${sourceLanguageCode}
+Target language: ${targetLanguageCode}
+
+Task: Provide a complete translation with:
+1. textTarget: the translated text in ${targetLanguageCode}
+2. grammar: part of speech (noun, verb, adjective, adverb, interjection, preposition, conjunction, pronoun, determiner)
+3. explanationSource: brief explanation of the word in ${sourceLanguageCode}
+4. explanationTarget: brief explanation of the word in ${targetLanguageCode}
+5. vocabExamples: array with 1 example showing usage in sentences
+
+Format your response as JSON:
+{
+    "textTarget": "translated_word",
+    "grammar": "part_of_speech",
+    "explanationSource": "explanation in source language",
+    "explanationTarget": "explanation in target language",
+    "vocabExamples": [
+        {
+            "source": "example sentence with source word",
+            "target": "example sentence with translated word"
+        }
+    ]
+}
+
+Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
+            `;
+
+            const result = await model.generateContent(prompt);
+            const response = result.response;
+            const text = response.text();
+
+            const parsedResponse = this.parseTranslationResponse(text);
+
+            return {
+                ...parsedResponse,
+                subjectIds: subjectIds || [],
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error translating vocab "${textSource}" (attempt ${retryCount + 1}):`,
+                error,
+            );
+
+            if (retryCount < AI_CONFIG.maxRetries) {
+                this.logger.warn(`Retrying translation for "${textSource}"...`);
+                await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1));
+                return this.translateVocab(
+                    textSource,
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    subjectIds,
+                    retryCount + 1,
+                );
+            }
+
+            throw error;
+        }
     }
 
     /**
@@ -104,6 +181,23 @@ export class AiService {
 
             return null;
         }
+    }
+
+    /**
+     * Parse translation response from AI model
+     */
+    private parseTranslationResponse(text: string): CreateTextTargetInput {
+        let jsonText = text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const parsed = JSON.parse(jsonText);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        return parsed as CreateTextTargetInput;
     }
 
     /**

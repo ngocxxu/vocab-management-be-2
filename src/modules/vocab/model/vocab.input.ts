@@ -31,6 +31,15 @@ export class VocabInput extends PickType(VocabDto, [
         ],
     })
     public readonly textTargets: CreateTextTargetInput[];
+
+    @ApiProperty({
+        description:
+            'List of subject ids (used when textTargets is empty and AI translation is needed)',
+        type: 'array',
+        items: { type: 'string' },
+        required: false,
+    })
+    public readonly subjectIds?: string[];
 }
 
 export class CreateTextTargetInput {

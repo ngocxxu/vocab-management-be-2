@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Vocab } from '@prisma/client';
+import { AiService } from '../../ai/service/ai.service';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
@@ -35,6 +36,7 @@ export class VocabService {
         private readonly prismaService: PrismaService,
         private readonly redisService: RedisService,
         private readonly logger: LoggerService,
+        private readonly aiService: AiService,
     ) {}
 
     /**
@@ -328,6 +330,38 @@ export class VocabService {
                 textTargets,
                 languageFolderId,
             }: VocabInput = createVocabData;
+
+            // If textTargets is not empty, check if any target is empty and generate it using AI
+            if (textSource && textTargets && textTargets.length > 0) {
+                const emptyTarget = textTargets.find((target) => !target.textTarget);
+                if (emptyTarget) {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+                    const aiGeneratedTarget = await this.aiService.translateVocab(
+                        textSource,
+                        sourceLanguageCode,
+                        targetLanguageCode,
+                        emptyTarget.subjectIds || [],
+                    );
+
+                    Object.assign(emptyTarget, {
+                        textTarget: aiGeneratedTarget.textTarget,
+                        grammar: aiGeneratedTarget.grammar,
+                        explanationSource: aiGeneratedTarget.explanationSource,
+                        explanationTarget: aiGeneratedTarget.explanationTarget,
+                        vocabExamples: aiGeneratedTarget.vocabExamples || [],
+                    });
+                }
+            } else if (textSource && textTargets && textTargets.length === 0) {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+                const aiGeneratedTarget = await this.aiService.translateVocab(
+                    textSource,
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    [],
+                );
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                createVocabData.textTargets.push(aiGeneratedTarget);
+            }
 
             // Validate that source and target languages are different
             if (sourceLanguageCode === targetLanguageCode) {
