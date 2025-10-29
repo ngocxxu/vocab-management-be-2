@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
@@ -11,7 +11,19 @@ export interface AiServiceConfig {
     sourceQuestionProbability: number;
     maxRetries: number;
     retryDelayMs: number;
+    modelFallbackOrder?: readonly string[];
 }
+
+// Model fallback order when token/quota errors occur
+const MODEL_FALLBACK_ORDER = [
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-2.5-pro',
+    'learnlm-2.0-flash-experimental',
+] as const;
 
 // Constants for AI service configuration
 const AI_CONFIG: AiServiceConfig = {
@@ -21,6 +33,7 @@ const AI_CONFIG: AiServiceConfig = {
     sourceQuestionProbability: 0.5,
     maxRetries: 2,
     retryDelayMs: 1000,
+    modelFallbackOrder: MODEL_FALLBACK_ORDER,
 } as const;
 
 const QUESTION_TYPES = {
@@ -42,6 +55,7 @@ export interface MultipleChoiceQuestion {
 export class AiService {
     private readonly logger = new Logger(AiService.name);
     private readonly genAI: GoogleGenerativeAI;
+    private currentModelIndex = 0;
 
     public constructor() {
         const apiKey = process.env.GEMINI_API_KEY;
@@ -62,8 +76,6 @@ export class AiService {
         retryCount = 0,
     ): Promise<CreateTextTargetInput> {
         try {
-            const model = this.genAI.getGenerativeModel({ model: AI_CONFIG.modelName });
-
             const prompt = `
 You are a language learning assistant. Translate a vocabulary word from ${sourceLanguageCode} to ${targetLanguageCode}.
 
@@ -95,16 +107,18 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
             `;
 
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
+            return this.runWithModelFallback(async (model) => {
+                const result = await model.generateContent(prompt);
+                const response = result.response;
+                const text = response.text();
 
-            const parsedResponse = this.parseTranslationResponse(text);
+                const parsedResponse = this.parseTranslationResponse(text);
 
-            return {
-                ...parsedResponse,
-                subjectIds: subjectIds || [],
-            };
+                return {
+                    ...parsedResponse,
+                    subjectIds: subjectIds || [],
+                };
+            });
         } catch (error) {
             this.logger.error(
                 `Error translating vocab "${textSource}" (attempt ${retryCount + 1}):`,
@@ -208,6 +222,64 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     }
 
     /**
+     * Check if error is related to token exhaustion, quota, or context length
+     */
+    private isTokenOrQuotaError(error: unknown): boolean {
+        if (!error) return false;
+
+        const errorMessage =
+            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+        const errorString = JSON.stringify(error).toLowerCase();
+
+        return (
+            errorMessage.includes('quota') ||
+            errorMessage.includes('token') ||
+            errorMessage.includes('context') ||
+            errorMessage.includes('exhausted') ||
+            errorMessage.includes('rate limit') ||
+            errorMessage.includes('429') ||
+            errorString.includes('resource_exhausted') ||
+            errorString.includes('quota_exceeded') ||
+            errorString.includes('context_length') ||
+            errorString.includes('token_limit')
+        );
+    }
+
+    /**
+     * Execute a function with automatic model fallback on token/quota errors
+     */
+    private async runWithModelFallback<T>(
+        executor: (model: GenerativeModel) => Promise<T>,
+    ): Promise<T> {
+        const models = AI_CONFIG.modelFallbackOrder ?? MODEL_FALLBACK_ORDER;
+        let lastError: unknown;
+
+        for (let i = this.currentModelIndex; i < models.length; i++) {
+            const model = this.genAI.getGenerativeModel({ model: models[i] });
+            try {
+                const result = await executor(model);
+                this.currentModelIndex = i;
+                return result;
+            } catch (error) {
+                lastError = error;
+                if (!this.isTokenOrQuotaError(error)) {
+                    throw error;
+                }
+                this.logger.warn(
+                    `Model ${models[i]} failed due to token/quota error; trying next model`,
+                );
+            }
+        }
+
+        if (lastError) {
+            this.logger.error('All models exhausted. Last error:', lastError);
+            throw lastError;
+        }
+
+        throw new Error('Model fallback failed: no models available');
+    }
+
+    /**
      * Common method to generate question with prompt template
      */
     private async generateQuestionWithPrompt(promptData: {
@@ -223,8 +295,6 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         options: Array<{ label: string; value: string }>;
         correctAnswer: string;
     }> {
-        const model = this.genAI.getGenerativeModel({ model: AI_CONFIG.modelName });
-
         const isSourceQuestion = promptData.questionType === 'source';
         const questionText = isSourceQuestion
             ? `What is the translation of '${promptData.sourceText}' in [target_language]?`
@@ -267,20 +337,20 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
         `;
 
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
+        return this.runWithModelFallback(async (model) => {
+            const result = await model.generateContent(prompt);
+            const response = result.response;
+            const text = response.text();
 
-        // Parse JSON response - handle markdown code blocks
-        const parsedResponse = this.parseJsonResponse(text);
+            const parsedResponse = this.parseJsonResponse(text);
 
-        // Shuffle options to randomize correct answer position
-        const shuffledOptions = shuffleArray(parsedResponse.options);
+            const shuffledOptions = shuffleArray(parsedResponse.options);
 
-        return {
-            ...parsedResponse,
-            options: shuffledOptions,
-        };
+            return {
+                ...parsedResponse,
+                options: shuffledOptions,
+            };
+        });
     }
 
     /**
