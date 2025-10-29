@@ -23,10 +23,7 @@ import { WordTypeModule } from './word-type/word-type.module';
 @Module({
     imports: [
         BullModule.forRoot({
-            redis: {
-                host: process.env.REDIS_HOST,
-                port: Number(process.env.REDIS_PORT),
-            },
+            redis: process.env.REDIS_URL,
         }),
         BullModule.registerQueue({
             name: EReminderType.EMAIL_REMINDER,

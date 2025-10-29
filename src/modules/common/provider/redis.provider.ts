@@ -13,45 +13,23 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     public async onModuleInit() {
         try {
-            // Check if we should use Upstash (production) or local Redis
-            const useUpstash =
-                process.env.SWITCH_REDIS === 'true' || process.env.NODE_ENV === 'production';
+            const redisUrl = process.env.REDIS_URL;
 
-            if (useUpstash) {
-                // Use Upstash Redis (production)
-                const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
-                if (!redisUrl) {
-                    throw new Error(
-                        'REDIS_URL or UPSTASH_REDIS_URL environment variable is required for production',
-                    );
-                }
-
-                this.redisClient = new Redis(redisUrl, {
-                    lazyConnect: true,
-                    retryStrategy: (times: number) => {
-                        const delay = Math.min(times * 50, 2000);
-                        return delay;
-                    },
-                    maxRetriesPerRequest: 3,
-                    enableReadyCheck: true,
-                });
-
-                this.logger.info('Using Upstash Redis (production configuration)');
-            } else {
-                // Use local Redis (development)
-                this.redisClient = new Redis({
-                    host: this.configService.get('redis.host'),
-                    port: this.configService.get('redis.port'),
-                    password: this.configService.get('redis.password'),
-                    db: this.configService.get('redis.db'),
-                    retryStrategy: () => this.configService.get('redis.retryDelayOnFailover'),
-                    maxRetriesPerRequest: this.configService.get('redis.maxRetriesPerRequest'),
-                    enableReadyCheck: this.configService.get('redis.enableReadyCheck'),
-                    lazyConnect: true,
-                });
-
-                this.logger.info('Using local Redis (development configuration)');
+            if (!redisUrl) {
+                throw new Error('REDIS_URL environment variable is required');
             }
+
+            this.redisClient = new Redis(redisUrl, {
+                lazyConnect: true,
+                retryStrategy: (times: number) => {
+                    const delay = Math.min(times * 50, 2000);
+                    return delay;
+                },
+                maxRetriesPerRequest: 3,
+                enableReadyCheck: true,
+            });
+
+            this.logger.info('Redis client initialized with REDIS_URL configuration');
 
             // Set up event listeners
             this.redisClient.on('connect', () => {
