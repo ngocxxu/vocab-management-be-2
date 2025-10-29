@@ -15,7 +15,7 @@ export interface AiServiceConfig {
 
 // Constants for AI service configuration
 const AI_CONFIG: AiServiceConfig = {
-    modelName: 'gemini-2.0-flash',
+    modelName: 'gemini-2.0-flash-lite',
     questionCount: 4,
     passingScore: 70,
     sourceQuestionProbability: 0.5,
