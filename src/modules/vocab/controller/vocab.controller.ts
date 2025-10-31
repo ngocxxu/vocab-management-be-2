@@ -151,11 +151,13 @@ export class VocabController {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     @ApiResponse({ status: HttpStatus.CREATED, type: CsvImportResponseDto })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid CSV file or parameters' })
+    @ApiResponse({ status: HttpStatus.REQUEST_TIMEOUT, description: 'Request timeout' })
     public async importCsv(
         @Req() request: Request,
         @Query() queryParams: CsvImportQueryDto,
         @CurrentUser() user: User,
     ): Promise<CsvImportResponseDto> {
+        const startTime = Date.now();
         try {
             // Get the multipart data from Express/multer
             const file = (request as RequestWithFile).file;
@@ -163,6 +165,10 @@ export class VocabController {
             if (!file) {
                 throw new BadRequestException('CSV file is required');
             }
+
+            this.logger.info(
+                `CSV import started for user ${user.id}, file: ${file.originalname}, size: ${file.size} bytes`,
+            );
 
             // Validate file type
             if (!file.originalname?.toLowerCase().endsWith('.csv')) {
@@ -181,35 +187,49 @@ export class VocabController {
             }
 
             // Parse CSV
+            const parseStartTime = Date.now();
             const { rows }: { rows: CsvRowData[] } = await CsvParserUtil.parseCsvBuffer(buffer);
+            const parseDuration = Date.now() - parseStartTime;
+            this.logger.info(`CSV parsed in ${parseDuration}ms, ${rows.length} rows found`);
 
             if (rows.length === 0) {
                 throw new BadRequestException('CSV file is empty or contains no valid data');
             }
 
             // Import vocabs
+            const importStartTime = Date.now();
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const result: CsvImportResponseDto = await this.vocabService.importFromCsv(
                 rows,
                 queryParams,
                 user.id,
             );
+            const importDuration = Date.now() - importStartTime;
+            const totalDuration = Date.now() - startTime;
 
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             this.logger.info(
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                `CSV import completed for user ${user.id}: ${result.created} created, ${result.updated} updated, ${result.failed} failed`,
+                `CSV import for user ${user.id} in ${totalDuration}ms (import: ${importDuration}ms): ${result.created} created, ${result.updated} updated, ${result.failed} failed`,
             );
 
             // eslint-disable-next-line @typescript-eslint/no-unsafe-return
             return result;
         } catch (error: unknown) {
+            const duration = Date.now() - startTime;
             if (error instanceof BadRequestException) {
+                this.logger.warn(
+                    `CSV import failed for user ${user.id} after ${duration}ms: ${error.message}`,
+                );
                 throw error;
             }
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(`CSV import failed for user ${user.id}: ${errorMessage}`);
-            throw new BadRequestException(errorMessage);
+            this.logger.error(
+                `CSV import failed for user ${user.id} after ${duration}ms: ${errorMessage}`,
+            );
+            throw new BadRequestException(
+                `Failed to import CSV: ${errorMessage}. If the file is large, this may take several minutes.`,
+            );
         }
     }
 

@@ -1,6 +1,7 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Request, Response, NextFunction } from 'express';
 import * as multer from 'multer';
 
 import { ApplicationModule } from './modules/app.module';
@@ -22,6 +23,34 @@ const API_DEFAULT_PREFIX = '/api/v1/';
 const SWAGGER_TITLE = 'Passenger API';
 const SWAGGER_DESCRIPTION = 'API used for passenger management';
 const SWAGGER_PREFIX = '/docs';
+
+const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+const DEFAULT_REQUEST_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+/**
+ * Parse integer from environment variable with default value
+ */
+function parseIntEnv(key: string, defaultValue: number): number {
+    return parseInt(process.env[key] || defaultValue.toString(), 10);
+}
+
+/**
+ * Create standardized error response
+ */
+function createErrorResponse(statusCode: number, message: string, error: string) {
+    return {
+        statusCode,
+        message,
+        error,
+    };
+}
+
+/**
+ * Get file size in MB for display
+ */
+function getFileSizeInMB(bytes: number): number {
+    return Math.round(bytes / 1024 / 1024);
+}
 
 /**
  * Get CORS configuration based on environment
@@ -73,11 +102,86 @@ function createSwagger(app: INestApplication) {
  * module and registers essential components such as the logger and request
  * parsing middleware.
  */
-async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create(ApplicationModule);
+/**
+ * Configure multer file upload middleware with error handling
+ */
+function createMulterMiddleware(maxFileSize: number) {
+    const logger = new Logger('Multer');
+    const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: {
+            fileSize: maxFileSize,
+            fieldSize: maxFileSize,
+        },
+    }).single('file');
 
-    // Configure multer for file uploads
-    app.use(multer().single('file'));
+    return (req: Request, res: Response, next: NextFunction): void => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        upload(req, res, (err: unknown) => {
+            if (err) {
+                if (err instanceof multer.MulterError) {
+                    if (err.code === 'LIMIT_FILE_SIZE') {
+                        logger.warn(`File size limit exceeded: ${req.method} ${req.path}`);
+                        return res
+                            .status(413)
+                            .json(
+                                createErrorResponse(
+                                    413,
+                                    'File too large',
+                                    `File size exceeds the maximum allowed limit of ${maxFileSize} bytes (${getFileSizeInMB(
+                                        maxFileSize,
+                                    )}MB)`,
+                                ),
+                            );
+                    }
+                    logger.error(`Multer error: ${err.code} - ${err.message}`);
+                    return res
+                        .status(400)
+                        .json(createErrorResponse(400, 'File upload error', err.message));
+                }
+                const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+                logger.error(`File upload error: ${errorMessage}`);
+                return next(err);
+            }
+            next();
+        });
+    };
+}
+
+/**
+ * Configure request timeout middleware
+ */
+function createTimeoutMiddleware(timeoutMs: number) {
+    const logger = new Logger('RequestTimeout');
+    return (req: Request, res: Response, next: NextFunction): void => {
+        req.setTimeout(timeoutMs, () => {
+            logger.warn(`Request timeout after ${timeoutMs}ms: ${req.method} ${req.path}`);
+            if (!res.headersSent) {
+                res.status(408).json(
+                    createErrorResponse(408, 'Request timeout', 'Request took too long to process'),
+                );
+            }
+        });
+        next();
+    };
+}
+
+async function bootstrap(): Promise<void> {
+    const app = await NestFactory.create(ApplicationModule, {
+        logger: ['error', 'warn', 'log'],
+    });
+
+    const maxFileSize = parseIntEnv('MAX_FILE_SIZE', DEFAULT_MAX_FILE_SIZE);
+    const requestTimeout = parseIntEnv('REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT);
+
+    // Configure multer for file uploads with size limits
+    app.use(createMulterMiddleware(maxFileSize));
+
+    // Configure server timeouts for long-running requests
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+    const expressApp = app.getHttpAdapter().getInstance();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+    expressApp.use(createTimeoutMiddleware(requestTimeout));
 
     // @todo Enable Helmet for better API security headers
 
