@@ -239,7 +239,7 @@ model WordType {
 
 model Subject {
   id                 String              @id @default(cuid()) @map("id")
-  name               String              @unique @map("name")
+  name               String              @map("name")
   order              Int                 @map("order")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
@@ -247,8 +247,9 @@ model Subject {
   userId             String              @map("user_id")
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, name])
   @@index([order])
-  @@index([name])
+  @@index([userId, name])
   @@map("subject")
 }
 
