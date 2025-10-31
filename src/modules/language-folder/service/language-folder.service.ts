@@ -140,7 +140,7 @@ export class LanguageFolderService {
      */
     public async findOne(id: string, userId?: string): Promise<LanguageFolderDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<LanguageFolder>(
+            const cached = await this.redisService.jsonGetWithPrefix<LanguageFolder>(
                 RedisPrefix.LANGUAGE_FOLDER,
                 `id:${id}`,
             );
@@ -171,11 +171,25 @@ export class LanguageFolderService {
                 throw new NotFoundException(`Language folder with ID ${id} not found`);
             }
 
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.LANGUAGE_FOLDER,
-                `id:${id}`,
-                folder,
-            );
+            try {
+                await this.redisService.jsonSetWithPrefix(
+                    RedisPrefix.LANGUAGE_FOLDER,
+                    `id:${id}`,
+                    folder,
+                );
+            } catch (error) {
+                // If Redis type conflict, clear the specific key and retry
+                if (error instanceof Error && error.message.includes('wrong Redis type')) {
+                    await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+                    await this.redisService.jsonSetWithPrefix(
+                        RedisPrefix.LANGUAGE_FOLDER,
+                        `id:${id}`,
+                        folder,
+                    );
+                } else {
+                    throw error;
+                }
+            }
 
             return new LanguageFolderDto(folder);
         } catch (error: unknown) {

@@ -113,14 +113,12 @@ model Vocab {
   vocabTrainerWords VocabTrainerWord[]
   textTargets       TextTarget[]
 
-  @@unique([textSource, sourceLanguageCode, targetLanguageCode])
+  @@unique([textSource, sourceLanguageCode, targetLanguageCode, languageFolderId])
   @@index([textSource])
   @@index([createdAt])
   @@index([updatedAt])
-  @@index([sourceLanguageCode])
-  @@index([targetLanguageCode])
   @@index([sourceLanguageCode, targetLanguageCode])
-  @@index([languageFolderId, sourceLanguageCode, targetLanguageCode])
+  @@index([languageFolderId])
   @@map("vocab")
 }
 
@@ -328,8 +326,8 @@ model User {
   vocabs                 Vocab[]
   vocabTrainers          VocabTrainer[]
   subjects               Subject[]
-  userFcmTokens           UserFcmToken[]
-  languageFolders         LanguageFolder[]
+  userFcmTokens          UserFcmToken[]
+  languageFolders        LanguageFolder[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])
