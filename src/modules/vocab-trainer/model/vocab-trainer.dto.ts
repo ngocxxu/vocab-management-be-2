@@ -81,6 +81,8 @@ export class VocabTrainerDto {
             questionAnswers?: JsonValue[];
         },
     ) {
+        const isMultipleChoice = entity.questionType === QuestionType.MULTIPLE_CHOICE;
+
         this.id = entity.id;
         this.name = entity.name;
         this.status = entity.status;
@@ -97,11 +99,13 @@ export class VocabTrainerDto {
         this.vocabAssignments = entity.vocabAssignments?.map((a) => new VocabTrainerWordDto(a));
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
         this.questionAnswers = shuffleArray(
-            entity.questionAnswers?.map((q) =>
-                (q as { type: string } | null)?.type === QuestionType.MULTIPLE_CHOICE
-                    ? new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto)
-                    : new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto),
-            ) ?? [],
+            entity.questionAnswers?.length
+                ? entity.questionAnswers.map((q) =>
+                      isMultipleChoice
+                          ? new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto)
+                          : new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto),
+                  )
+                : [],
         );
     }
 }
