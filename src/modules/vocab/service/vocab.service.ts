@@ -341,6 +341,7 @@ export class VocabService {
                         sourceLanguageCode,
                         targetLanguageCode,
                         emptyTarget.subjectIds || [],
+                        userId,
                     );
 
                     Object.assign(emptyTarget, {
@@ -358,6 +359,7 @@ export class VocabService {
                     sourceLanguageCode,
                     targetLanguageCode,
                     [],
+                    userId,
                 );
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                 createVocabData.textTargets.push(aiGeneratedTarget);

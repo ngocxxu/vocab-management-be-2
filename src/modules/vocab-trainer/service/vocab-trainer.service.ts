@@ -187,7 +187,10 @@ export class VocabTrainerService {
 
                 // Generate AI-powered multiple choice questions
                 const aiQuestions: MultipleChoiceQuestion[] =
-                    await this.aiService.generateMultipleChoiceQuestions(dataVocabAssignments);
+                    await this.aiService.generateMultipleChoiceQuestions(
+                        dataVocabAssignments,
+                        trainer.userId,
+                    );
 
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 trainer.questionAnswers = JSON.parse(JSON.stringify(aiQuestions));

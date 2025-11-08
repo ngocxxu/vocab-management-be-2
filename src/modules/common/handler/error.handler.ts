@@ -19,7 +19,14 @@ export type ErrorContext =
     | 'getUserTokens'
     | 'getTokensForUsers'
     | 'findByUserId'
-    | 'exportToCsv';
+    | 'exportToCsv'
+    | 'getSystemConfig'
+    | 'getUserConfig'
+    | 'getConfig'
+    | 'setSystemConfig'
+    | 'setUserConfig'
+    | 'deleteSystemConfig'
+    | 'deleteUserConfig';
 
 // Define error mapping interface
 interface PrismaErrorMapping {
@@ -51,6 +58,13 @@ export class PrismaErrorHandler {
             getTokensForUsers: 'FCM token not found',
             findByUserId: 'Record not found',
             exportToCsv: 'Record not found',
+            getSystemConfig: 'Config not found',
+            getUserConfig: 'Config not found',
+            getConfig: 'Config not found',
+            setSystemConfig: 'Config creation failed',
+            setUserConfig: 'Config creation failed',
+            deleteSystemConfig: 'Config not found',
+            deleteUserConfig: 'Config not found',
         },
         P2003: 'Foreign key constraint failed',
         P2014: 'Invalid ID provided',

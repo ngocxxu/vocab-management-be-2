@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '../../config/service';
 import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
 
@@ -11,11 +12,11 @@ export interface AiServiceConfig {
     sourceQuestionProbability: number;
     maxRetries: number;
     retryDelayMs: number;
-    modelFallbackOrder?: readonly string[];
+    models?: readonly string[];
 }
 
-// Model fallback order when token/quota errors occur
-const MODEL_FALLBACK_ORDER = [
+// Default model fallback order when no config exists
+const DEFAULT_MODEL_FALLBACK_ORDER = [
     'gemini-2.0-flash-lite',
     'gemini-2.0-flash',
     'gemini-2.5-flash-lite',
@@ -33,7 +34,8 @@ const AI_CONFIG: AiServiceConfig = {
     sourceQuestionProbability: 0.5,
     maxRetries: 2,
     retryDelayMs: 1000,
-    modelFallbackOrder: MODEL_FALLBACK_ORDER,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    models: DEFAULT_MODEL_FALLBACK_ORDER,
 } as const;
 
 const QUESTION_TYPES = {
@@ -55,9 +57,8 @@ export interface MultipleChoiceQuestion {
 export class AiService {
     private readonly logger = new Logger(AiService.name);
     private readonly genAI: GoogleGenerativeAI;
-    private currentModelIndex = 0;
 
-    public constructor() {
+    public constructor(private readonly configService: ConfigService) {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
             throw new Error('GEMINI_API_KEY environment variable is required');
@@ -73,6 +74,7 @@ export class AiService {
         sourceLanguageCode: string,
         targetLanguageCode: string,
         subjectIds?: string[],
+        userId?: string,
         retryCount = 0,
     ): Promise<CreateTextTargetInput> {
         try {
@@ -107,18 +109,17 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
             `;
 
-            return this.runWithModelFallback(async (model) => {
-                const result = await model.generateContent(prompt);
-                const response = result.response;
-                const text = response.text();
+            const model = await this.getModel(userId);
+            const result = await model.generateContent(prompt);
+            const response = result.response;
+            const text = response.text();
 
-                const parsedResponse = this.parseTranslationResponse(text);
+            const parsedResponse = this.parseTranslationResponse(text);
 
-                return {
-                    ...parsedResponse,
-                    subjectIds: subjectIds || [],
-                };
-            });
+            return {
+                ...parsedResponse,
+                subjectIds: subjectIds || [],
+            };
         } catch (error) {
             this.logger.error(
                 `Error translating vocab "${textSource}" (attempt ${retryCount + 1}):`,
@@ -133,6 +134,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
                     sourceLanguageCode,
                     targetLanguageCode,
                     subjectIds,
+                    userId,
                     retryCount + 1,
                 );
             }
@@ -146,12 +148,13 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
      */
     public async generateMultipleChoiceQuestions(
         vocabList: VocabWithTextTargets[],
+        userId?: string,
     ): Promise<MultipleChoiceQuestion[]> {
         try {
             const questions: MultipleChoiceQuestion[] = [];
 
             for (const vocab of vocabList) {
-                const question = await this.generateQuestionForVocab(vocab);
+                const question = await this.generateQuestionForVocab(vocab, 0, userId);
                 if (question) {
                     questions.push(question);
                 }
@@ -170,15 +173,16 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     private async generateQuestionForVocab(
         vocab: VocabWithTextTargets,
         retryCount = 0,
+        userId?: string,
     ): Promise<MultipleChoiceQuestion | null> {
         try {
             // Randomly choose whether to ask about source or target
             const isAskingSource = Math.random() < AI_CONFIG.sourceQuestionProbability;
 
             if (isAskingSource) {
-                return await this.generateSourceQuestion(vocab);
+                return await this.generateSourceQuestion(vocab, userId);
             } else {
-                return await this.generateTargetQuestion(vocab);
+                return await this.generateTargetQuestion(vocab, userId);
             }
         } catch (error) {
             this.logger.error(
@@ -221,76 +225,30 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
-    /**
-     * Check if error is related to token exhaustion, quota, or context length
-     */
-    private isTokenOrQuotaError(error: unknown): boolean {
-        if (!error) return false;
-
-        const errorMessage =
-            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-        const errorString = JSON.stringify(error).toLowerCase();
-
-        return (
-            errorMessage.includes('quota') ||
-            errorMessage.includes('token') ||
-            errorMessage.includes('context') ||
-            errorMessage.includes('exhausted') ||
-            errorMessage.includes('rate limit') ||
-            errorMessage.includes('429') ||
-            errorString.includes('resource_exhausted') ||
-            errorString.includes('quota_exceeded') ||
-            errorString.includes('context_length') ||
-            errorString.includes('token_limit')
-        );
-    }
-
-    /**
-     * Execute a function with automatic model fallback on token/quota errors
-     */
-    private async runWithModelFallback<T>(
-        executor: (model: GenerativeModel) => Promise<T>,
-    ): Promise<T> {
-        const models = AI_CONFIG.modelFallbackOrder ?? MODEL_FALLBACK_ORDER;
-        let lastError: unknown;
-
-        for (let i = this.currentModelIndex; i < models.length; i++) {
-            const model = this.genAI.getGenerativeModel({ model: models[i] });
-            try {
-                const result = await executor(model);
-                this.currentModelIndex = i;
-                return result;
-            } catch (error) {
-                lastError = error;
-                if (!this.isTokenOrQuotaError(error)) {
-                    throw error;
-                }
-                this.logger.warn(
-                    `Model ${models[i]} failed due to token/quota error; trying next model`,
-                );
-            }
-        }
-
-        if (lastError) {
-            this.logger.error('All models exhausted. Last error:', lastError);
-            throw lastError;
-        }
-
-        throw new Error('Model fallback failed: no models available');
+    private async getModel(userId: string | undefined): Promise<GenerativeModel> {
+        const configValue = await this.configService.getConfig(userId || null, 'ai.model');
+        const modelName =
+            configValue && typeof configValue === 'string'
+                ? configValue
+                : DEFAULT_MODEL_FALLBACK_ORDER[0];
+        return this.genAI.getGenerativeModel({ model: modelName });
     }
 
     /**
      * Common method to generate question with prompt template
      */
-    private async generateQuestionWithPrompt(promptData: {
-        questionType: 'source' | 'target';
-        sourceLanguage: string;
-        targetLanguage: string;
-        sourceText: string;
-        targetText: string;
-        correctAnswer: string;
-        correctAnswerLabel: string;
-    }): Promise<{
+    private async generateQuestionWithPrompt(
+        promptData: {
+            questionType: 'source' | 'target';
+            sourceLanguage: string;
+            targetLanguage: string;
+            sourceText: string;
+            targetText: string;
+            correctAnswer: string;
+            correctAnswerLabel: string;
+        },
+        userId?: string,
+    ): Promise<{
         content: string;
         options: Array<{ label: string; value: string }>;
         correctAnswer: string;
@@ -337,20 +295,19 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
         `;
 
-        return this.runWithModelFallback(async (model) => {
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
+        const model = await this.getModel(userId);
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const text = response.text();
 
-            const parsedResponse = this.parseJsonResponse(text);
+        const parsedResponse = this.parseJsonResponse(text);
 
-            const shuffledOptions = shuffleArray(parsedResponse.options);
+        const shuffledOptions = shuffleArray(parsedResponse.options);
 
-            return {
-                ...parsedResponse,
-                options: shuffledOptions,
-            };
-        });
+        return {
+            ...parsedResponse,
+            options: shuffledOptions,
+        };
     }
 
     /**
@@ -380,6 +337,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
      */
     private async generateSourceQuestion(
         vocab: VocabWithTextTargets,
+        userId?: string,
     ): Promise<MultipleChoiceQuestion> {
         // Randomly select one target text as the correct answer
         const correctTarget =
@@ -395,7 +353,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             correctAnswerLabel: correctTarget.textTarget,
         };
 
-        const parsedResponse = await this.generateQuestionWithPrompt(promptData);
+        const parsedResponse = await this.generateQuestionWithPrompt(promptData, userId);
 
         return {
             correctAnswer: parsedResponse.correctAnswer,
@@ -410,6 +368,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
      */
     private async generateTargetQuestion(
         vocab: VocabWithTextTargets,
+        userId?: string,
     ): Promise<MultipleChoiceQuestion> {
         // Randomly select one target text
         const selectedTarget =
@@ -425,7 +384,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             correctAnswerLabel: vocab.textSource,
         };
 
-        const parsedResponse = await this.generateQuestionWithPrompt(promptData);
+        const parsedResponse = await this.generateQuestionWithPrompt(promptData, userId);
 
         return {
             correctAnswer: parsedResponse.correctAnswer,

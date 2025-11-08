@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, CommonModule } from './common';
+import { ConfigModule } from './config/config.module';
 import { EmailModule } from './email/email.module';
 import { EventsModule } from './event/module';
 import { FcmModule } from './fcm/fcm.module';
@@ -33,6 +34,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         }),
         CommonModule,
         AuthModule,
+        ConfigModule,
         AiModule,
         UserModule,
         LanguageModule,
