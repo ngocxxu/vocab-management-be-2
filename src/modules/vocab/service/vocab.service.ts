@@ -9,7 +9,7 @@ import { RedisService } from '../../common/provider/redis.provider';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
 import { buildPrismaWhere } from '../../common/util/query-builder.util';
 import { RedisPrefix } from '../../common/util/redis-key.util';
-import { VocabDto, VocabInput } from '../model';
+import { BulkDeleteInput, VocabDto, VocabInput } from '../model';
 import { CsvImportQueryDto, CsvImportResponseDto, CsvImportErrorDto, CsvRowDto } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 import { CsvParserUtil, CsvRowData } from '../util/csv-parser.util';
@@ -634,7 +634,13 @@ export class VocabService {
         }
     }
 
-    public async deleteBulk(ids: string[], userId?: string): Promise<VocabDto[]> {
+    public async deleteBulk(input: BulkDeleteInput, userId?: string): Promise<VocabDto[]> {
+        const { ids } = input;
+
+        if (!ids.length) {
+            throw new Error('Ids are required');
+        }
+
         try {
             const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
 

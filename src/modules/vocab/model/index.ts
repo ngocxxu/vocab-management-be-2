@@ -1,5 +1,6 @@
 export * from './vocab.dto';
 export * from './vocab.input';
+export * from './bulk-delete.input';
 export * from './csv-import-query.dto';
 export * from './csv-row.dto';
 export * from './csv-import-error.dto';

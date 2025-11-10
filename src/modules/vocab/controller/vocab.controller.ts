@@ -20,7 +20,13 @@ import { Request, Response } from 'express';
 import { LoggerService, RolesGuard } from '../../common';
 import { CurrentUser, Roles } from '../../common/decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
-import { VocabDto, VocabInput, CsvImportQueryDto, CsvImportResponseDto } from '../model';
+import {
+    VocabDto,
+    VocabInput,
+    CsvImportQueryDto,
+    CsvImportResponseDto,
+    BulkDeleteInput,
+} from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 import { VocabService } from '../service';
 import { CsvParserUtil, CsvRowData } from '../util/csv-parser.util';
@@ -139,8 +145,11 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Delete multiple vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async deleteBulk(@Body() ids: string[], @CurrentUser() user: User): Promise<VocabDto[]> {
-        return this.vocabService.deleteBulk(ids, user.id);
+    public async deleteBulk(
+        @Body() input: BulkDeleteInput,
+        @CurrentUser() user: User,
+    ): Promise<VocabDto[]> {
+        return this.vocabService.deleteBulk(input, user.id);
     }
 
     @Post('import/csv')
