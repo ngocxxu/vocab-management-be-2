@@ -7,7 +7,6 @@ export function getRandomElements<T extends { id: string }>(arr: T[], n: number,
     return shuffled.slice(0, n);
 }
 
-// Helper functions
 const getRandomTextTarget = (vocab: VocabWithTextTargets): string => {
     if (!vocab.textTargets?.length) return '';
     const randomIndex = Math.floor(Math.random() * vocab.textTargets.length);
