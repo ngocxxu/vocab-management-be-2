@@ -143,9 +143,9 @@ export class VocabTrainerController {
     @ApiOperation({ summary: 'Delete multiple vocab trainers' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     public async deleteBulk(
-        @Body() ids: string[],
+        @Body() body: { ids: string[] },
         @CurrentUser() user: User,
     ): Promise<VocabTrainerDto[]> {
-        return this.vocabTrainerService.deleteBulk(ids, user.id);
+        return this.vocabTrainerService.deleteBulk(body.ids, user.id);
     }
 }
