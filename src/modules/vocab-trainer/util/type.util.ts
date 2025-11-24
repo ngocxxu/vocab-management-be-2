@@ -1,7 +1,7 @@
 import { Prisma, VocabTrainer } from '@prisma/client';
 
 export enum EReminderRepeat {
-    MAX_REPEAT = 32,
+    MAX_REPEAT = 6,
 }
 
 // Type for VocabTrainerWord with vocab relation

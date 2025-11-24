@@ -20,7 +20,7 @@ export class NotificationProcessor {
         try {
             await this.notificationService.create({
                 type: NotificationType.VOCAB_TRAINER,
-                action: NotificationAction.CREATE,
+                action: NotificationAction.REMIND,
                 priority: PriorityLevel.LOW,
                 expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
                 isActive: true,
