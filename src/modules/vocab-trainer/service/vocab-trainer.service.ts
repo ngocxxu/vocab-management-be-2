@@ -1,12 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import {
+    NotificationAction,
+    NotificationType,
+    PriorityLevel,
+    Prisma,
+    QuestionType,
+    TrainerStatus,
+    User,
+    VocabTrainer,
+} from '@prisma/client';
 import { AiService, MultipleChoiceQuestion } from '../../ai/service/ai.service';
 import { PrismaErrorHandler } from '../../common/handler';
 import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
 import { buildPrismaWhere, getOrderBy, getPagination } from '../../common/util';
+import { NotificationService } from '../../notification/service';
 import { ReminderService } from '../../reminder/service';
-import { EEmailTemplate, EReminderTitle } from '../../reminder/util';
+import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import {
     SubmitMultipleChoiceInput,
     UpdateVocabTrainerInput,
@@ -48,6 +58,7 @@ export class VocabTrainerService {
         private readonly prismaService: PrismaService,
         private readonly reminderService: ReminderService,
         private readonly aiService: AiService,
+        private readonly notificationService: NotificationService,
     ) {}
 
     /**
@@ -268,6 +279,20 @@ export class VocabTrainerService {
             const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
 
             if (shouldDelete) {
+                await this.notificationService.create({
+                    type: NotificationType.VOCAB_TRAINER,
+                    action: NotificationAction.CREATE,
+                    priority: PriorityLevel.HIGH,
+                    data: {
+                        trainerName: trainer.name,
+                        message: 'Your test has been completed after 6 passes',
+                        completedAt: new Date().toISOString(),
+                    },
+                    expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
+                    isActive: true,
+                    recipientUserIds: [user.id],
+                });
+
                 await this.delete(trainer.id, user.id);
                 return new VocabTrainerDto(
                     trainer as unknown as VocabTrainer & {
@@ -315,6 +340,7 @@ export class VocabTrainerService {
             );
             const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
 
+            // Send reminder email
             await this.reminderService.scheduleReminder(
                 user.email,
                 EReminderTitle.VOCAB_TRAINER,
@@ -323,6 +349,7 @@ export class VocabTrainerService {
                 delayInMs,
             );
 
+            // Send notification
             await this.reminderService.scheduleCreateNotification(
                 [user.id],
                 EReminderTitle.VOCAB_TRAINER,
