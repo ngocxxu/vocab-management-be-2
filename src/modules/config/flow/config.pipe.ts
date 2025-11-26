@@ -2,18 +2,9 @@ import { Inject, Injectable, PipeTransform } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import * as Joi from 'joi';
+import { DEFAULT_MODEL_FALLBACK_ORDER } from '../../ai/service/ai.service';
 import { JoiValidationPipe } from '../../common';
 import { ConfigInput } from '../model';
-
-const ALLOWED_MODEL_NAMES = [
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-2.5-pro',
-    'learnlm-2.0-flash-experimental',
-] as const;
 
 @Injectable()
 export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unknown, ConfigInput> {
@@ -33,12 +24,12 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
         if (key === 'ai.model') {
             return baseSchema.keys({
                 value: Joi.string()
-                    .valid(...ALLOWED_MODEL_NAMES)
+                    .valid(...DEFAULT_MODEL_FALLBACK_ORDER)
                     .required()
                     .messages({
                         'string.base': 'AI model must be a string',
                         'any.required': 'AI model is required',
-                        'any.only': `Model name must be one of: ${ALLOWED_MODEL_NAMES.join(', ')}`,
+                        'any.only': `Model name must be one of: ${DEFAULT_MODEL_FALLBACK_ORDER.join(', ')}`,
                     }),
             });
         }

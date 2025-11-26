@@ -16,7 +16,7 @@ export interface AiServiceConfig {
 }
 
 // Default model fallback order when no config exists
-const DEFAULT_MODEL_FALLBACK_ORDER = [
+export const DEFAULT_MODEL_FALLBACK_ORDER = [
     'gemini-2.0-flash-lite',
     'gemini-2.0-flash',
     'gemini-2.5-flash-lite',
