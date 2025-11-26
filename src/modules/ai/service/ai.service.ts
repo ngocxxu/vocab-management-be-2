@@ -23,12 +23,13 @@ const DEFAULT_MODEL_FALLBACK_ORDER = [
     'gemini-2.5-flash',
     'gemini-2.0-flash-exp',
     'gemini-2.5-pro',
-    'learnlm-2.0-flash-experimental',
+    'gemini-3-pro',
+    'learnlm-2.0-flash-exp',
 ] as const;
 
 // Constants for AI service configuration
 const AI_CONFIG: AiServiceConfig = {
-    modelName: 'gemini-2.0-flash-lite',
+    modelName: 'gemini-3-pro',
     questionCount: 4,
     passingScore: 70,
     sourceQuestionProbability: 0.5,
