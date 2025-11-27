@@ -325,7 +325,9 @@ export class VocabTrainerService {
                 data: {
                     trainerName: trainer.name,
                     scorePercentage,
-                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
+                    trainerId: trainer.id,
+                    questionType: trainer.questionType,
+                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}/exam/multiple-choice`,
                 },
             };
 
@@ -347,6 +349,12 @@ export class VocabTrainerService {
                 EEmailTemplate.EXAM_REMINDER,
                 sendDataReminder.data,
                 delayInMs,
+            );
+
+            await this.reminderService.sendImmediateCreateNotification(
+                [user.id],
+                EReminderTitle.VOCAB_TRAINER,
+                sendDataNotification.data,
             );
 
             // Send notification
