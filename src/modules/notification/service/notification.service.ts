@@ -53,11 +53,13 @@ export class NotificationService {
      * Find notifications for a specific user
      * @param userId - The user ID to get notifications for
      * @param includeDeleted - Whether to include deleted notifications
-     * @returns Promise<NotificationDto[]> Array of notification DTOs
+     * @param isRead - Filter by read status (undefined = all, true = read only, false = unread only)
+     * @returns Promise<IResponse<NotificationDto[]>> Array of notification DTOs
      */
     public async findByUser(
         userId: string,
         includeDeleted: boolean = false,
+        isRead?: boolean,
     ): Promise<IResponse<NotificationDto[]>> {
         try {
             const notifications = await this.prismaService.notification.findMany({
@@ -70,6 +72,7 @@ export class NotificationService {
                         some: {
                             userId,
                             isDeleted: includeDeleted ? undefined : false,
+                            ...(isRead !== undefined && { isRead }),
                         },
                     },
                 },
@@ -77,6 +80,7 @@ export class NotificationService {
                     notificationRecipients: {
                         where: {
                             userId,
+                            ...(isRead !== undefined && { isRead }),
                         },
                         include: {
                             user: true,
@@ -93,6 +97,15 @@ export class NotificationService {
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.notificationErrorMapping);
         }
+    }
+
+    /**
+     * Find unread notifications for a specific user
+     * @param userId - The user ID to get unread notifications for
+     * @returns Promise<IResponse<NotificationDto[]>> Array of unread notification DTOs
+     */
+    public async findUnreadByUser(userId: string): Promise<IResponse<NotificationDto[]>> {
+        return this.findByUser(userId, false, false);
     }
 
     /**

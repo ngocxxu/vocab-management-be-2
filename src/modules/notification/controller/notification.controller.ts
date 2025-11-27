@@ -44,9 +44,9 @@ export class NotificationController {
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
     public async getMyNotifications(
         @CurrentUser() user: User,
-        @Query('includeDeleted') includeDeleted?: boolean,
+        @Query('includeDeleted') includeDeleted: boolean = false,
     ): Promise<IResponse<NotificationDto[]>> {
-        return this.notificationService.findByUser(user.id, includeDeleted === true);
+        return this.notificationService.findByUser(user.id, includeDeleted);
     }
 
     @Get('my/unread')
@@ -57,7 +57,7 @@ export class NotificationController {
     public async getMyUnreadNotifications(
         @CurrentUser() user: User,
     ): Promise<IResponse<NotificationDto[]>> {
-        return this.notificationService.findByUser(user.id, false);
+        return this.notificationService.findUnreadByUser(user.id);
     }
 
     @Get('my/unread-count')
