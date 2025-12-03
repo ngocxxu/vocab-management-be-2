@@ -169,6 +169,98 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     }
 
     /**
+     * Evaluate fill-in-blank answer using AI
+     */
+    public async evaluateFillInBlankAnswer(
+        vocab: VocabWithTextTargets,
+        userAnswer: string,
+        systemAnswer: string,
+        questionType: 'textSource' | 'textTarget',
+        userId?: string,
+        retryCount = 0,
+    ): Promise<{ isCorrect: boolean; explanation?: string }> {
+        try {
+            const sourceLanguage = vocab.sourceLanguageCode;
+            const targetLanguage = vocab.targetLanguageCode;
+            const sourceText = vocab.textSource;
+            const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
+
+            const isAskingSource = questionType === 'textSource';
+            const questionContext = isAskingSource
+                ? `What is the translation of "${sourceText}" in ${targetLanguage}?`
+                : `What is the translation of "${systemAnswer}" in ${sourceLanguage}?`;
+
+            const taskDesc =
+                `Determine if the student's answer "${userAnswer}" is semantically correct ` +
+                `and contextually appropriate as a translation/meaning of "${systemAnswer}" ` +
+                'in the context of this vocabulary.';
+
+            const prompt = `
+You are a language learning assistant. Evaluate if a student's answer is semantically correct and contextually appropriate.
+
+Context:
+- Source language: ${sourceLanguage}
+- Target language: ${targetLanguage}
+- Source word: "${sourceText}"
+- Target word(s): "${targetTexts}"
+- Question: ${questionContext}
+- Correct answer: "${systemAnswer}"
+- Student's answer: "${userAnswer}"
+
+Task: ${taskDesc}
+
+Consider:
+1. Semantic equivalence (same meaning)
+2. Contextual appropriateness
+3. Acceptable variations (different forms, synonyms, etc.)
+4. Common translation alternatives
+
+Format your response as JSON:
+{
+    "isCorrect": true/false,
+    "explanation": "brief explanation by Vietnamese language of why the answer is correct or incorrect"
+}
+
+Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
+            `;
+
+            const model = await this.getModel(userId);
+            const result = await model.generateContent(prompt);
+            const response = result.response;
+            const text = response.text();
+
+            const parsedResponse = this.parseEvaluationResponse(text);
+
+            return {
+                isCorrect: parsedResponse.isCorrect,
+                explanation: parsedResponse.explanation,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error evaluating fill-in-blank answer for vocab ${vocab.id} (attempt ${
+                    retryCount + 1
+                }):`,
+                error,
+            );
+
+            if (retryCount < AI_CONFIG.maxRetries) {
+                this.logger.warn(`Retrying evaluation for vocab ${vocab.id}...`);
+                await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1));
+                return this.evaluateFillInBlankAnswer(
+                    vocab,
+                    userAnswer,
+                    systemAnswer,
+                    questionType,
+                    userId,
+                    retryCount + 1,
+                );
+            }
+
+            throw error;
+        }
+    }
+
+    /**
      * Generate a single question for a vocabulary item
      */
     private async generateQuestionForVocab(
@@ -330,6 +422,23 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             content: string;
             options: Array<{ label: string; value: string }>;
             correctAnswer: string;
+        };
+    }
+
+    private parseEvaluationResponse(text: string): {
+        isCorrect: boolean;
+        explanation?: string;
+    } {
+        let jsonText = text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        return JSON.parse(jsonText) as {
+            isCorrect: boolean;
+            explanation?: string;
         };
     }
 

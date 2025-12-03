@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
     NotificationAction,
     NotificationType,
@@ -18,12 +18,13 @@ import { NotificationService } from '../../notification/service';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import {
+    MultipleChoiceQuestionDto,
+    SubmitFillInBlankInput,
     SubmitMultipleChoiceInput,
     UpdateVocabTrainerInput,
     VocabTrainerDto,
     VocabTrainerInput,
     VocabTrainerQueryParamsInput,
-    MultipleChoiceQuestionDto,
 } from '../model';
 import {
     EReminderRepeat,
@@ -41,6 +42,7 @@ export interface FlipCardQuestion {
 
 @Injectable()
 export class VocabTrainerService {
+    private readonly logger = new Logger(VocabTrainerService.name);
     private readonly errorMapping = {
         P2002: 'VocabTrainer with this name already exists',
         P2025: {
@@ -196,6 +198,44 @@ export class VocabTrainerService {
 
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 trainer.questionAnswers = JSON.parse(JSON.stringify(aiQuestions));
+            } else if (trainer.questionType === QuestionType.FILL_IN_THE_BLANK) {
+                const fillInBlankQuestions: Array<{
+                    correctAnswer: string;
+                    type: 'textSource' | 'textTarget';
+                    content: string;
+                    vocabId: string;
+                }> = [];
+
+                trainer.vocabAssignments.forEach((assignment) => {
+                    const vocab = assignment.vocab;
+
+                    if (!vocab.textTargets || vocab.textTargets.length === 0) {
+                        return;
+                    }
+
+                    const isAskingSource = Math.random() < 0.5;
+                    const randomTargetIndex = Math.floor(Math.random() * vocab.textTargets.length);
+                    const selectedTarget = vocab.textTargets[randomTargetIndex];
+
+                    if (isAskingSource) {
+                        fillInBlankQuestions.push({
+                            correctAnswer: selectedTarget.textTarget,
+                            type: 'textTarget',
+                            content: `What is the translation of "${vocab.textSource}" in ${vocab.targetLanguageCode}?`,
+                            vocabId: vocab.id,
+                        });
+                    } else {
+                        fillInBlankQuestions.push({
+                            correctAnswer: vocab.textSource,
+                            type: 'textSource',
+                            content: `What is the translation of "${selectedTarget.textTarget}" in ${vocab.sourceLanguageCode}?`,
+                            vocabId: vocab.id,
+                        });
+                    }
+                });
+
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                trainer.questionAnswers = JSON.parse(JSON.stringify(fillInBlankQuestions));
             } else if (trainer.questionType === QuestionType.FLIP_CARD) {
                 const flipCardQuestions: FlipCardQuestion[] = [];
 
@@ -387,6 +427,235 @@ export class VocabTrainerService {
             );
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
+        }
+    }
+
+    public async submitFillInBlank(
+        id: string,
+        input: SubmitFillInBlankInput,
+        user: User,
+    ): Promise<VocabTrainerDto> {
+        try {
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (user.id) {
+                where.userId = user.id;
+            }
+
+            const trainer = await this.prismaService.vocabTrainer.findFirst({
+                where,
+                include: {
+                    vocabAssignments: {
+                        include: {
+                            vocab: {
+                                include: {
+                                    textTargets: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (!trainer) {
+                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
+            }
+
+            const { countTime, wordTestInputs } = input;
+
+            const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
+            let correctAnswers = 0;
+
+            for (const answerSubmission of wordTestInputs) {
+                let matchedVocabAssignment = null;
+                let answerType: 'textSource' | 'textTarget' = 'textTarget';
+
+                for (const vocabAssignment of trainer.vocabAssignments) {
+                    const vocabItem = vocabAssignment.vocab;
+
+                    if (vocabItem.textSource === answerSubmission.systemAnswer) {
+                        matchedVocabAssignment = vocabAssignment;
+                        answerType = 'textSource';
+                        break;
+                    }
+
+                    if (vocabItem.textTargets && vocabItem.textTargets.length > 0) {
+                        const matchingTextTarget = vocabItem.textTargets.find(
+                            (textTarget) => textTarget.textTarget === answerSubmission.systemAnswer,
+                        );
+                        if (matchingTextTarget) {
+                            matchedVocabAssignment = vocabAssignment;
+                            answerType = 'textTarget';
+                            break;
+                        }
+                    }
+                }
+
+                if (!matchedVocabAssignment) {
+                    this.logger.warn(
+                        `Could not find vocab for systemAnswer "${answerSubmission.systemAnswer}"`,
+                    );
+                    continue;
+                }
+
+                const vocab = matchedVocabAssignment.vocab;
+
+                let isCorrect = false;
+                let explanation: string | undefined;
+                try {
+                    const evaluation = await this.aiService.evaluateFillInBlankAnswer(
+                        vocab,
+                        answerSubmission.userAnswer,
+                        answerSubmission.systemAnswer,
+                        answerType,
+                        user.id,
+                    );
+                    isCorrect = evaluation.isCorrect;
+                    explanation = evaluation.explanation;
+                } catch (error) {
+                    this.logger.error(
+                        `Error evaluating answer for systemAnswer "${answerSubmission.systemAnswer}":`,
+                        error,
+                    );
+                    isCorrect = false;
+                }
+
+                if (isCorrect) {
+                    correctAnswers++;
+                }
+
+                createResults.push({
+                    vocabTrainerId: trainer.id,
+                    status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
+                    userSelected: answerSubmission.userAnswer,
+                    systemSelected: answerSubmission.systemAnswer,
+                    data: { explanation: explanation || undefined },
+                });
+            }
+
+            await this.prismaService.vocabTrainerResult.deleteMany({
+                where: { vocabTrainerId: trainer.id },
+            });
+            await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
+
+            const totalQuestions = wordTestInputs.length;
+            const scorePercentage = (correctAnswers / totalQuestions) * 100;
+            const overallStatus =
+                scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
+
+            const passCount =
+                overallStatus === TrainerStatus.PASSED
+                    ? (trainer.reminderRepeat || 0) + 1
+                    : trainer.reminderRepeat || 0;
+
+            const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
+
+            if (shouldDelete) {
+                await this.notificationService.create({
+                    type: NotificationType.VOCAB_TRAINER,
+                    action: NotificationAction.CREATE,
+                    priority: PriorityLevel.HIGH,
+                    data: {
+                        trainerName: trainer.name,
+                        message: 'Your test has been completed after 6 passes',
+                        completedAt: new Date().toISOString(),
+                    },
+                    expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
+                    isActive: true,
+                    recipientUserIds: [user.id],
+                });
+
+                await this.delete(trainer.id, user.id);
+                return new VocabTrainerDto(
+                    trainer as unknown as VocabTrainer & {
+                        questionAnswers?: MultipleChoiceQuestionDto[];
+                    },
+                );
+            }
+
+            await this.prismaService.vocabTrainer.update({
+                where: { id: trainer.id },
+                data: {
+                    reminderRepeat: passCount,
+                    reminderLastRemind: new Date(),
+                    reminderDisabled: false,
+                },
+            });
+
+            const sendDataReminder = {
+                data: {
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    testName: trainer.name,
+                    repeatDays: '2',
+                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
+                },
+            };
+
+            const sendDataNotification = {
+                data: {
+                    trainerName: trainer.name,
+                    scorePercentage,
+                    trainerId: trainer.id,
+                    questionType: trainer.questionType,
+                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}/exam/fill-in-blank`,
+                },
+            };
+
+            const lastRemindDate =
+                trainer.reminderLastRemind instanceof Date
+                    ? trainer.reminderLastRemind
+                    : new Date(trainer.reminderLastRemind);
+
+            const reminderIntervalDays = 2;
+            const nextReminderTime = new Date(
+                lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
+            );
+            const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
+
+            await this.reminderService.scheduleReminder(
+                user.email,
+                EReminderTitle.VOCAB_TRAINER,
+                EEmailTemplate.EXAM_REMINDER,
+                sendDataReminder.data,
+                delayInMs,
+            );
+
+            await this.reminderService.sendImmediateCreateNotification(
+                [user.id],
+                EReminderTitle.VOCAB_TRAINER,
+                sendDataNotification.data,
+            );
+
+            await this.reminderService.scheduleCreateNotification(
+                [user.id],
+                EReminderTitle.VOCAB_TRAINER,
+                sendDataNotification.data,
+                delayInMs,
+            );
+
+            const result = await this.prismaService.vocabTrainer.update({
+                where: { id: trainer.id },
+                data: {
+                    name: trainer.name,
+                    status: overallStatus,
+                    countTime,
+                    setCountTime: trainer.setCountTime,
+                    updatedAt: new Date(),
+                },
+                include: {
+                    results: true,
+                },
+            });
+
+            return new VocabTrainerDto(
+                result as unknown as VocabTrainer & {
+                    questionAnswers?: MultipleChoiceQuestionDto[];
+                },
+            );
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'submitFillInBlank', this.errorMapping);
         }
     }
 

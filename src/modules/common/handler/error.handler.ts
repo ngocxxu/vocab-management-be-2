@@ -26,6 +26,7 @@ export type ErrorContext =
     | 'setSystemConfig'
     | 'setUserConfig'
     | 'deleteSystemConfig'
+    | 'submitFillInBlank'
     | 'deleteUserConfig';
 
 // Define error mapping interface

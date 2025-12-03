@@ -180,6 +180,7 @@ model VocabTrainerResult {
   status         TrainerStatus @map("status")
   userSelected   String        @map("user_selected")
   systemSelected String        @map("system_selected")
+  data           Json?         @map("data")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 

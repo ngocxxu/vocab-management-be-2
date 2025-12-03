@@ -4,6 +4,8 @@ export * from './vocab-trainer-word.dto';
 export * from './vocab-trainer-result.dto';
 export * from './submit-multiple-choice.dto';
 export * from './multiple-choice-question.dto';
+export * from './fill-in-blank-question.dto';
+export * from './submit-fill-in-blank.dto';
 export * from './vocab-trainer.input';
 export * from './update-vocab-trainer.input';
 export * from './vocab-trainer-query-params.input';

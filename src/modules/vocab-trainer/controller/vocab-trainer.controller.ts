@@ -21,6 +21,7 @@ import { CurrentUser } from '../../common/decorator/user.decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { VocabTrainerPipe } from '../flow/vocab-trainer.pipe';
 import { VocabTrainerDto, VocabTrainerInput } from '../model';
+import { SubmitFillInBlankInput } from '../model/submit-fill-in-blank.dto';
 import { SubmitMultipleChoiceInput } from '../model/submit-multiple-choice.dto';
 import { UpdateVocabTrainerInput } from '../model/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../model/vocab-trainer-query-params.input';
@@ -82,11 +83,21 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
     public async submitExam(
         @Param('id') id: string,
-        @Body() input: SubmitMultipleChoiceInput,
+        @Body() input: SubmitMultipleChoiceInput | SubmitFillInBlankInput,
         @CurrentUser() user: User,
     ): Promise<VocabTrainerDto> {
         if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
-            return this.vocabTrainerService.submitMultipleChoice(id, input, user);
+            return this.vocabTrainerService.submitMultipleChoice(
+                id,
+                input as SubmitMultipleChoiceInput,
+                user,
+            );
+        } else if (input.questionType === QuestionType.FILL_IN_THE_BLANK) {
+            return this.vocabTrainerService.submitFillInBlank(
+                id,
+                input as SubmitFillInBlankInput,
+                user,
+            );
         } else {
             throw new BadRequestException('Question type is not suitable');
         }

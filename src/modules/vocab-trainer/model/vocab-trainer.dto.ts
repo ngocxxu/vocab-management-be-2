@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { shuffleArray } from '../util';
+import { FillInBlankQuestionDto } from './fill-in-blank-question.dto';
 import { FlipCardQuestionDto } from './flip-card-question.dto';
 import { MultipleChoiceQuestionDto } from './multiple-choice-question.dto';
 import { VocabTrainerResultDto } from './vocab-trainer-result.dto';
@@ -69,10 +70,14 @@ export class VocabTrainerDto {
 
     @ApiProperty({
         description: 'AI-generated questions for this trainer',
-        type: [MultipleChoiceQuestionDto, FlipCardQuestionDto],
+        type: [MultipleChoiceQuestionDto, FlipCardQuestionDto, FillInBlankQuestionDto],
         required: false,
     })
-    public questionAnswers?: (MultipleChoiceQuestionDto | FlipCardQuestionDto)[];
+    public questionAnswers?: (
+        | MultipleChoiceQuestionDto
+        | FlipCardQuestionDto
+        | FillInBlankQuestionDto
+    )[];
 
     public constructor(
         entity: VocabTrainer & {
@@ -82,6 +87,7 @@ export class VocabTrainerDto {
         },
     ) {
         const isMultipleChoice = entity.questionType === QuestionType.MULTIPLE_CHOICE;
+        const isFillInBlank = entity.questionType === QuestionType.FILL_IN_THE_BLANK;
 
         this.id = entity.id;
         this.name = entity.name;
@@ -100,11 +106,17 @@ export class VocabTrainerDto {
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
         this.questionAnswers = shuffleArray(
             entity.questionAnswers?.length
-                ? entity.questionAnswers.map((q) =>
-                      isMultipleChoice
-                          ? new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto)
-                          : new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto),
-                  )
+                ? entity.questionAnswers.map((q) => {
+                      if (isMultipleChoice) {
+                          return new MultipleChoiceQuestionDto(
+                              q as unknown as MultipleChoiceQuestionDto,
+                          );
+                      } else if (isFillInBlank) {
+                          return new FillInBlankQuestionDto(q as unknown as FillInBlankQuestionDto);
+                      } else {
+                          return new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto);
+                      }
+                  })
                 : [],
         );
     }

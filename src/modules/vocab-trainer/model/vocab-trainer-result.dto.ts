@@ -23,6 +23,9 @@ export class VocabTrainerResultDto {
     @ApiProperty({ description: 'Updated at' })
     public updatedAt: Date;
 
+    @ApiProperty({ description: 'AI explanation for the answer', required: false })
+    public data?: { explanation?: string };
+
     public constructor(entity: VocabTrainerResult) {
         this.id = entity.id;
         this.vocabTrainerId = entity.vocabTrainerId;
@@ -31,5 +34,6 @@ export class VocabTrainerResultDto {
         this.systemSelected = entity.systemSelected;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
+        this.data = entity.data as { explanation?: string };
     }
 }
