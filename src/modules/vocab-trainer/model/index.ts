@@ -6,6 +6,8 @@ export * from './submit-multiple-choice.dto';
 export * from './multiple-choice-question.dto';
 export * from './fill-in-blank-question.dto';
 export * from './submit-fill-in-blank.dto';
+export * from './submit-translation-audio.dto';
+export * from './submit-translation-audio-response.dto';
 export * from './vocab-trainer.input';
 export * from './update-vocab-trainer.input';
 export * from './vocab-trainer-query-params.input';

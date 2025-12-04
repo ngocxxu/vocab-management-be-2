@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { AuthGuard, CommonModule } from './common';
 import { ConfigModule } from './config/config.module';
 import { EmailModule } from './email/email.module';
@@ -32,9 +33,13 @@ import { WordTypeModule } from './word-type/word-type.module';
         BullModule.registerQueue({
             name: EReminderType.NOTIFICATION,
         }),
+        BullModule.registerQueue({
+            name: EReminderType.AUDIO_EVALUATION,
+        }),
         CommonModule,
         AuthModule,
         ConfigModule,
+        CloudinaryModule,
         AiModule,
         UserModule,
         LanguageModule,

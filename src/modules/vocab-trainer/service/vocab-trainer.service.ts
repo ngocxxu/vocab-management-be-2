@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
     NotificationAction,
     NotificationType,
@@ -21,11 +21,13 @@ import {
     MultipleChoiceQuestionDto,
     SubmitFillInBlankInput,
     SubmitMultipleChoiceInput,
+    SubmitTranslationAudioInput,
     UpdateVocabTrainerInput,
     VocabTrainerDto,
     VocabTrainerInput,
     VocabTrainerQueryParamsInput,
 } from '../model';
+import { SubmitTranslationAudioResponseDto } from '../model/submit-translation-audio-response.dto';
 import {
     EReminderRepeat,
     evaluateMultipleChoiceAnswers,
@@ -263,6 +265,52 @@ export class VocabTrainerService {
 
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 trainer.questionAnswers = JSON.parse(JSON.stringify(flipCardQuestions));
+            } else if (trainer.questionType === QuestionType.TRANSLATION_AUDIO) {
+                if (trainer.vocabAssignments.length === 0) {
+                    trainer.questionAnswers = [];
+                } else {
+                    const firstVocab = trainer.vocabAssignments[0].vocab;
+                    const targetLanguage = firstVocab.targetLanguageCode;
+                    const sourceLanguage = firstVocab.sourceLanguageCode;
+
+                    const targetLanguageWords: string[] = [];
+                    trainer.vocabAssignments.forEach((assignment) => {
+                        const vocab = assignment.vocab;
+                        if (vocab.textTargets && vocab.textTargets.length > 0) {
+                            vocab.textTargets.forEach((tt) => {
+                                if (!targetLanguageWords.includes(tt.textTarget)) {
+                                    targetLanguageWords.push(tt.textTarget);
+                                }
+                            });
+                        }
+                    });
+
+                    if (targetLanguageWords.length > 0) {
+                        const dialogueResult = await this.aiService.generateDialogueForVocabs(
+                            targetLanguageWords,
+                            targetLanguage,
+                            sourceLanguage,
+                            trainer.userId,
+                        );
+
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                        const dialogue: Array<{ speaker: string; text: string }> = JSON.parse(
+                            JSON.stringify(dialogueResult.dialogue),
+                        );
+
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                        trainer.questionAnswers = dialogue;
+
+                        await this.prismaService.vocabTrainer.update({
+                            where: { id: trainer.id },
+                            data: {
+                                questionAnswers: dialogue,
+                            },
+                        });
+                    } else {
+                        trainer.questionAnswers = [];
+                    }
+                }
             }
 
             return new VocabTrainerDto(trainer);
@@ -656,6 +704,119 @@ export class VocabTrainerService {
             );
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'submitFillInBlank', this.errorMapping);
+        }
+    }
+
+    public async submitTranslationAudio(
+        id: string,
+        input: SubmitTranslationAudioInput,
+        user: User,
+    ): Promise<SubmitTranslationAudioResponseDto> {
+        try {
+            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
+                id,
+            };
+            if (user.id) {
+                where.userId = user.id;
+            }
+
+            const trainer = await this.prismaService.vocabTrainer.findFirst({
+                where,
+                include: {
+                    vocabAssignments: {
+                        include: {
+                            vocab: {
+                                include: {
+                                    textTargets: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (!trainer) {
+                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
+            }
+
+            if (trainer.questionType !== QuestionType.TRANSLATION_AUDIO) {
+                throw new BadRequestException('Question type is not TRANSLATION_AUDIO');
+            }
+
+            const { fileId, targetStyle, targetAudience, countTime } = input;
+
+            if (fileId) {
+                try {
+                    await this.aiService.downloadAudioFromCloudinary(fileId);
+                } catch (error) {
+                    this.logger.error(`Failed to download audio from Cloudinary: ${error}`);
+                    throw new BadRequestException(
+                        `Invalid fileId: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                }
+            }
+
+            if (!trainer.questionAnswers || !Array.isArray(trainer.questionAnswers)) {
+                throw new BadRequestException('Dialogue not found in questionAnswers');
+            }
+
+            const targetDialogue = trainer.questionAnswers as Array<{
+                speaker: string;
+                text: string;
+            }>;
+
+            if (targetDialogue.length === 0) {
+                throw new BadRequestException('Dialogue is empty');
+            }
+
+            const firstVocab = trainer.vocabAssignments[0]?.vocab;
+            if (!firstVocab) {
+                throw new BadRequestException('No vocab assignments found');
+            }
+
+            const sourceLanguage = firstVocab.sourceLanguageCode;
+            const targetLanguage = firstVocab.targetLanguageCode;
+
+            const { jobId } = await this.aiService.queueAudioEvaluation({
+                fileId,
+                targetDialogue,
+                sourceLanguage,
+                targetLanguage,
+                targetStyle,
+                targetAudience,
+                userId: user.id,
+                vocabTrainerId: trainer.id,
+            });
+
+            await this.prismaService.vocabTrainer.update({
+                where: { id: trainer.id },
+                data: {
+                    countTime,
+                    updatedAt: new Date(),
+                },
+            });
+
+            const result = await this.prismaService.vocabTrainer.findFirst({
+                where: { id: trainer.id },
+                include: {
+                    results: true,
+                },
+            });
+
+            if (!result) {
+                throw new NotFoundException(`VocabTrainer with ID ${id} not found after update`);
+            }
+
+            return {
+                trainer: new VocabTrainerDto(
+                    result as unknown as VocabTrainer & {
+                        questionAnswers?: Array<{ speaker: string; text: string }>;
+                    },
+                ),
+                jobId,
+            };
+        } catch (error: unknown) {
+            PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
         }
     }
 

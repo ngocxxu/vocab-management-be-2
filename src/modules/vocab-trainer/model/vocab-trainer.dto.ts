@@ -77,6 +77,7 @@ export class VocabTrainerDto {
         | MultipleChoiceQuestionDto
         | FlipCardQuestionDto
         | FillInBlankQuestionDto
+        | { speaker: string; text: string }
     )[];
 
     public constructor(
@@ -88,6 +89,7 @@ export class VocabTrainerDto {
     ) {
         const isMultipleChoice = entity.questionType === QuestionType.MULTIPLE_CHOICE;
         const isFillInBlank = entity.questionType === QuestionType.FILL_IN_THE_BLANK;
+        const isTranslationAudio = entity.questionType === QuestionType.TRANSLATION_AUDIO;
 
         this.id = entity.id;
         this.name = entity.name;
@@ -104,20 +106,30 @@ export class VocabTrainerDto {
         this.updatedAt = entity.updatedAt;
         this.vocabAssignments = entity.vocabAssignments?.map((a) => new VocabTrainerWordDto(a));
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
-        this.questionAnswers = shuffleArray(
-            entity.questionAnswers?.length
-                ? entity.questionAnswers.map((q) => {
-                      if (isMultipleChoice) {
-                          return new MultipleChoiceQuestionDto(
-                              q as unknown as MultipleChoiceQuestionDto,
-                          );
-                      } else if (isFillInBlank) {
-                          return new FillInBlankQuestionDto(q as unknown as FillInBlankQuestionDto);
-                      } else {
-                          return new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto);
-                      }
-                  })
-                : [],
-        );
+
+        if (isTranslationAudio) {
+            this.questionAnswers = entity.questionAnswers as Array<{
+                speaker: string;
+                text: string;
+            }>;
+        } else {
+            this.questionAnswers = shuffleArray(
+                entity.questionAnswers?.length
+                    ? entity.questionAnswers.map((q) => {
+                          if (isMultipleChoice) {
+                              return new MultipleChoiceQuestionDto(
+                                  q as unknown as MultipleChoiceQuestionDto,
+                              );
+                          } else if (isFillInBlank) {
+                              return new FillInBlankQuestionDto(
+                                  q as unknown as FillInBlankQuestionDto,
+                              );
+                          } else {
+                              return new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto);
+                          }
+                      })
+                    : [],
+            );
+        }
     }
 }

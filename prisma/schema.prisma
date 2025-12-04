@@ -54,6 +54,7 @@ enum QuestionType {
   MATCHING
   TRUE_OR_FALSE
   SHORT_ANSWER
+  TRANSLATION_AUDIO
 }
 
 enum ConfigScope {

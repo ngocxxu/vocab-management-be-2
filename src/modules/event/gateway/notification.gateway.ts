@@ -2,9 +2,12 @@ import { Logger } from '@nestjs/common';
 import {
     WebSocketGateway,
     WebSocketServer,
+    SubscribeMessage,
     OnGatewayInit,
     OnGatewayConnection,
     OnGatewayDisconnect,
+    MessageBody,
+    ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
@@ -19,6 +22,17 @@ export class NotificationGateway
     public server: Server;
 
     private readonly logger = new Logger('NotificationGateway');
+
+    @SubscribeMessage('join-user-room')
+    public handleJoinUserRoom(
+        @MessageBody() data: { userId: string },
+        @ConnectedSocket() client: Socket,
+    ): void {
+        if (data.userId) {
+            this.joinUserRoom(data.userId, client);
+            client.emit('joined-user-room', { userId: data.userId });
+        }
+    }
 
     public afterInit(): void {
         this.logger.log('Notification Gateway initialized');
@@ -53,5 +67,21 @@ export class NotificationGateway
     public joinUserRoom(userId: string, client: Socket): void {
         void client.join(`user-${userId}`);
         this.logger.log(`User ${userId} joined notification room`);
+    }
+
+    // Emit audio evaluation progress to specific user
+    public emitAudioEvaluationProgress(
+        userId: string,
+        jobId: string,
+        status: 'evaluating' | 'completed' | 'failed',
+        data?: { transcript?: string; markdownReport?: string; error?: string },
+    ): void {
+        this.server.to(`user-${userId}`).emit('audio-evaluation-progress', {
+            jobId,
+            status,
+            data,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`Audio evaluation progress sent to user ${userId}: ${status}`);
     }
 }

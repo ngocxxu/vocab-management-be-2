@@ -2,6 +2,7 @@ export enum EReminderType {
     EMAIL_REMINDER = 'email_reminder',
     NOTIFICATION = 'notification',
     NOTIFICATION_FCM = 'notification_fcm',
+    AUDIO_EVALUATION = 'audio-evaluation',
 }
 
 export enum EReminderTitle {
