@@ -295,6 +295,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         targetDialogue: Array<{ speaker: string; text: string }>;
         sourceLanguage: string;
         targetLanguage: string;
+        sourceWords: string[];
         targetStyle?: 'formal' | 'informal';
         targetAudience?: string;
         userId: string;
@@ -384,6 +385,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         transcript: string;
         sourceLanguage: string;
         targetLanguage: string;
+        sourceWords: string[];
         targetStyle?: 'formal' | 'informal';
         targetAudience?: string;
         userId?: string;
@@ -394,6 +396,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             transcript,
             sourceLanguage,
             targetLanguage,
+            sourceWords,
             targetStyle,
             targetAudience,
             userId,
@@ -405,6 +408,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
                 .map((item) => `${item.speaker}: "${item.text}"`)
                 .join('\n');
 
+            const sourceWordsList = sourceWords.join(', ');
             const styleContext = targetStyle ? `target style = ${targetStyle}` : '';
             const audienceContext = targetAudience ? `target audience = ${targetAudience}` : '';
             const context = [styleContext, audienceContext].filter(Boolean).join(', ');
@@ -416,13 +420,16 @@ You must follow STRICT SCORING RULES and NEVER give generous scores.
 Your job:
 - Compare the user's ${sourceLanguage} translation (ASR transcript) against the original ${targetLanguage} dialogue.
 - Detect any missing meaning, added meaning, mistranslation, incorrect register, grammar issues, or incorrect tense.
+- CRITICALLY IMPORTANT: The user's translation MUST use the source words or their synonyms: ${sourceWordsList}
+- Penalize SEVERELY if the user does not use the required source words or their synonyms
 - Penalize SEVERELY for omissions, additions, or incorrect interpretation of meaning.
 
 Scoring rules (VERY STRICT):
-- accuracy = 10 only if semantic meaning aligns ≥ 95%.
+- accuracy = 10 only if semantic meaning aligns ≥ 95% AND the required source words (or synonyms) are used.
 - Every missing key idea = -2 points.
 - Every mistranslation of critical meaning = -2 to -3 points.
 - Every invented meaning (addition) = -3 points.
+- If required source words are not used (or their synonyms), deduct -3 to -5 points from accuracy.
 - completeness = proportional to meaning coverage:
     completeness = round( (covered_meaning_percent) / 10 )
 - fluency = evaluate grammar, naturalness, cohesion.
@@ -464,6 +471,8 @@ ${dialogueText}
 
 User ASR transcript (${sourceLanguage}):
 "${transcript}"
+
+Required source words (or synonyms) that MUST be used: ${sourceWordsList}
 
 ${context ? `Context: ${context}` : ''}
             `;
@@ -575,6 +584,7 @@ ${context ? `Context: ${context}` : ''}
 
     public async generateDialogueForVocabs(
         targetLanguageWords: string[],
+        sourceLanguageWords: string[],
         targetLanguage: string,
         sourceLanguage: string,
         userId?: string,
@@ -582,11 +592,17 @@ ${context ? `Context: ${context}` : ''}
     ): Promise<{ dialogue: Array<{ speaker: string; text: string }>; vocabWordsUsed: string[] }> {
         try {
             const wordsList = targetLanguageWords.join(', ');
+            const sourceWordsList = sourceLanguageWords.join(', ');
             const prompt = `
 You are a language learning assistant. Generate a natural dialogue between two speakers (A and B) 
 in ${targetLanguage} that incorporates ALL of the following vocabulary words naturally:
 
 Vocabulary words (${targetLanguage}): ${wordsList}
+
+Important context:
+- This dialogue will be translated by the user from ${targetLanguage} to ${sourceLanguage}
+- When the user translates this dialogue, they MUST use the source words or their synonyms: ${sourceWordsList}
+- The dialogue should be structured so that when translated, it naturally requires the use of these source words
 
 Requirements:
 1. Create a conversation between speakers A and B
@@ -623,6 +639,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
                 await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1));
                 return this.generateDialogueForVocabs(
                     targetLanguageWords,
+                    sourceLanguageWords,
                     targetLanguage,
                     sourceLanguage,
                     userId,

@@ -37,3 +37,5 @@ export class CloudinaryController {
         return this.cloudinaryService.generateUploadSignature(input);
     }
 }
+
+

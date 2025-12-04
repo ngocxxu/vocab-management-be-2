@@ -11,3 +11,5 @@ export class SubmitTranslationAudioInput extends SubmitExamInput {
     @ApiProperty({ description: 'Target audience (optional)', required: false })
     public targetAudience?: string;
 }
+
+

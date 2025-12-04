@@ -274,8 +274,12 @@ export class VocabTrainerService {
                     const sourceLanguage = firstVocab.sourceLanguageCode;
 
                     const targetLanguageWords: string[] = [];
+                    const sourceLanguageWords: string[] = [];
                     trainer.vocabAssignments.forEach((assignment) => {
                         const vocab = assignment.vocab;
+                        if (!sourceLanguageWords.includes(vocab.textSource)) {
+                            sourceLanguageWords.push(vocab.textSource);
+                        }
                         if (vocab.textTargets && vocab.textTargets.length > 0) {
                             vocab.textTargets.forEach((tt) => {
                                 if (!targetLanguageWords.includes(tt.textTarget)) {
@@ -288,6 +292,7 @@ export class VocabTrainerService {
                     if (targetLanguageWords.length > 0) {
                         const dialogueResult = await this.aiService.generateDialogueForVocabs(
                             targetLanguageWords,
+                            sourceLanguageWords,
                             targetLanguage,
                             sourceLanguage,
                             trainer.userId,
@@ -777,11 +782,20 @@ export class VocabTrainerService {
             const sourceLanguage = firstVocab.sourceLanguageCode;
             const targetLanguage = firstVocab.targetLanguageCode;
 
+            const sourceWords: string[] = [];
+            trainer.vocabAssignments.forEach((assignment) => {
+                const vocab = assignment.vocab;
+                if (!sourceWords.includes(vocab.textSource)) {
+                    sourceWords.push(vocab.textSource);
+                }
+            });
+
             const { jobId } = await this.aiService.queueAudioEvaluation({
                 fileId,
                 targetDialogue,
                 sourceLanguage,
                 targetLanguage,
+                sourceWords,
                 targetStyle,
                 targetAudience,
                 userId: user.id,

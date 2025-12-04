@@ -13,6 +13,7 @@ export interface AudioEvaluationJobData {
     targetDialogue: Array<{ speaker: string; text: string }>;
     sourceLanguage: string;
     targetLanguage: string;
+    sourceWords: string[];
     targetStyle?: 'formal' | 'informal';
     targetAudience?: string;
     userId: string;
@@ -36,6 +37,7 @@ export class AiProcessor {
             targetDialogue,
             sourceLanguage,
             targetLanguage,
+            sourceWords,
             targetStyle,
             targetAudience,
             userId,
@@ -64,6 +66,7 @@ export class AiProcessor {
                 transcript,
                 sourceLanguage,
                 targetLanguage,
+                sourceWords,
                 targetStyle,
                 targetAudience,
                 userId,
