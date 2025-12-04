@@ -403,59 +403,11 @@ export class VocabTrainerService {
                 },
             });
 
-            // ----------------------Schedule reminder----------------------
-            const sendDataReminder = {
-                data: {
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    testName: trainer.name,
-                    repeatDays: '2',
-                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
-                },
-            };
-
-            const sendDataNotification = {
-                data: {
-                    trainerName: trainer.name,
-                    scorePercentage,
-                    trainerId: trainer.id,
-                    questionType: trainer.questionType,
-                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}/exam/multiple-choice`,
-                },
-            };
-
-            const lastRemindDate =
-                trainer.reminderLastRemind instanceof Date
-                    ? trainer.reminderLastRemind
-                    : new Date(trainer.reminderLastRemind);
-
-            const reminderIntervalDays = 2;
-            const nextReminderTime = new Date(
-                lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
-            );
-            const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
-
-            // Send reminder email
-            await this.reminderService.scheduleReminder(
-                user.email,
-                EReminderTitle.VOCAB_TRAINER,
-                EEmailTemplate.EXAM_REMINDER,
-                sendDataReminder.data,
-                delayInMs,
-            );
-
-            await this.reminderService.sendImmediateCreateNotification(
-                [user.id],
-                EReminderTitle.VOCAB_TRAINER,
-                sendDataNotification.data,
-            );
-
-            // Send notification
-            await this.reminderService.scheduleCreateNotification(
-                [user.id],
-                EReminderTitle.VOCAB_TRAINER,
-                sendDataNotification.data,
-                delayInMs,
+            await this.scheduleReminderForTrainer(
+                user,
+                trainer,
+                scorePercentage,
+                `${process.env.FRONTEND_URL}/${trainer.id}/exam/multiple-choice`,
             );
 
             // Update trainer status if needed
@@ -636,56 +588,11 @@ export class VocabTrainerService {
                 },
             });
 
-            const sendDataReminder = {
-                data: {
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    testName: trainer.name,
-                    repeatDays: '2',
-                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
-                },
-            };
-
-            const sendDataNotification = {
-                data: {
-                    trainerName: trainer.name,
-                    scorePercentage,
-                    trainerId: trainer.id,
-                    questionType: trainer.questionType,
-                    examUrl: `${process.env.FRONTEND_URL}/${trainer.id}/exam/fill-in-blank`,
-                },
-            };
-
-            const lastRemindDate =
-                trainer.reminderLastRemind instanceof Date
-                    ? trainer.reminderLastRemind
-                    : new Date(trainer.reminderLastRemind);
-
-            const reminderIntervalDays = 2;
-            const nextReminderTime = new Date(
-                lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
-            );
-            const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
-
-            await this.reminderService.scheduleReminder(
-                user.email,
-                EReminderTitle.VOCAB_TRAINER,
-                EEmailTemplate.EXAM_REMINDER,
-                sendDataReminder.data,
-                delayInMs,
-            );
-
-            await this.reminderService.sendImmediateCreateNotification(
-                [user.id],
-                EReminderTitle.VOCAB_TRAINER,
-                sendDataNotification.data,
-            );
-
-            await this.reminderService.scheduleCreateNotification(
-                [user.id],
-                EReminderTitle.VOCAB_TRAINER,
-                sendDataNotification.data,
-                delayInMs,
+            await this.scheduleReminderForTrainer(
+                user,
+                trainer,
+                scorePercentage,
+                `${process.env.FRONTEND_URL}/${trainer.id}/exam/fill-in-blank`,
             );
 
             const result = await this.prismaService.vocabTrainer.update({
@@ -980,5 +887,64 @@ export class VocabTrainerService {
             PrismaErrorHandler.handle(error, 'deleteBulk', this.errorMapping);
             throw error;
         }
+    }
+
+    private async scheduleReminderForTrainer(
+        user: User,
+        trainer: Pick<VocabTrainer, 'id' | 'name' | 'questionType' | 'reminderLastRemind'>,
+        scorePercentage: number,
+        examUrl: string,
+    ): Promise<void> {
+        const sendDataReminder = {
+            data: {
+                firstName: user.firstName,
+                lastName: user.lastName,
+                testName: trainer.name,
+                repeatDays: '2',
+                examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
+            },
+        };
+
+        const sendDataNotification = {
+            data: {
+                trainerName: trainer.name,
+                scorePercentage,
+                trainerId: trainer.id,
+                questionType: trainer.questionType,
+                examUrl,
+            },
+        };
+
+        const lastRemindDate =
+            trainer.reminderLastRemind instanceof Date
+                ? trainer.reminderLastRemind
+                : new Date(trainer.reminderLastRemind);
+
+        const reminderIntervalDays = 2;
+        const nextReminderTime = new Date(
+            lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
+        );
+        const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
+
+        await this.reminderService.scheduleReminder(
+            user.email,
+            EReminderTitle.VOCAB_TRAINER,
+            EEmailTemplate.EXAM_REMINDER,
+            sendDataReminder.data,
+            delayInMs,
+        );
+
+        await this.reminderService.sendImmediateCreateNotification(
+            [user.id],
+            EReminderTitle.VOCAB_TRAINER,
+            sendDataNotification.data,
+        );
+
+        await this.reminderService.scheduleCreateNotification(
+            [user.id],
+            EReminderTitle.VOCAB_TRAINER,
+            sendDataNotification.data,
+            delayInMs,
+        );
     }
 }
