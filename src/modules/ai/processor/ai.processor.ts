@@ -56,7 +56,7 @@ export class AiProcessor {
                 audioBuffer,
                 mimeType,
                 sourceLanguage,
-                userId, // Thêm userId ở đây
+                userId,
             );
 
             const evaluationResult = await this.aiService.evaluateTranslation({
@@ -66,7 +66,7 @@ export class AiProcessor {
                 targetLanguage,
                 targetStyle,
                 targetAudience,
-                userId, // Thêm userId
+                userId,
             });
 
             const markdownReport = this.aiService.formatMarkdownReport(

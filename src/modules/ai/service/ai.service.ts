@@ -522,24 +522,6 @@ ${context ? `Context: ${context}` : ''}
         report +=
             'OverallScore = accuracy * 2.5 + fluency * 2 + register * 1.5 + completeness * 4 (clamped 0–100)\n\n';
 
-        // Source / transcript
-        report += '## Source Dialogue (provided)\n\n';
-        report += `${safe(evaluation.sourceDialogue, '(no source provided)')}\n\n`;
-
-        report += '## Your Transcript (ASR)\n\n';
-        report += `${transcript || '(no transcript)'}\n\n`;
-
-        // Missing ideas
-        const missing = safe(evaluation.missingIdeas, []);
-        if (Array.isArray(missing) && missing.length > 0) {
-            report +=
-                '## Missing Ideas (explicit list of source ideas not covered by the transcript)\n\n';
-            missing.forEach((mi, i) => {
-                report += `${i + 1}. ${mi}\n`;
-            });
-            report += '\n';
-        }
-
         // Errors
         const errors = safe(evaluation.errors, []);
         if (Array.isArray(errors) && errors.length > 0) {
@@ -559,9 +541,24 @@ ${context ? `Context: ${context}` : ''}
             report += '## Errors Found\n\nNo specific errors detected.\n\n';
         }
 
+        // Source / transcript
+        report += '## Your Transcript (ASR)\n\n';
+        report += `${transcript || '(no transcript)'}\n\n`;
+
         // Corrected translation
         report += '## Corrected Translation (full)\n\n';
         report += `${safe(evaluation.correctedTranslation, '(no corrected translation)')}\n\n`;
+
+        // Missing ideas
+        const missing = safe(evaluation.missingIdeas, []);
+        if (Array.isArray(missing) && missing.length > 0) {
+            report +=
+                '## Missing Ideas (explicit list of source ideas not covered by the transcript)\n\n';
+            missing.forEach((mi, i) => {
+                report += `${i + 1}. ${mi}\n`;
+            });
+            report += '\n';
+        }
 
         // Advice / improvement tips
         const advice = safe(evaluation.advice, []);
