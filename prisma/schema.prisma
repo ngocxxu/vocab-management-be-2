@@ -116,8 +116,10 @@ model Vocab {
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
 
-  vocabTrainerWords VocabTrainerWord[]
-  textTargets       TextTarget[]
+  vocabTrainerWords   VocabTrainerWord[]
+  textTargets         TextTarget[]
+  vocabMasteries      VocabMastery[]
+  vocabTrainerResults VocabTrainerResult[]
 
   @@unique([textSource, sourceLanguageCode, targetLanguageCode, languageFolderId])
   @@index([textSource])
@@ -178,6 +180,8 @@ model VocabTrainerResult {
   id             String        @id @default(cuid()) @map("id")
   vocabTrainerId String        @map("vocab_trainer_id")
   vocabTrainer   VocabTrainer  @relation(fields: [vocabTrainerId], references: [id], onDelete: Cascade)
+  vocabId        String?       @map("vocab_id")
+  vocab          Vocab?        @relation(fields: [vocabId], references: [id], onDelete: Cascade)
   status         TrainerStatus @map("status")
   userSelected   String        @map("user_selected")
   systemSelected String        @map("system_selected")
@@ -188,6 +192,8 @@ model VocabTrainerResult {
   @@index([vocabTrainerId])
   @@index([vocabTrainerId, status])
   @@index([vocabTrainerId, createdAt])
+  @@index([vocabId])
+  @@index([vocabId, status])
   @@index([status])
   @@index([createdAt])
   @@map("vocab_trainer_result")
@@ -337,6 +343,7 @@ model User {
   userFcmTokens          UserFcmToken[]
   languageFolders        LanguageFolder[]
   configs                Config[]
+  vocabMasteries         VocabMastery[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])
@@ -382,4 +389,40 @@ model Config {
   @@index([scope, userId])
   @@index([userId])
   @@map("config")
+}
+
+model VocabMastery {
+  id             String   @id @default(cuid()) @map("id")
+  vocabId        String   @map("vocab_id")
+  vocab          Vocab    @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  masteryScore   Float    @default(0) @map("mastery_score")
+  correctCount   Int      @default(0) @map("correct_count")
+  incorrectCount Int      @default(0) @map("incorrect_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  history VocabMasteryHistory[]
+
+  @@unique([vocabId, userId])
+  @@index([vocabId])
+  @@index([userId])
+  @@index([userId, incorrectCount])
+  @@index([userId, masteryScore])
+  @@map("vocab_mastery")
+}
+
+model VocabMasteryHistory {
+  id             String       @id @default(cuid()) @map("id")
+  vocabMasteryId String       @map("vocab_mastery_id")
+  vocabMastery   VocabMastery @relation(fields: [vocabMasteryId], references: [id], onDelete: Cascade)
+  masteryScore   Float        @map("mastery_score")
+  correctCount   Int          @map("correct_count")
+  incorrectCount Int          @map("incorrect_count")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([vocabMasteryId, createdAt])
+  @@index([createdAt])
+  @@map("vocab_mastery_history")
 }

@@ -40,6 +40,7 @@ export const createQuestion = (
 export function evaluateMultipleChoiceAnswers(
     trainerId: string,
     wordTestSelects: WordTestSelect[],
+    vocabIdMap?: Map<string, string>,
 ): EvaluateResult {
     const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
     let correctAnswers = 0;
@@ -55,13 +56,16 @@ export function evaluateMultipleChoiceAnswers(
 
         if (isCorrect) correctAnswers++;
 
+        const vocabId = vocabIdMap?.get(wordTest.systemSelected) || null;
+
         // Prepare data for batch insert
         createResults.push({
             vocabTrainerId: trainerId,
+            vocabId,
             status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
             userSelected: wordTest.userSelected,
             systemSelected: questionAnswer?.systemSelected ?? '',
-        });
+        } as Prisma.VocabTrainerResultCreateManyInput);
     }
 
     return { createResults, correctAnswers };

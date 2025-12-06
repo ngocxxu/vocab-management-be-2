@@ -27,7 +27,15 @@ export type ErrorContext =
     | 'setUserConfig'
     | 'deleteSystemConfig'
     | 'submitFillInBlank'
-    | 'deleteUserConfig';
+    | 'deleteUserConfig'
+    | 'getOrCreateMastery'
+    | 'updateMastery'
+    | 'saveHistory'
+    | 'getSummary'
+    | 'getMasteryBySubject'
+    | 'getProgressOverTime'
+    | 'getTopProblematicVocabs'
+    | 'getMasteryDistribution';
 
 // Define error mapping interface
 interface PrismaErrorMapping {

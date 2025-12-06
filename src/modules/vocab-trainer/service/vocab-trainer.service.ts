@@ -17,6 +17,7 @@ import { buildPrismaWhere, getOrderBy, getPagination } from '../../common/util';
 import { NotificationService } from '../../notification/service';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
+import { VocabMasteryService } from '../../vocab/service/vocab-mastery.service';
 import {
     MultipleChoiceQuestionDto,
     SubmitFillInBlankInput,
@@ -63,6 +64,7 @@ export class VocabTrainerService {
         private readonly reminderService: ReminderService,
         private readonly aiService: AiService,
         private readonly notificationService: NotificationService,
+        private readonly vocabMasteryService: VocabMasteryService,
     ) {}
 
     /**
@@ -339,17 +341,68 @@ export class VocabTrainerService {
 
             const trainer = (await this.prismaService.vocabTrainer.findFirst({
                 where,
-            })) as unknown as VocabTrainerWithTypedAnswers;
+                include: {
+                    vocabAssignments: {
+                        include: {
+                            vocab: {
+                                include: {
+                                    textTargets: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            })) as unknown as VocabTrainerWithTypedAnswers & {
+                vocabAssignments?: Array<{
+                    vocab: VocabWithTextTargets;
+                }>;
+            };
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
 
             const { countTime, wordTestSelects } = input;
 
+            // Map vocabId from questionAnswers or vocabAssignments
+            const questionAnswers = trainer.questionAnswers as Array<{
+                vocabId?: string;
+                correctAnswer?: string;
+                options?: Array<{ label: string; value: string }>;
+            }>;
+
+            const vocabIdMap = new Map<string, string>();
+
+            // Try to get vocabId from questionAnswers first
+            questionAnswers.forEach((q) => {
+                if (q.vocabId && q.correctAnswer) {
+                    vocabIdMap.set(q.correctAnswer, q.vocabId);
+                }
+                // Also map from options if available
+                if (q.options) {
+                    q.options.forEach((opt) => {
+                        if (q.vocabId) {
+                            vocabIdMap.set(opt.value, q.vocabId);
+                        }
+                    });
+                }
+            });
+
+            // Fallback: map from vocabAssignments by text matching
+            if (trainer.vocabAssignments) {
+                trainer.vocabAssignments.forEach((assignment) => {
+                    const vocab = assignment.vocab;
+                    vocabIdMap.set(vocab.textSource, vocab.id);
+                    vocab.textTargets?.forEach((tt) => {
+                        vocabIdMap.set(tt.textTarget, vocab.id);
+                    });
+                });
+            }
+
             // Use the utility function for answer evaluation
             const { createResults, correctAnswers } = evaluateMultipleChoiceAnswers(
                 trainer.id,
                 wordTestSelects,
+                vocabIdMap,
             );
 
             // Batch insert all results
@@ -357,6 +410,17 @@ export class VocabTrainerService {
                 where: { vocabTrainerId: trainer.id },
             });
             await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
+
+            // Update mastery scores for each vocab
+            for (const resultItem of createResults) {
+                const vocabId = (
+                    resultItem as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string }
+                ).vocabId;
+                if (vocabId) {
+                    const isCorrect = resultItem.status === TrainerStatus.PASSED;
+                    await this.vocabMasteryService.updateMastery(vocabId, user.id, isCorrect);
+                }
+            }
 
             // Calculate overall status
             const totalQuestions = wordTestSelects.length;
@@ -532,17 +596,29 @@ export class VocabTrainerService {
 
                 createResults.push({
                     vocabTrainerId: trainer.id,
+                    vocabId: vocab.id,
                     status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
                     userSelected: answerSubmission.userAnswer,
                     systemSelected: answerSubmission.systemAnswer,
                     data: { explanation: explanation || undefined },
-                });
+                } as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string });
             }
 
             await this.prismaService.vocabTrainerResult.deleteMany({
                 where: { vocabTrainerId: trainer.id },
             });
             await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
+
+            // Update mastery scores for each vocab
+            for (const resultItem of createResults) {
+                const vocabId = (
+                    resultItem as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string }
+                ).vocabId;
+                if (vocabId) {
+                    const isCorrect = resultItem.status === TrainerStatus.PASSED;
+                    await this.vocabMasteryService.updateMastery(vocabId, user.id, isCorrect);
+                }
+            }
 
             const totalQuestions = wordTestInputs.length;
             const scorePercentage = (correctAnswers / totalQuestions) * 100;

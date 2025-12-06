@@ -26,9 +26,14 @@ import {
     CsvImportQueryDto,
     CsvImportResponseDto,
     BulkDeleteInput,
+    MasterySummaryDto,
+    MasteryBySubjectDto,
+    ProgressOverTimeDto,
+    TopProblematicVocabDto,
+    MasteryDistributionDto,
 } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
-import { VocabService } from '../service';
+import { VocabService, VocabMasteryService } from '../service';
 import { CsvParserUtil, CsvRowData } from '../util/csv-parser.util';
 
 // Type for multer file
@@ -53,6 +58,7 @@ export class VocabController {
     public constructor(
         private readonly logger: LoggerService,
         private readonly vocabService: VocabService,
+        private readonly vocabMasteryService: VocabMasteryService,
     ) {}
 
     @Get()
@@ -274,5 +280,69 @@ export class VocabController {
             this.logger.error(`CSV export failed for user ${user.id}: ${errorMessage}`);
             throw new BadRequestException(errorMessage);
         }
+    }
+
+    @Get('statistics/summary')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Get mastery summary statistics' })
+    @ApiResponse({ status: HttpStatus.OK, type: MasterySummaryDto })
+    public async getMasterySummary(@CurrentUser() user: User): Promise<MasterySummaryDto> {
+        const summary = await this.vocabMasteryService.getSummary(user.id);
+        return new MasterySummaryDto(summary);
+    }
+
+    @Get('statistics/by-subject')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Get mastery scores grouped by subject' })
+    @ApiResponse({ status: HttpStatus.OK, type: [MasteryBySubjectDto] })
+    public async getMasteryBySubject(@CurrentUser() user: User): Promise<MasteryBySubjectDto[]> {
+        const results = await this.vocabMasteryService.getMasteryBySubject(user.id);
+        return results.map((r) => new MasteryBySubjectDto(r));
+    }
+
+    @Get('statistics/progress')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Get mastery progress over time' })
+    @ApiResponse({ status: HttpStatus.OK, type: [ProgressOverTimeDto] })
+    public async getProgressOverTime(
+        @CurrentUser() user: User,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ): Promise<ProgressOverTimeDto[]> {
+        const start = startDate ? new Date(startDate) : undefined;
+        const end = endDate ? new Date(endDate) : undefined;
+        const results = await this.vocabMasteryService.getProgressOverTime(user.id, start, end);
+        return results.map((r) => new ProgressOverTimeDto(r));
+    }
+
+    @Get('statistics/problematic')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Get top problematic vocabs' })
+    @ApiResponse({ status: HttpStatus.OK, type: [TopProblematicVocabDto] })
+    public async getTopProblematicVocabs(
+        @CurrentUser() user: User,
+        @Query('minIncorrect') minIncorrect?: number,
+        @Query('limit') limit?: number,
+    ): Promise<TopProblematicVocabDto[]> {
+        const min = minIncorrect ? Number(minIncorrect) : 5;
+        const lim = limit ? Number(limit) : 10;
+        const results = await this.vocabMasteryService.getTopProblematicVocabs(user.id, min, lim);
+        return results.map((r) => new TopProblematicVocabDto(r));
+    }
+
+    @Get('statistics/distribution')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Get mastery score distribution' })
+    @ApiResponse({ status: HttpStatus.OK, type: [MasteryDistributionDto] })
+    public async getMasteryDistribution(
+        @CurrentUser() user: User,
+    ): Promise<MasteryDistributionDto[]> {
+        const results = await this.vocabMasteryService.getMasteryDistribution(user.id);
+        return results.map((r) => new MasteryDistributionDto(r));
     }
 }

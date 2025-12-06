@@ -11,3 +11,4 @@ export { TextTargetSubjectDto } from './text-target-subject.dto';
 export { TextTargetDto } from './text-target.dto';
 export { VocabExampleDto } from './vocab-example.dto';
 export { WordTypeDto } from './word-type.data';
+export * from './vocab-mastery-statistics.dto';
