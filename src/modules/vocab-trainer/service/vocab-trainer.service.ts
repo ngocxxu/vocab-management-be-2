@@ -901,24 +901,83 @@ export class VocabTrainerService {
             if (!existing) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
+
+            const { vocabAssignmentIds, ...trainerData } = input;
+
+            if (vocabAssignmentIds !== undefined) {
+                const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
+
+                return await this.prismaService.$transaction(async (tx) => {
+                    await tx.vocabTrainer.update({
+                        where: { id },
+                        data: {
+                            name: trainerData.name,
+                            status: trainerData.status,
+                            questionType: trainerData.questionType ?? existing.questionType,
+                            reminderTime: trainerData.reminderTime ?? existing.reminderTime,
+                            countTime: trainerData.countTime ?? existing.countTime,
+                            setCountTime: trainerData.setCountTime ?? existing.setCountTime,
+                            reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
+                            reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
+                            reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+                        },
+                        include: {
+                            vocabAssignments: true,
+                            results: true,
+                        },
+                    });
+
+                    await tx.vocabTrainerWord.deleteMany({
+                        where: { vocabTrainerId: id },
+                    });
+
+                    if (uniqueVocabIds.length > 0) {
+                        await tx.vocabTrainerWord.createMany({
+                            data: uniqueVocabIds.map((vocabId) => ({
+                                vocabTrainerId: id,
+                                vocabId,
+                            })),
+                            skipDuplicates: true,
+                        });
+                    }
+
+                    const trainerWithAssignments = await tx.vocabTrainer.findUnique({
+                        where: { id },
+                        include: {
+                            vocabAssignments: true,
+                            results: true,
+                        },
+                    });
+
+                    if (!trainerWithAssignments) {
+                        throw new NotFoundException(
+                            `VocabTrainer with ID ${id} not found after update`,
+                        );
+                    }
+
+                    return new VocabTrainerDto(trainerWithAssignments);
+                });
+            }
+
             const trainer = await this.prismaService.vocabTrainer.update({
                 where: { id },
                 data: {
-                    name: input.name,
-                    status: input.status,
-                    questionType: input.questionType ?? existing.questionType,
-                    reminderTime: input.reminderTime ?? existing.reminderTime,
-                    countTime: input.countTime ?? existing.countTime,
-                    setCountTime: input.setCountTime ?? existing.setCountTime,
-                    reminderDisabled: input.reminderDisabled ?? existing.reminderDisabled,
-                    reminderRepeat: input.reminderRepeat ?? existing.reminderRepeat,
-                    reminderLastRemind: input.reminderLastRemind ?? existing.reminderLastRemind,
+                    name: trainerData.name,
+                    status: trainerData.status,
+                    questionType: trainerData.questionType ?? existing.questionType,
+                    reminderTime: trainerData.reminderTime ?? existing.reminderTime,
+                    countTime: trainerData.countTime ?? existing.countTime,
+                    setCountTime: trainerData.setCountTime ?? existing.setCountTime,
+                    reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
+                    reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
+                    reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
                 },
                 include: {
                     vocabAssignments: true,
                     results: true,
                 },
             });
+
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'update', this.errorMapping);

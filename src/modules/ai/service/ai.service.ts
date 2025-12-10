@@ -30,6 +30,7 @@ export const DEFAULT_MODEL_FALLBACK_ORDER = [
     'gemini-2.5-pro',
     'gemini-3-pro',
     'learnlm-2.0-flash-exp',
+    'gemini-2.5-flash-tts'
 ] as const;
 
 // Constants for AI service configuration
