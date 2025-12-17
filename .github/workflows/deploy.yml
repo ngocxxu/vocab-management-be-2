@@ -72,18 +72,18 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ steps.bump.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:latest
 
-      - name: Deploy to K3s via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          script: |
-            # Update deployment image
-            kubectl set image deployment/vocab-be \
-              vocab-be=${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ steps.bump.outputs.version }} \
-              -n vocab-be
+      # - name: Deploy to K3s via SSH
+      #   uses: appleboy/ssh-action@v1.0.3
+      #   with:
+      #     host: ${{ secrets.VPS_HOST }}
+      #     username: ${{ secrets.VPS_USER }}
+      #     key: ${{ secrets.VPS_SSH_KEY }}
+      #     port: ${{ secrets.VPS_PORT }}
+      #     script: |
+      #       # Update deployment image
+      #       kubectl set image deployment/vocab-be \
+      #         vocab-be=${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ steps.bump.outputs.version }} \
+      #         -n vocab-be
 
-            # Wait for rollout to complete
-            kubectl rollout status deployment/vocab-be -n vocab-be
+      #       # Wait for rollout to complete
+      #       kubectl rollout status deployment/vocab-be -n vocab-be
