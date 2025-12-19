@@ -18,7 +18,8 @@ export function getOrderBy<T extends string = string>(
   sortOrder: 'asc' | 'desc' | undefined,
   defaultSort: T,
 ): Record<T, 'asc' | 'desc'> {
-  return sortBy
-    ? { [sortBy]: sortOrder === 'asc' ? 'asc' : 'desc' } as Record<T, 'asc' | 'desc'>
-    : { [defaultSort]: 'desc' } as Record<T, 'asc' | 'desc'>;
+  if (!sortBy) {
+    return { [defaultSort]: 'desc' } as Record<T, 'asc' | 'desc'>;
+  }
+  return { [sortBy]: sortOrder ?? 'desc' } as Record<T, 'asc' | 'desc'>;
 }
