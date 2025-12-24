@@ -96,5 +96,5 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
             NEXT_PUBLIC_SOCKET_URL=${{ secrets.NEXT_PUBLIC_SOCKET_URL }}
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/vocab-fe:${{ steps.bump.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/vocab-fe:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ steps.bump.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:latest
