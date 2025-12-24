@@ -19,19 +19,3 @@ export class FillInBlankQuestionDto {
         this.content = entity.content;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

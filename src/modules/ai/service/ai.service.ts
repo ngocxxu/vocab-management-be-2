@@ -1,102 +1,23 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Queue } from 'bullmq';
-import { ConfigService } from '../../config/service';
 import { EReminderType } from '../../reminder/util';
 import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
 import { AudioEvaluationJobData } from '../processor/ai.processor';
-
-// Configuration interface for AI service
-export interface AiServiceConfig {
-    modelName: string;
-    questionCount: number;
-    passingScore: number;
-    sourceQuestionProbability: number;
-    maxRetries: number;
-    retryDelayMs: number;
-    models?: readonly string[];
-}
-
-// Default model fallback order when no config exists
-export const DEFAULT_MODEL_FALLBACK_ORDER = [
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-2.5-pro',
-    'gemini-3-pro',
-    'learnlm-2.0-flash-exp',
-    'gemini-2.5-flash-tts'
-] as const;
-
-// Constants for AI service configuration
-const AI_CONFIG: AiServiceConfig = {
-    modelName: 'gemini-3-pro',
-    questionCount: 4,
-    passingScore: 70,
-    sourceQuestionProbability: 0.5,
-    maxRetries: 2,
-    retryDelayMs: 1000,
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    models: DEFAULT_MODEL_FALLBACK_ORDER,
-} as const;
-
-const QUESTION_TYPES = {
-    SOURCE: 'textSource',
-    TARGET: 'textTarget',
-} as const;
-
-export interface MultipleChoiceQuestion {
-    correctAnswer: string;
-    type: 'textSource' | 'textTarget';
-    content: string;
-    options: Array<{
-        label: string;
-        value: string;
-    }>;
-}
-
-export interface EvaluationResult {
-    sourceDialogue: string;
-    missingIdeas: string[];
-    overallScore: number;
-    scores: {
-        accuracy: number;
-        fluency: number;
-        register: number;
-        completeness: number;
-    };
-    errors: Array<{
-        index: number;
-        span: string;
-        type: 'omission' | 'addition' | 'wrong_lex' | 'tense' | 'register';
-        explanation: string;
-        suggestion: string;
-    }>;
-    correctedTranslation: string;
-    advice: string[];
-}
-
+import { AiProviderFactory } from '../provider/ai-provider.factory';
+import { AI_CONFIG, QUESTION_TYPES } from '../util/const.util';
+import { EvaluationResult, MultipleChoiceQuestion } from '../util/type.util';
 @Injectable()
 export class AiService {
     private readonly logger = new Logger(AiService.name);
-    private readonly genAI: GoogleGenerativeAI;
 
     public constructor(
-        private readonly configService: ConfigService,
+        private readonly providerFactory: AiProviderFactory,
         @InjectQueue(EReminderType.AUDIO_EVALUATION)
         private readonly audioEvaluationQueue: Queue,
-    ) {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            throw new Error('GEMINI_API_KEY environment variable is required');
-        }
-        this.genAI = new GoogleGenerativeAI(apiKey);
-    }
+    ) {}
 
     /**
      * Translate vocab using AI when textTargets is empty
@@ -141,10 +62,8 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
             `;
 
-            const model = await this.getModel(userId);
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
+            const provider = await this.providerFactory.getProvider(userId);
+            const text = await provider.generateContent(prompt, userId);
 
             const parsedResponse = this.parseTranslationResponse(text);
 
@@ -255,10 +174,8 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
             `;
 
-            const model = await this.getModel(userId);
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
+            const provider = await this.providerFactory.getProvider(userId);
+            const text = await provider.generateContent(prompt, userId);
 
             const parsedResponse = this.parseFillInBlankEvaluationResponse(text);
 
@@ -316,7 +233,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
                 throw new Error('CLOUDINARY_URL environment variable is required');
             }
 
-            const urlMatch = cloudinaryUrl.match(/cloudinary:\/\/([^:]+):([^@]+)@(.+)/);
+            const urlMatch = /cloudinary:\/\/([^:]+):([^@]+)@(.+)/.exec(cloudinaryUrl);
             if (!urlMatch) {
                 throw new Error('Invalid CLOUDINARY_URL format');
             }
@@ -347,21 +264,8 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         retryCount = 0,
     ): Promise<string> {
         try {
-            const prompt = `Transcribe this ${sourceLanguage} audio recording. Return only the transcript text, no additional commentary.`;
-
-            const model = await this.getModel(userId);
-            const audioPart = {
-                inlineData: {
-                    data: audioBuffer.toString('base64'),
-                    mimeType,
-                },
-            };
-
-            const result = await model.generateContent([prompt, audioPart]);
-            const response = result.response;
-            const text = response.text();
-
-            return text.trim();
+            const provider = await this.providerFactory.getProvider(userId);
+            return await provider.transcribeAudio(audioBuffer, mimeType, sourceLanguage, userId);
         } catch (error) {
             this.logger.error(`Error transcribing audio (attempt ${retryCount + 1}):`, error);
 
@@ -478,10 +382,8 @@ Required source words (or synonyms) that MUST be used: ${sourceWordsList}
 ${context ? `Context: ${context}` : ''}
             `;
 
-            const model = await this.getModel(userId);
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
+            const provider = await this.providerFactory.getProvider(userId);
+            const text = await provider.generateContent(prompt, userId);
 
             const parsedResponse = this.parseEvaluationResponse(text);
             return parsedResponse;
@@ -625,10 +527,8 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
             `;
 
-            const model = await this.getModel(userId);
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
+            const provider = await this.providerFactory.getProvider(userId);
+            const text = await provider.generateContent(prompt, userId);
 
             const parsedResponse = this.parseDialogueResponse(text);
             return parsedResponse;
@@ -710,15 +610,6 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
-    private async getModel(userId: string | undefined): Promise<GenerativeModel> {
-        const configValue = await this.configService.getConfig(userId || null, 'ai.model');
-        const modelName =
-            configValue && typeof configValue === 'string'
-                ? configValue
-                : DEFAULT_MODEL_FALLBACK_ORDER[0];
-        return this.genAI.getGenerativeModel({ model: modelName });
-    }
-
     /**
      * Common method to generate question with prompt template
      */
@@ -780,10 +671,8 @@ Format your response as JSON:
 Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
         `;
 
-        const model = await this.getModel(userId);
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
+        const provider = await this.providerFactory.getProvider(userId);
+        const text = await provider.generateContent(prompt, userId);
 
         const parsedResponse = this.parseJsonResponse(text);
 

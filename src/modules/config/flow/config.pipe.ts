@@ -2,7 +2,6 @@ import { Inject, Injectable, PipeTransform } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import * as Joi from 'joi';
-import { DEFAULT_MODEL_FALLBACK_ORDER } from '../../ai/service/ai.service';
 import { JoiValidationPipe } from '../../common';
 import { ConfigInput } from '../model';
 
@@ -21,16 +20,22 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
             }),
         });
 
+        if (key === 'ai.provider') {
+            return baseSchema.keys({
+                value: Joi.string().valid('gemini', 'openrouter').required().messages({
+                    'string.base': 'AI provider must be a string',
+                    'any.required': 'AI provider is required',
+                    'any.only': 'AI provider must be either "gemini" or "openrouter"',
+                }),
+            });
+        }
+
         if (key === 'ai.model') {
             return baseSchema.keys({
-                value: Joi.string()
-                    .valid(...DEFAULT_MODEL_FALLBACK_ORDER)
-                    .required()
-                    .messages({
-                        'string.base': 'AI model must be a string',
-                        'any.required': 'AI model is required',
-                        'any.only': `Model name must be one of: ${DEFAULT_MODEL_FALLBACK_ORDER.join(', ')}`,
-                    }),
+                value: Joi.string().required().messages({
+                    'string.base': 'AI model must be a string',
+                    'any.required': 'AI model is required',
+                }),
             });
         }
 

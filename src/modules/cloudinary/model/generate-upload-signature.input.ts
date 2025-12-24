@@ -45,17 +45,3 @@ export class GenerateUploadSignatureInput {
     @IsString()
     public uploadPreset?: string;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

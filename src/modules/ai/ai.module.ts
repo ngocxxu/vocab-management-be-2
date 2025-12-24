@@ -5,6 +5,9 @@ import { ConfigModule } from '../config';
 import { EventsModule } from '../event/module';
 import { EReminderType } from '../reminder/util';
 import { AiProcessor } from './processor/ai.processor';
+import { AiProviderFactory } from './provider/ai-provider.factory';
+import { GeminiProvider } from './provider/gemini.provider';
+import { OpenRouterProvider } from './provider/openrouter.provider';
 import { AiService } from './service/ai.service';
 
 @Module({
@@ -16,7 +19,13 @@ import { AiService } from './service/ai.service';
             name: EReminderType.AUDIO_EVALUATION,
         }),
     ],
-    providers: [AiService, AiProcessor],
+    providers: [
+        GeminiProvider,
+        OpenRouterProvider,
+        AiProviderFactory,
+        AiService,
+        AiProcessor,
+    ],
     exports: [AiService],
 })
 export class AiModule {}

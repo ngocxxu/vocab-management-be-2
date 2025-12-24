@@ -19,17 +19,3 @@ export class SubmitFillInBlankInput extends SubmitExamInput {
     })
     public wordTestInputs: WordTestInput[];
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
