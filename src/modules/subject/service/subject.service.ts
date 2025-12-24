@@ -150,6 +150,8 @@ export class SubjectService {
                 })),
             );
 
+            await this.subjectRepository.clearUserCache(userId);
+
             const sortedSubjects = await this.subjectRepository.findByIdsOrdered(
                 subjectIds.map((subject) => subject.id),
                 userId,
