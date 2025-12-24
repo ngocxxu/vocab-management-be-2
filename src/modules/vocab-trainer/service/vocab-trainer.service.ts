@@ -9,7 +9,8 @@ import {
     User,
     VocabTrainer,
 } from '@prisma/client';
-import { AiService, MultipleChoiceQuestion } from '../../ai/service/ai.service';
+import { AiService } from '../../ai/service/ai.service';
+import { MultipleChoiceQuestion } from '../../ai/util/type.util';
 import { PrismaErrorHandler } from '../../common/handler';
 import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
