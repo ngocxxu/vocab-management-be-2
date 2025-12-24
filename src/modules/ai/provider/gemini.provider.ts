@@ -27,13 +27,14 @@ export class GeminiProvider implements IAiProvider {
         options?: GenerateContentOptions,
     ): Promise<string> {
         try {
-            const model = await this.getModel(userId);
+            const hasAudio = !!(options?.audioBuffer && options?.audioMimeType);
+            const model = await this.getModel(userId, hasAudio);
             const requestParts: (string | { inlineData: { data: string; mimeType: string } })[] = [
                 prompt,
             ];
 
             // Validate and attach audio if present
-            if (options?.audioBuffer && options?.audioMimeType) {
+            if (hasAudio && options.audioBuffer && options.audioMimeType) {
                 const audioPart = {
                     inlineData: {
                         data: options.audioBuffer.toString('base64'),
@@ -87,8 +88,21 @@ export class GeminiProvider implements IAiProvider {
             : AI_CONFIG.models?.[0] || '';
     }
 
-    private async getModel(userId?: string): Promise<GenerativeModel> {
-        const modelName = await this.getModelName(userId);
+    public async getAudioModelName(userId?: string): Promise<string> {
+        const audioModelConfig = await this.configService.getConfig(
+            userId || null,
+            'ai.audio.model',
+        );
+        if (audioModelConfig && typeof audioModelConfig === 'string') {
+            return audioModelConfig;
+        }
+        return this.getModelName(userId);
+    }
+
+    private async getModel(userId?: string, useAudioModel = false): Promise<GenerativeModel> {
+        const modelName = useAudioModel
+            ? await this.getAudioModelName(userId)
+            : await this.getModelName(userId);
         return this.genAI.getGenerativeModel({ model: modelName });
     }
 }

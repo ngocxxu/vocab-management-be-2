@@ -264,7 +264,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         retryCount = 0,
     ): Promise<string> {
         try {
-            const provider = await this.providerFactory.getProvider(userId);
+            const provider = await this.providerFactory.getAudioProvider(userId);
             return await provider.transcribeAudio(audioBuffer, mimeType, sourceLanguage, userId);
         } catch (error) {
             this.logger.error(`Error transcribing audio (attempt ${retryCount + 1}):`, error);
@@ -404,8 +404,7 @@ ${context ? `Context: ${context}` : ''}
     }
 
     public formatMarkdownReport(evaluation: EvaluationResult, transcript: string): string {
-        const safe = <T, U>(v: T | undefined, d: U) =>
-            v === undefined || v === null ? (d as unknown as T) : v;
+        const safe = <T, U>(v: T | undefined, d: U) => v ?? (d as unknown as T);
 
         let report = '# Translation Evaluation Report\n\n';
 
@@ -439,12 +438,9 @@ ${context ? `Context: ${context}` : ''}
         if (Array.isArray(errors) && errors.length > 0) {
             report += '## Errors Found (ordered)\n\n';
             errors.forEach((error) => {
-                // ensure index exists for display
                 const idx = typeof error.index === 'number' ? error.index : undefined;
-                report += `${idx !== undefined ? `**${idx}.** ` : ''}**Location**: ${safe(
-                    error.span,
-                    '(unknown span)',
-                )}  \n`;
+                const indexPrefix = idx === undefined ? '' : `**${idx}.**`;
+                report += `${indexPrefix}**Location**: ${safe(error.span, '(unknown span)')}  \n`;
                 report += `- **Type**: ${safe(error.type, '(unknown)')}  \n`;
                 report += `- **Issue**: ${safe(error.explanation, '(no explanation)')}  \n`;
                 report += `- **Suggestion**: ${safe(error.suggestion, '(no suggestion)')}  \n\n`;

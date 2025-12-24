@@ -7,6 +7,7 @@ import { EReminderType } from '../reminder/util';
 import { AiProcessor } from './processor/ai.processor';
 import { AiProviderFactory } from './provider/ai-provider.factory';
 import { GeminiProvider } from './provider/gemini.provider';
+import { GroqProvider } from './provider/groq.provider';
 import { OpenRouterProvider } from './provider/openrouter.provider';
 import { AiService } from './service/ai.service';
 
@@ -22,6 +23,7 @@ import { AiService } from './service/ai.service';
     providers: [
         GeminiProvider,
         OpenRouterProvider,
+        GroqProvider,
         AiProviderFactory,
         AiService,
         AiProcessor,

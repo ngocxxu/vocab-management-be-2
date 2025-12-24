@@ -18,5 +18,7 @@ export interface IAiProvider {
     ): Promise<string>;
 
     getModelName(userId?: string): Promise<string>;
+
+    getAudioModelName(userId?: string): Promise<string>;
 }
 

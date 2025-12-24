@@ -12,7 +12,8 @@
     "allowJs": true,
     "outDir": "./dist",
     "strictNullChecks": true,
-    "noUnusedLocals": true
+    "noUnusedLocals": true,
+    "esModuleInterop": true
   },
   "include": [
     "src/**/*",

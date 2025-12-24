@@ -24,7 +24,10 @@ export class OpenRouterProvider implements IAiProvider {
         options?: GenerateContentOptions,
     ): Promise<string> {
         // 1. Prepare Model & Logic common
-        const modelName = await this.getModelName(userId);
+        const hasAudio = !!(options?.audioBuffer && options?.audioMimeType);
+        const modelName = hasAudio
+            ? await this.getAudioModelName(userId)
+            : await this.getModelName(userId);
         const openRouterModelName = this.mapModelNameToOpenRouter(modelName);
 
         // 2. Build Content Payload
@@ -105,6 +108,17 @@ export class OpenRouterProvider implements IAiProvider {
         return configValue && typeof configValue === 'string'
             ? configValue
             : AI_CONFIG.models?.[0] || '';
+    }
+
+    public async getAudioModelName(userId?: string): Promise<string> {
+        const audioModelConfig = await this.configService.getConfig(
+            userId || null,
+            'ai.audio.model',
+        );
+        if (audioModelConfig && typeof audioModelConfig === 'string') {
+            return audioModelConfig;
+        }
+        return this.getModelName(userId);
     }
 
     private mapModelNameToOpenRouter(modelName: string): string {
