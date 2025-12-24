@@ -340,6 +340,148 @@ export class AuthService {
     }
 
     /**
+     * Sync OAuth user from Supabase to local DB
+     * Generic method that works for all OAuth providers (google, github, facebook, apple)
+     */
+    public async syncOAuthUser(accessToken: string, refreshToken: string): Promise<SignInResponse> {
+        try {
+            const userClient = createClient(
+                process.env.SUPABASE_URL ?? '',
+                process.env.SUPABASE_KEY ?? '',
+                {
+                    global: {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
+                },
+            );
+
+            const { data: userData, error: userError } = await userClient.auth.getUser(accessToken);
+
+            if (userError) {
+                this.handleAuthError(userError, 'syncOAuthUser');
+            }
+            if (!userData.user) {
+                throw new UnauthorizedException('User data is missing from Supabase response');
+            }
+
+            const supabaseUser = userData.user;
+            const extractedUserData = this.extractUserDataFromSupabase(supabaseUser);
+
+            let user = await this.prismaService.user.findUnique({
+                where: {
+                    supabaseUserId: supabaseUser.id,
+                },
+            });
+
+            if (!user) {
+                user = await this.prismaService.user.create({
+                    data: {
+                        email: extractedUserData.email,
+                        supabaseUserId: supabaseUser.id,
+                        firstName: extractedUserData.firstName,
+                        lastName: extractedUserData.lastName,
+                        phone: extractedUserData.phone,
+                        avatar: extractedUserData.avatar,
+                        role: UserRole.CUSTOMER,
+                        isActive: true,
+                    },
+                });
+            } else {
+                const needsUpdate =
+                    user.firstName !== extractedUserData.firstName ||
+                    user.lastName !== extractedUserData.lastName ||
+                    user.avatar !== extractedUserData.avatar ||
+                    (extractedUserData.phone && user.phone !== extractedUserData.phone);
+
+                if (needsUpdate) {
+                    user = await this.prismaService.user.update({
+                        where: { id: user.id },
+                        data: {
+                            firstName: extractedUserData.firstName,
+                            lastName: extractedUserData.lastName,
+                            avatar: extractedUserData.avatar,
+                            ...(extractedUserData.phone && { phone: extractedUserData.phone }),
+                        },
+                    });
+                }
+            }
+
+            const { data: sessionData, error: sessionError } = await userClient.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+            });
+
+            if (sessionError || !sessionData.session) {
+                throw new UnauthorizedException('Failed to get session');
+            }
+
+            return {
+                session: new SessionDto(sessionData.session, new UserDto(user)),
+                accessToken: sessionData.session.access_token,
+                refreshToken: sessionData.session.refresh_token,
+            };
+        } catch (error) {
+            if (error instanceof PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error);
+            }
+            this.logger.error('SyncOAuthUser failed:', error);
+            throw new BadRequestException('OAuth user sync failed');
+        }
+    }
+
+    /**
+     * Extract normalized user data from Supabase user object
+     * Works for all OAuth providers (google, github, facebook, apple)
+     */
+    private extractUserDataFromSupabase(supabaseUser: {
+        id: string;
+        email?: string;
+        phone?: string;
+        user_metadata?: Record<string, unknown>;
+        raw_user_meta_data?: Record<string, unknown>;
+    }): {
+        email: string;
+        firstName: string;
+        lastName: string;
+        phone: string | null;
+        avatar: string | null;
+    } {
+        const metadata = supabaseUser.user_metadata || supabaseUser.raw_user_meta_data || {};
+        const email = supabaseUser.email || (metadata.email as string) || '';
+
+        let firstName = '';
+        let lastName = '';
+        const fullName = (metadata.full_name as string) || (metadata.name as string) || '';
+
+        if (fullName) {
+            const nameParts = fullName.trim().split(/\s+/);
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+        } else {
+            firstName = (metadata.first_name as string) || (metadata.given_name as string) || '';
+            lastName = (metadata.last_name as string) || (metadata.family_name as string) || '';
+        }
+
+        const avatar =
+            (metadata.avatar_url as string) ||
+            (metadata.picture as string) ||
+            (metadata.photo_url as string) ||
+            null;
+
+        const phone = supabaseUser.phone || (metadata.phone as string) || null;
+
+        return {
+            email,
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            phone: phone ? phone.trim() : null,
+            avatar: avatar ? avatar.trim() : null,
+        };
+    }
+
+    /**
      * Handle authentication errors
      */
     private handleAuthError(error: unknown, operation: string): void {

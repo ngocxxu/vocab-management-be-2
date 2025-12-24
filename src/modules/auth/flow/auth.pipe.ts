@@ -9,6 +9,7 @@ import {
     VerifyOtpInput,
     ResendConfirmationInput,
     SignUpInput,
+    OAuthSyncInput,
 } from '../model';
 
 export class SignUpPipe extends JoiValidationPipe {
@@ -136,6 +137,21 @@ export class ResendConfirmationPipe extends JoiValidationPipe {
                 'string.empty': 'Email cannot be empty',
                 'string.email': 'Please provide a valid email address',
                 'any.required': 'Email is required',
+            }),
+        });
+    }
+}
+
+export class OAuthSyncPipe extends JoiValidationPipe {
+    public buildSchema(): Joi.Schema {
+        return Joi.object<OAuthSyncInput>({
+            accessToken: Joi.string().required().messages({
+                'string.empty': 'Access token cannot be empty',
+                'any.required': 'Access token is required',
+            }),
+            refreshToken: Joi.string().required().messages({
+                'string.empty': 'Refresh token cannot be empty',
+                'any.required': 'Refresh token is required',
             }),
         });
     }

@@ -9,14 +9,14 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
-import { Request } from 'express';
+import { Response, Request } from 'express';
 
 import { CookieUtil, LoggerService } from '../../common';
 import { Public } from '../../common/decorator';
 import { UserDto } from '../../user/model';
 import {
     OAuthPipe,
+    OAuthSyncPipe,
     RefreshTokenPipe,
     ResendConfirmationPipe,
     ResetPasswordPipe,
@@ -27,6 +27,7 @@ import {
 import {
     OAuthInput,
     OAuthResponseDto,
+    OAuthSyncInput,
     RefreshTokenInput,
     ResendConfirmationInput,
     ResetPasswordInput,
@@ -105,6 +106,35 @@ export class AuthController {
         this.logger.info(`OAuth sign in initiated successfully with provider: ${provider}`);
 
         return result;
+    }
+
+    @Post('oauth/sync')
+    @Public()
+    @ApiOperation({ summary: 'Sync OAuth user from Supabase to local DB' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'OAuth user synced successfully',
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'OAuth user sync failed',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: 'Invalid access token',
+    })
+    public async syncOAuthUser(
+        @Body(OAuthSyncPipe) input: OAuthSyncInput,
+        @Res({ passthrough: true }) response: Response,
+    ): Promise<SessionDto> {
+        const { accessToken, refreshToken } = input;
+
+        const result = await this.authService.syncOAuthUser(accessToken, refreshToken);
+        this.logger.info('OAuth user synced successfully');
+
+        CookieUtil.setAuthCookies(response, result.accessToken, result.refreshToken);
+
+        return result.session;
     }
 
     @Get('verify')

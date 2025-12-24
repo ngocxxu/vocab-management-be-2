@@ -6,4 +6,5 @@ export {
     ResetPasswordPipe,
     VerifyOtpPipe,
     ResendConfirmationPipe,
+    OAuthSyncPipe,
 } from './auth.pipe';

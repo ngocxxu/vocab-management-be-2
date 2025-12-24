@@ -79,3 +79,17 @@ export class ResendConfirmationInput {
     @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     public readonly email: string;
 }
+
+export class OAuthSyncInput {
+    @ApiProperty({
+        description: 'Supabase access token from OAuth session',
+        example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    })
+    public readonly accessToken: string;
+
+    @ApiProperty({
+        description: 'Supabase refresh token from OAuth session',
+        example: 'refresh_token_string',
+    })
+    public readonly refreshToken: string;
+}

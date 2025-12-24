@@ -6,5 +6,6 @@ export {
     ResetPasswordInput,
     VerifyOtpInput,
     ResendConfirmationInput,
+    OAuthSyncInput,
 } from './auth.input';
 export { OAuthResponseDto, SessionDto } from './auth.dto';
