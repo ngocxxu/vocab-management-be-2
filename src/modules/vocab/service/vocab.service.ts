@@ -1,22 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Vocab } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AiService } from '../../ai/service/ai.service';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { LoggerService } from '../../common/provider/logger.service';
-import { RedisService } from '../../common/provider/redis.provider';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
-import { buildPrismaWhere } from '../../common/util/query-builder.util';
-import { RedisPrefix } from '../../common/util/redis-key.util';
 import { BulkDeleteInput, VocabDto, VocabInput } from '../model';
 import { CsvImportQueryDto, CsvImportResponseDto, CsvImportErrorDto, CsvRowDto } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
+import { VocabRepository } from '../repository';
 import { CsvParserUtil, CsvRowData } from '../util/csv-parser.util';
 
 @Injectable()
 export class VocabService {
-    // Custom error mapping cho Vocab
     private readonly vocabErrorMapping = {
         P2002: 'Vocabulary with this text source and language combination already exists',
         P2025: {
@@ -33,8 +30,8 @@ export class VocabService {
     };
 
     public constructor(
+        private readonly vocabRepository: VocabRepository,
         private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
     ) {}
@@ -83,19 +80,6 @@ export class VocabService {
         userId: string,
     ): Promise<PaginationDto<VocabDto>> {
         try {
-            // Generate cache key based on query parameters
-            const cacheKey = `list:${JSON.stringify({ ...query, userId })}`;
-
-            // Try to get from cache first
-            const cached = await this.redisService.jsonGetWithPrefix<PaginationDto<VocabDto>>(
-                RedisPrefix.VOCAB,
-                cacheKey,
-            );
-
-            if (cached) {
-                return cached;
-            }
-
             const { page, pageSize, skip, take } = getPagination({
                 page: query.page,
                 pageSize: query.pageSize,
@@ -109,71 +93,21 @@ export class VocabService {
                 'createdAt',
             ) as Prisma.VocabOrderByWithRelationInput;
 
-            const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
-                stringFields: [
-                    'textSource',
-                    'sourceLanguageCode',
-                    'targetLanguageCode',
-                    'userId',
-                    'languageFolderId',
-                ],
-                customMap: (input, w) => {
-                    // Add user filter if userId provided
-                    if (userId) {
-                        (w as Prisma.VocabWhereInput).userId = userId;
-                    }
-                    if (
-                        input.subjectIds &&
-                        Array.isArray(input.subjectIds) &&
-                        input.subjectIds.length > 0
-                    ) {
-                        (w as Prisma.VocabWhereInput).textTargets = {
-                            some: {
-                                textTargetSubjects: {
-                                    some: {
-                                        subjectId: { in: input.subjectIds },
-                                    },
-                                },
-                            },
-                        };
-                    }
-                },
-            });
+            const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(
+                query,
+                userId,
+                skip,
+                take,
+                orderBy,
+            );
 
-            const [totalItems, vocabs] = await Promise.all([
-                this.prismaService.vocab.count({ where }),
-                this.prismaService.vocab.findMany({
-                    where,
-                    include: {
-                        sourceLanguage: true,
-                        targetLanguage: true,
-                        languageFolder: true,
-                        textTargets: {
-                            include: {
-                                wordType: true,
-                                vocabExamples: true,
-                                textTargetSubjects: {
-                                    include: {
-                                        subject: true,
-                                    },
-                                },
-                            },
-                        },
-                    },
-                    orderBy,
-                    skip,
-                    take,
-                }),
-            ]);
+            if (!vocabs || !Array.isArray(vocabs)) {
+                throw new Error('Invalid vocabs data returned from repository');
+            }
 
             const items = vocabs.map((vocab) => new VocabDto({ ...vocab }));
 
-            const result = new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
-
-            // Cache the result
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, cacheKey, result);
-
-            return result;
+            return new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.vocabErrorMapping);
         }
@@ -187,65 +121,9 @@ export class VocabService {
      */
     public async findRandom(count: number, userId?: string): Promise<VocabDto[]> {
         try {
-            // Generate cache key for random vocab query
-            const cacheKey = `random:${count}:${userId || 'all'}`;
+            const vocabs = await this.vocabRepository.findRandom(count, userId);
 
-            // Try to get from cache first
-            const cached = await this.redisService.jsonGetWithPrefix<VocabDto[]>(
-                RedisPrefix.VOCAB,
-                cacheKey,
-            );
-
-            if (cached) {
-                return cached;
-            }
-
-            const where: Prisma.VocabWhereInput = {};
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const allIds = await this.prismaService.vocab.findMany({
-                where,
-                select: { id: true },
-            });
-
-            if (allIds.length < count) {
-                throw new Error('Not enough vocabularies to select from');
-            }
-
-            if (allIds.length === 0) return [];
-            const shuffled = allIds.sort(() => 0.5 - Math.random());
-            const selectedIds = shuffled.slice(0, Math.min(count, allIds.length)).map((x) => x.id);
-
-            const vocabs = await this.prismaService.vocab.findMany({
-                where: { id: { in: selectedIds } },
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            vocabExamples: true,
-                            textTargetSubjects: {
-                                include: { subject: true },
-                            },
-                        },
-                    },
-                },
-            });
-
-            const result = vocabs.map((vocab) => new VocabDto({ ...vocab }));
-
-            // Cache the result with a shorter TTL for random queries (5 minutes)
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.VOCAB,
-                cacheKey,
-                result,
-                300, // 5 minutes TTL
-            );
-
-            return result;
+            return vocabs.map((vocab) => new VocabDto({ ...vocab }));
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'findRandom', this.vocabErrorMapping);
             throw error;
@@ -262,47 +140,11 @@ export class VocabService {
      */
     public async findOne(id: string, userId?: string): Promise<VocabDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<Vocab>(
-                RedisPrefix.VOCAB,
-                `id:${id}`,
-            );
-            if (cached) {
-                // Verify ownership if userId provided
-                if (userId && cached.userId !== userId) {
-                    throw new NotFoundException(`Vocabulary with ID ${id} not found`);
-                }
-                return new VocabDto(cached);
-            }
-
-            const where: Prisma.VocabWhereUniqueInput & Prisma.VocabWhereInput = { id };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const vocab = await this.prismaService.vocab.findFirst({
-                where,
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            vocabExamples: true,
-                            textTargetSubjects: {
-                                include: {
-                                    subject: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
+            const vocab = await this.vocabRepository.findById(id, userId);
 
             if (!vocab) {
                 throw new NotFoundException(`Vocabulary with ID ${id} not found`);
             }
-
-            await this.redisService.setObjectWithPrefix(RedisPrefix.VOCAB, `id:${id}`, vocab);
 
             return new VocabDto(vocab);
         } catch (error: unknown) {
@@ -370,74 +212,45 @@ export class VocabService {
                 throw new Error('Source and target languages must be different');
             }
 
-            const vocab = await this.prismaService.vocab.create({
-                data: {
-                    textSource,
-                    sourceLanguageCode,
-                    targetLanguageCode,
-                    languageFolderId,
-                    textTargets: {
-                        create: textTargets.map((target) => ({
-                            textTarget: target.textTarget,
-                            grammar: target.grammar,
-                            explanationSource: target.explanationSource,
-                            explanationTarget: target.explanationTarget,
-                            ...(target.subjectIds && {
-                                textTargetSubjects: {
-                                    create: target.subjectIds.map((subjectId: string) => ({
-                                        subjectId,
-                                    })),
-                                },
-                            }),
-
-                            ...(target.wordTypeId && {
-                                wordType: { connect: { id: target.wordTypeId } },
-                            }),
-
-                            ...(target.vocabExamples && {
-                                vocabExamples: {
-                                    create: target.vocabExamples.map((example) => ({
-                                        source: example.source,
-                                        target: example.target,
-                                    })),
-                                },
-                            }),
-                        })),
-                    },
-                    userId,
-                },
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            vocabExamples: true,
+            const vocab = await this.vocabRepository.create({
+                textSource,
+                sourceLanguage: { connect: { code: sourceLanguageCode } },
+                targetLanguage: { connect: { code: targetLanguageCode } },
+                languageFolder: { connect: { id: languageFolderId } },
+                user: { connect: { id: userId } },
+                textTargets: {
+                    create: textTargets.map((target) => ({
+                        textTarget: target.textTarget,
+                        grammar: target.grammar,
+                        explanationSource: target.explanationSource,
+                        explanationTarget: target.explanationTarget,
+                        ...(target.subjectIds && {
                             textTargetSubjects: {
-                                include: {
-                                    subject: true,
-                                },
+                                create: target.subjectIds.map((subjectId: string) => ({
+                                    subjectId,
+                                })),
                             },
-                        },
-                    },
+                        }),
+
+                        ...(target.wordTypeId && {
+                            wordType: { connect: { id: target.wordTypeId } },
+                        }),
+
+                        ...(target.vocabExamples && {
+                            vocabExamples: {
+                                create: target.vocabExamples.map((example) => ({
+                                    source: example.source,
+                                    target: example.target,
+                                })),
+                            },
+                        }),
+                    })),
                 },
             });
 
-            const vocabDto = new VocabDto({
-                ...vocab,
-            });
+            await this.vocabRepository.clearListCaches();
 
-            // Cache the new vocab as RedisJSON
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.VOCAB,
-                `id:${vocabDto.id}`,
-                vocabDto,
-            );
-
-            // Clear list caches since we added a new vocab
-            await this.clearVocabListCaches();
-
-            return vocabDto;
+            return new VocabDto(vocab);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.vocabErrorMapping);
         }
@@ -481,12 +294,7 @@ export class VocabService {
     ): Promise<VocabDto> {
         try {
             // First, verify the vocab exists and belongs to the user
-            const existingVocab = await this.prismaService.vocab.findFirst({
-                where: {
-                    id,
-                    userId,
-                },
-            });
+            const existingVocab = await this.vocabRepository.findById(id, userId);
 
             if (!existingVocab) {
                 throw new Error('Vocab not found or unauthorized');
@@ -532,50 +340,20 @@ export class VocabService {
                   }
                 : undefined;
 
-            const vocab = await this.prismaService.vocab.update({
-                where: { id },
-                data: {
-                    ...(updateVocabData.textSource && { textSource: updateVocabData.textSource }),
-                    ...(updateVocabData.sourceLanguageCode && {
-                        sourceLanguageCode: updateVocabData.sourceLanguageCode,
-                    }),
-                    ...(updateVocabData.targetLanguageCode && {
-                        targetLanguageCode: updateVocabData.targetLanguageCode,
-                    }),
-                    ...(textTargetsUpdate && { textTargets: textTargetsUpdate }),
-                },
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            vocabExamples: true,
-                            textTargetSubjects: {
-                                include: {
-                                    subject: true,
-                                },
-                            },
-                        },
-                    },
-                },
+            const vocab = await this.vocabRepository.update(id, {
+                ...(updateVocabData.textSource && { textSource: updateVocabData.textSource }),
+                ...(updateVocabData.sourceLanguageCode && {
+                    sourceLanguageCode: updateVocabData.sourceLanguageCode,
+                }),
+                ...(updateVocabData.targetLanguageCode && {
+                    targetLanguageCode: updateVocabData.targetLanguageCode,
+                }),
+                ...(textTargetsUpdate && { textTargets: textTargetsUpdate }),
             });
 
-            const vocabDto = new VocabDto({
-                ...vocab,
-            });
+            await this.vocabRepository.clearListCaches();
 
-            // Update the cache
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.VOCAB,
-                `id:${vocabDto.id}`,
-                vocabDto,
-            );
-
-            // Clear list caches since we updated a vocab
-            await this.clearVocabListCaches();
-
-            return vocabDto;
+            return new VocabDto(vocab);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -594,41 +372,11 @@ export class VocabService {
      */
     public async delete(id: string, userId?: string): Promise<VocabDto> {
         try {
-            const where: Prisma.VocabWhereUniqueInput & Prisma.VocabWhereInput = { id };
-            if (userId) {
-                where.userId = userId;
-            }
+            const vocab = await this.vocabRepository.delete(id, userId);
 
-            const vocab = await this.prismaService.vocab.delete({
-                where,
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            vocabExamples: true,
-                            textTargetSubjects: {
-                                include: {
-                                    subject: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
+            await this.vocabRepository.clearListCaches();
 
-            const vocabDto = new VocabDto({
-                ...vocab,
-            });
-
-            // Remove from cache
-            await this.redisService.delWithPrefix(RedisPrefix.VOCAB, `id:${id}`);
-
-            // Clear list caches since we deleted a vocab
-            await this.clearVocabListCaches();
-
-            return vocabDto;
+            return new VocabDto(vocab);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.vocabErrorMapping);
         }
@@ -664,38 +412,22 @@ export class VocabService {
      * Clear vocab cache
      */
     public async clearVocabCache(): Promise<void> {
-        await this.redisService.clearByPrefix(RedisPrefix.VOCAB);
+        await this.vocabRepository.clearCache();
     }
 
-    /**
-     * Clear specific vocab cache by ID
-     */
     public async clearVocabCacheById(id: string): Promise<void> {
-        await this.redisService.delWithPrefix(RedisPrefix.VOCAB, `id:${id}`);
+        await this.vocabRepository.clearCacheById(id);
     }
 
-    /**
-     * Clear vocab list caches (for find and findRandom methods)
-     */
     public async clearVocabListCaches(): Promise<void> {
-        const listKeys = await this.redisService.getKeysByPrefix(RedisPrefix.VOCAB);
-        const filteredKeys = listKeys.filter(
-            (key) => key.includes('list:') || key.includes('random:'),
-        );
-
-        if (filteredKeys.length > 0) {
-            await this.redisService.getClient().del(...filteredKeys);
-        }
+        await this.vocabRepository.clearListCaches();
     }
 
-    /**
-     * Update specific fields in cached vocab object
-     */
     public async updateVocabCacheFields(
         id: string,
         fields: Record<string, unknown>,
     ): Promise<void> {
-        await this.redisService.updateObjectFieldsWithPrefix(RedisPrefix.VOCAB, `id:${id}`, fields);
+        await this.vocabRepository.updateCacheFields(id, fields);
     }
 
     /**
@@ -724,10 +456,10 @@ export class VocabService {
             throw new Error('Source and target languages must be different');
         }
 
-        // Validate language folder exists
-        const languageFolder = await this.prismaService.languageFolder.findFirst({
-            where: { id: languageFolderId, userId },
-        });
+        const languageFolder = await this.vocabRepository.findLanguageFolderById(
+            languageFolderId,
+            userId,
+        );
         if (!languageFolder) {
             throw new Error(`Language folder with ID '${languageFolderId}' not found`);
         }
@@ -752,13 +484,9 @@ export class VocabService {
         const wordTypeMap = new Map<string, string>();
 
         if (wordTypesInCsv.size > 0) {
-            const wordTypes = await this.prismaService.wordType.findMany({
-                where: {
-                    OR: Array.from(wordTypesInCsv).map((name) => ({
-                        name: { contains: name, mode: 'insensitive' },
-                    })),
-                },
-            });
+            const wordTypes = await this.vocabRepository.findWordTypesByNames(
+                Array.from(wordTypesInCsv),
+            );
 
             // Create map: wordTypeName (lowercase) -> wordTypeId
             const foundWordTypeNames = new Set<string>();
@@ -795,14 +523,10 @@ export class VocabService {
         const subjectMap = new Map<string, string>();
 
         if (subjectsInCsv.size > 0) {
-            const subjects = await this.prismaService.subject.findMany({
-                where: {
-                    userId,
-                    OR: Array.from(subjectsInCsv).map((name) => ({
-                        name: { equals: name, mode: 'insensitive' },
-                    })),
-                },
-            });
+            const subjects = await this.vocabRepository.findSubjectsByNames(
+                Array.from(subjectsInCsv),
+                userId,
+            );
 
             // Create map: subjectName (lowercase) -> subjectId
             const foundSubjectNames = new Set<string>();

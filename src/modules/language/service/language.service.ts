@@ -1,14 +1,11 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Language } from '@prisma/client';
-import { IResponse, PrismaService } from '../../common';
+import { IResponse } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { RedisService } from '../../common/provider/redis.provider';
-import { RedisPrefix } from '../../common/util/redis-key.util';
 import { LanguageDto, LanguageInput } from '../model';
+import { LanguageRepository } from '../repository';
 
 @Injectable()
 export class LanguageService {
-    // Custom error mapping cho Language
     private readonly languageErrorMapping = {
         P2002: 'Language with this code already exists',
         P2025: {
@@ -21,10 +18,7 @@ export class LanguageService {
         P2003: 'Invalid language data provided',
     };
 
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+    public constructor(private readonly languageRepository: LanguageRepository) {}
 
     /**
      * Find all languages in the database
@@ -33,24 +27,7 @@ export class LanguageService {
      */
     public async find(): Promise<IResponse<LanguageDto[]>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<Language[]>(
-                RedisPrefix.LANGUAGE,
-                'all',
-            );
-            if (cached) {
-                return {
-                    items: cached.map((language) => new LanguageDto(language)),
-                    statusCode: HttpStatus.OK,
-                };
-            }
-
-            const languages = await this.prismaService.language.findMany({
-                orderBy: {
-                    name: 'asc',
-                },
-            });
-
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.LANGUAGE, 'all', languages);
+            const languages = await this.languageRepository.findAll();
 
             return {
                 items: languages.map((language) => new LanguageDto(language)),
@@ -70,23 +47,11 @@ export class LanguageService {
      */
     public async findOne(id: string): Promise<LanguageDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<Language>(
-                RedisPrefix.LANGUAGE,
-                `id:${id}`,
-            );
-            if (cached) {
-                return new LanguageDto(cached);
-            }
-
-            const language = await this.prismaService.language.findUnique({
-                where: { id },
-            });
+            const language = await this.languageRepository.findById(id);
 
             if (!language) {
                 throw new NotFoundException(`Language with ID ${id} not found`);
             }
-
-            await this.redisService.setObjectWithPrefix(RedisPrefix.LANGUAGE, `id:${id}`, language);
 
             return new LanguageDto(language);
         } catch (error: unknown) {
@@ -109,15 +74,10 @@ export class LanguageService {
         try {
             const { code, name }: LanguageInput = createLanguageData;
 
-            const language = await this.prismaService.language.create({
-                data: {
-                    code,
-                    name,
-                },
+            const language = await this.languageRepository.create({
+                code,
+                name,
             });
-
-            // Clear cache since we added a new language
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
 
             return new LanguageDto(language);
         } catch (error: unknown) {
@@ -141,28 +101,18 @@ export class LanguageService {
         try {
             const { code, name }: Partial<LanguageInput> = updateLanguageData;
 
-            // Check if language exists
-            const existingLanguage = await this.prismaService.language.findUnique({
-                where: { id },
-            });
+            const existingLanguage = await this.languageRepository.findById(id);
 
             if (!existingLanguage) {
                 throw new NotFoundException(`Language with ID ${id} not found`);
             }
 
-            // Prepare update data
             const updateData = {
                 ...(code !== undefined && { code }),
                 ...(name !== undefined && { name }),
             };
 
-            const language = await this.prismaService.language.update({
-                where: { id },
-                data: updateData,
-            });
-
-            // Clear cache since we updated a language
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
+            const language = await this.languageRepository.update(id, updateData);
 
             return new LanguageDto(language);
         } catch (error: unknown) {
@@ -181,12 +131,7 @@ export class LanguageService {
      */
     public async delete(id: string): Promise<LanguageDto> {
         try {
-            const language = await this.prismaService.language.delete({
-                where: { id },
-            });
-
-            // Clear cache since we deleted a language
-            await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
+            const language = await this.languageRepository.delete(id);
 
             return new LanguageDto(language);
         } catch (error: unknown) {

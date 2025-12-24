@@ -1,15 +1,15 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { IResponse, PrismaService } from '../../common';
+import { IResponse } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { UserDto, UserInput } from '../model';
+import { UserRepository } from '../repository';
 
 @Injectable()
 export class UserService {
     private readonly supabase: SupabaseClient;
 
-    // Custom error mapping cho User
     private readonly userErrorMapping = {
         P2002: 'User name already exists',
         P2025: {
@@ -21,7 +21,7 @@ export class UserService {
         },
     };
 
-    public constructor(private readonly prismaService: PrismaService) {
+    public constructor(private readonly userRepository: UserRepository) {
         this.supabase = createClient(
             process.env.SUPABASE_URL ?? '',
             process.env.SUPABASE_KEY ?? '',
@@ -33,8 +33,7 @@ export class UserService {
      */
     public async find(): Promise<IResponse<UserDto[]>> {
         try {
-            const users = await this.prismaService.user.findMany(
-            );
+            const users = await this.userRepository.findAll();
 
             return {
                 items: users.map((user) => new UserDto({ ...user })),
@@ -50,9 +49,7 @@ export class UserService {
      */
     public async findOne(supabaseUserId: string): Promise<UserDto> {
         try {
-            const user = await this.prismaService.user.findUnique({
-                where: { supabaseUserId },
-            });
+            const user = await this.userRepository.findBySupabaseUserId(supabaseUserId);
 
             if (!user) {
                 throw new NotFoundException(`User with ID ${supabaseUserId} not found`);
@@ -87,19 +84,16 @@ export class UserService {
                 throw new Error('User data is missing from Supabase response');
             }
 
-            // 2. Create user in local DB
             const supabaseUser = data.user;
-            const user = await this.prismaService.user.create({
-                data: {
-                    email: email ?? supabaseUser.email,
-                    supabaseUserId: supabaseUser.id,
-                    firstName,
-                    lastName,
-                    phone: phone ?? supabaseUser.phone,
-                    avatar,
-                    role: role ?? UserRole.STAFF, // Use enum value
-                    isActive: true,
-                },
+            const user = await this.userRepository.create({
+                email: email ?? supabaseUser.email,
+                supabaseUserId: supabaseUser.id,
+                firstName,
+                lastName,
+                phone: phone ?? supabaseUser.phone,
+                avatar,
+                role: role ?? UserRole.STAFF,
+                isActive: true,
             });
 
             return new UserDto({
@@ -131,10 +125,7 @@ export class UserService {
                 throw new Error('Supabase user ID is required for update');
             }
 
-            // 1. Get current user data
-            const existingUser = await this.prismaService.user.findUnique({
-                where: { id },
-            });
+            const existingUser = await this.userRepository.findById(id);
 
             if (!existingUser) {
                 throw new Error('User not found');
@@ -171,11 +162,7 @@ export class UserService {
                 ...(isActive !== undefined && { isActive }),
             };
 
-            // 4. Update user in local DB
-            const user = await this.prismaService.user.update({
-                where: { id },
-                data: updateData,
-            });
+            const user = await this.userRepository.update(id, updateData);
 
             return new UserDto({
                 ...user,
@@ -190,9 +177,7 @@ export class UserService {
      */
     public async delete(id: string): Promise<UserDto> {
         try {
-            const existingUser = await this.prismaService.user.findUnique({
-                where: { id },
-            });
+            const existingUser = await this.userRepository.findById(id);
             if (!existingUser) {
                 throw new Error('User not found');
             }
@@ -202,9 +187,7 @@ export class UserService {
                 throw new Error(`Supabase delete error: ${error.code}`);
             }
 
-            const user = await this.prismaService.user.delete({
-                where: { id },
-            });
+            const user = await this.userRepository.delete(id);
 
             return new UserDto({ ...user });
         } catch (error) {

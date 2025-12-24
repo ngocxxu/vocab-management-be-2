@@ -1,14 +1,11 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { WordType } from '@prisma/client';
-import { IResponse, PrismaService } from '../../common';
+import { IResponse } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { RedisService } from '../../common/provider/redis.provider';
-import { RedisPrefix } from '../../common/util/redis-key.util';
 import { WordTypeDto, WordTypeInput } from '../model';
+import { WordTypeRepository } from '../repository';
 
 @Injectable()
 export class WordTypeService {
-    // Custom error mapping cho WordType
     private readonly wordTypeErrorMapping = {
         P2002: 'Word type with this name already exists',
         P2025: {
@@ -21,10 +18,7 @@ export class WordTypeService {
         P2003: 'Invalid word type data provided',
     };
 
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+    public constructor(private readonly wordTypeRepository: WordTypeRepository) {}
 
     /**
      * Find all word types in the database
@@ -33,24 +27,7 @@ export class WordTypeService {
      */
     public async find(): Promise<IResponse<WordTypeDto[]>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<WordType[]>(
-                RedisPrefix.WORD_TYPE,
-                'all',
-            );
-            if (cached) {
-                return {
-                    items: cached.map((wordType) => new WordTypeDto(wordType)),
-                    statusCode: HttpStatus.OK,
-                };
-            }
-
-            const wordTypes = await this.prismaService.wordType.findMany({
-                orderBy: {
-                    name: 'asc',
-                },
-            });
-
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.WORD_TYPE, 'all', wordTypes);
+            const wordTypes = await this.wordTypeRepository.findAll();
 
             return {
                 items: wordTypes.map((wordType) => new WordTypeDto(wordType)),
@@ -70,27 +47,11 @@ export class WordTypeService {
      */
     public async findOne(id: string): Promise<WordTypeDto> {
         try {
-            const cached = await this.redisService.getObjectWithPrefix<WordType>(
-                RedisPrefix.WORD_TYPE,
-                `id:${id}`,
-            );
-            if (cached) {
-                return new WordTypeDto(cached);
-            }
-
-            const wordType = await this.prismaService.wordType.findUnique({
-                where: { id },
-            });
+            const wordType = await this.wordTypeRepository.findById(id);
 
             if (!wordType) {
                 throw new NotFoundException(`Word type with ID ${id} not found`);
             }
-
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.WORD_TYPE,
-                `id:${id}`,
-                wordType,
-            );
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {
@@ -113,15 +74,10 @@ export class WordTypeService {
         try {
             const { name, description }: WordTypeInput = createWordTypeData;
 
-            const wordType = await this.prismaService.wordType.create({
-                data: {
-                    name,
-                    description,
-                },
+            const wordType = await this.wordTypeRepository.create({
+                name,
+                description,
             });
-
-            // Clear cache since we added a new word type
-            await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {
@@ -145,28 +101,18 @@ export class WordTypeService {
         try {
             const { name, description }: Partial<WordTypeInput> = updateWordTypeData;
 
-            // Check if word type exists
-            const existingWordType = await this.prismaService.wordType.findUnique({
-                where: { id },
-            });
+            const existingWordType = await this.wordTypeRepository.findById(id);
 
             if (!existingWordType) {
                 throw new NotFoundException(`Word type with ID ${id} not found`);
             }
 
-            // Prepare update data
             const updateData = {
                 ...(name !== undefined && { name }),
                 ...(description !== undefined && { description }),
             };
 
-            const wordType = await this.prismaService.wordType.update({
-                where: { id },
-                data: updateData,
-            });
-
-            // Clear cache since we updated a word type
-            await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
+            const wordType = await this.wordTypeRepository.update(id, updateData);
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {
@@ -185,12 +131,7 @@ export class WordTypeService {
      */
     public async delete(id: string): Promise<WordTypeDto> {
         try {
-            const wordType = await this.prismaService.wordType.delete({
-                where: { id },
-            });
-
-            // Clear cache since we deleted a word type
-            await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
+            const wordType = await this.wordTypeRepository.delete(id);
 
             return new WordTypeDto(wordType);
         } catch (error: unknown) {

@@ -1,15 +1,12 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Subject } from '@prisma/client';
-import { IResponse, PrismaService } from '../../common';
+import { IResponse } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
-import { RedisService } from '../../common/provider/redis.provider';
-import { RedisPrefix } from '../../common/util/redis-key.util';
 import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
+import { SubjectRepository } from '../repository';
 
 @Injectable()
 export class SubjectService {
-    // Custom error mapping cho Subject
     private readonly subjectErrorMapping = {
         P2002: 'Subject with this name already exists',
         P2025: {
@@ -23,10 +20,7 @@ export class SubjectService {
         P2003: 'Invalid subject data provided',
     };
 
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+    public constructor(private readonly subjectRepository: SubjectRepository) {}
 
     /**
      * Find all subjects in the database
@@ -35,31 +29,7 @@ export class SubjectService {
      */
     public async find(userId: string): Promise<IResponse<SubjectDto[]>> {
         try {
-            const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(
-                RedisPrefix.SUBJECT,
-                `userId:${userId}`,
-            );
-            if (cached) {
-                return {
-                    items: cached.map((subject) => new SubjectDto(subject)),
-                    statusCode: HttpStatus.OK,
-                };
-            }
-
-            const subjects = await this.prismaService.subject.findMany({
-                orderBy: {
-                    order: 'asc',
-                },
-                where: {
-                    userId,
-                },
-            });
-
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.SUBJECT,
-                `userId:${userId}`,
-                subjects,
-            );
+            const subjects = await this.subjectRepository.findByUserId(userId);
 
             return {
                 items: subjects.map((subject) => new SubjectDto(subject)),
@@ -80,51 +50,13 @@ export class SubjectService {
      */
     public async findOne(id: string, userId?: string): Promise<SubjectDto> {
         try {
-            // Try to get from cache first using JSON
-            const cached = await this.redisService.jsonGetWithPrefix<Subject>(
-                RedisPrefix.SUBJECT,
-                `id:${id}`,
-            );
-            if (cached) {
-                // Verify ownership if userId provided
-                if (userId && cached.userId !== userId) {
-                    throw new NotFoundException(`Subject with ID ${id} not found`);
-                }
-                return new SubjectDto(cached);
-            }
-
-            const where: { id: string; userId?: string } = { id };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const subject = await this.prismaService.subject.findFirst({
-                where,
-            });
+            const subject = await this.subjectRepository.findById(id, userId);
 
             if (!subject) {
                 throw new NotFoundException(`Subject with ID ${id} not found`);
             }
 
-            // Cache the result as JSON
-            try {
-                await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
-            } catch (error) {
-                // If Redis type conflict, clear the specific key and retry
-                if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                    await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
-                    await this.redisService.jsonSetWithPrefix(
-                        RedisPrefix.SUBJECT,
-                        `id:${id}`,
-                        subject,
-                    );
-                } else {
-                    throw error;
-                }
-            }
-
-            const subjectDto = new SubjectDto(subject);
-            return subjectDto;
+            return new SubjectDto(subject);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -148,51 +80,17 @@ export class SubjectService {
         try {
             const { name } = createSubjectData;
 
-            // Take the subject with the highest order
-            const lastSubject = await this.prismaService.subject.findFirst({
-                orderBy: {
-                    order: 'desc',
-                },
-            });
+            const lastSubject = await this.subjectRepository.findLastOrder();
 
-            // Auto-increment order for new subjects
             const newOrder = lastSubject ? lastSubject.order + 1 : 1;
 
-            const subject = await this.prismaService.subject.create({
-                data: {
-                    name,
-                    order: newOrder,
-                    userId,
-                },
+            const subject = await this.subjectRepository.create({
+                name,
+                order: newOrder,
+                userId,
             });
 
-            // Cache the new subject as JSON
-            try {
-                await this.redisService.jsonSetWithPrefix(
-                    RedisPrefix.SUBJECT,
-                    `id:${subject.id}`,
-                    subject,
-                );
-            } catch (error) {
-                // If Redis type conflict, clear the specific key and retry
-                if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                    await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${subject.id}`);
-                    await this.redisService.jsonSetWithPrefix(
-                        RedisPrefix.SUBJECT,
-                        `id:${subject.id}`,
-                        subject,
-                    );
-                } else {
-                    throw error;
-                }
-            }
-
-            const subjectDto = new SubjectDto(subject);
-
-            // Clear user's subject list cache since we added a new subject
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
-
-            return subjectDto;
+            return new SubjectDto(subject);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.subjectErrorMapping);
         }
@@ -214,60 +112,18 @@ export class SubjectService {
         userId?: string,
     ): Promise<SubjectDto> {
         try {
-            // First, verify the subject exists and belongs to the user
-            const where: { id: string; userId?: string } = { id };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const existingSubject = await this.prismaService.subject.findFirst({
-                where,
-            });
+            const existingSubject = await this.subjectRepository.findById(id, userId);
 
             if (!existingSubject) {
                 throw new Error('Subject not found or unauthorized');
             }
 
-            const subject = await this.prismaService.subject.update({
-                where: { id },
-                data: {
-                    name: updateSubjectData.name,
-                    order: updateSubjectData.order,
-                },
+            const subject = await this.subjectRepository.update(id, {
+                name: updateSubjectData.name,
+                order: updateSubjectData.order,
             });
 
-            const subjectDto = new SubjectDto({
-                ...subject,
-            });
-
-            // Update the cache using JSON storage for individual objects
-            try {
-                await this.redisService.jsonSetWithPrefix(
-                    RedisPrefix.SUBJECT,
-                    `id:${subjectDto.id}`,
-                    subjectDto,
-                );
-            } catch (error) {
-                // If Redis type conflict, clear the specific key and retry
-                if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                    await this.redisService.delWithPrefix(
-                        RedisPrefix.SUBJECT,
-                        `id:${subjectDto.id}`,
-                    );
-                    await this.redisService.jsonSetWithPrefix(
-                        RedisPrefix.SUBJECT,
-                        `id:${subjectDto.id}`,
-                        subjectDto,
-                    );
-                } else {
-                    throw error;
-                }
-            }
-
-            // Clear the user's subject list cache
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
-
-            return subjectDto;
+            return new SubjectDto(subject);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -280,42 +136,26 @@ export class SubjectService {
         try {
             const { subjectIds } = input;
 
-            // Create a map of subject ID to new order for efficient lookup
             const orderMap = new Map(subjectIds.map((item) => [item.id, item.order]));
 
-            const subjects = await this.prismaService.subject.findMany({
-                where: {
-                    id: { in: subjectIds.map((subject) => subject.id) },
-                    userId,
-                },
-            });
-
-            await Promise.all(
-                subjects.map(async (subject) =>
-                    this.prismaService.subject.update({
-                        where: { id: subject.id },
-                        data: { order: orderMap.get(subject.id) },
-                    }),
-                ),
+            const subjects = await this.subjectRepository.findByIds(
+                subjectIds.map((subject) => subject.id),
+                userId,
             );
 
-            // Fetch the updated subjects in the correct order using Prisma
-            const sortedSubjects = await this.prismaService.subject.findMany({
-                where: {
-                    id: { in: subjectIds.map((subject) => subject.id) },
-                    userId,
-                },
-                orderBy: {
-                    order: 'asc',
-                },
-            });
+            await this.subjectRepository.updateMany(
+                subjects.map((subject) => ({
+                    id: subject.id,
+                    data: { order: orderMap.get(subject.id) },
+                })),
+            );
 
-            const result = sortedSubjects.map((subject) => new SubjectDto(subject));
+            const sortedSubjects = await this.subjectRepository.findByIdsOrdered(
+                subjectIds.map((subject) => subject.id),
+                userId,
+            );
 
-            // Clear user's subject list cache since we reordered subjects
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
-
-            return result;
+            return sortedSubjects.map((subject) => new SubjectDto(subject));
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'reorder', this.subjectErrorMapping);
             throw error;
@@ -327,25 +167,7 @@ export class SubjectService {
      * @param userId - The user ID to clear cache for
      */
     public async clearUserCache(userId: string): Promise<void> {
-        try {
-            // Clear all subject-related cache for this user
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
-
-            // Get all subject IDs for this user and clear individual caches
-            const subjects = await this.prismaService.subject.findMany({
-                where: { userId },
-                select: { id: true },
-            });
-
-            for (const subject of subjects) {
-                await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${subject.id}`);
-            }
-        } catch (error) {
-            // Log error but don't throw - cache clearing is not critical
-            // Using console.warn for non-critical cache operations
-            // eslint-disable-next-line no-console
-            console.warn('Failed to clear subject cache:', error);
-        }
+        await this.subjectRepository.clearUserCache(userId);
     }
 
     /**
@@ -358,24 +180,9 @@ export class SubjectService {
      */
     public async delete(id: string, userId?: string): Promise<SubjectDto> {
         try {
-            const where: { id: string; userId?: string } = { id };
-            if (userId) {
-                where.userId = userId;
-            }
+            const subject = await this.subjectRepository.delete(id, userId);
 
-            const subject = await this.prismaService.subject.delete({
-                where,
-            });
-
-            const subjectDto = new SubjectDto({
-                ...subject,
-            });
-
-            // Remove from cache
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
-
-            return subjectDto;
+            return new SubjectDto(subject);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { VocabDto } from '../model';
+import { VocabMasteryRepository } from '../repository';
 
 @Injectable()
 export class VocabMasteryService {
@@ -16,28 +16,19 @@ export class VocabMasteryService {
         P2003: 'Invalid vocab ID or user ID provided',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(private readonly vocabMasteryRepository: VocabMasteryRepository) {}
 
     public async getOrCreateMastery(vocabId: string, userId: string) {
         try {
-            let mastery = await this.prismaService.vocabMastery.findUnique({
-                where: {
-                    vocabId_userId: {
-                        vocabId,
-                        userId,
-                    },
-                },
-            });
+            let mastery = await this.vocabMasteryRepository.findByVocabIdAndUserId(vocabId, userId);
 
             if (!mastery) {
-                mastery = await this.prismaService.vocabMastery.create({
-                    data: {
-                        vocabId,
-                        userId,
-                        masteryScore: 0,
-                        correctCount: 0,
-                        incorrectCount: 0,
-                    },
+                mastery = await this.vocabMasteryRepository.create({
+                    vocab: { connect: { id: vocabId } },
+                    user: { connect: { id: userId } },
+                    masteryScore: 0,
+                    correctCount: 0,
+                    incorrectCount: 0,
                 });
             }
 
@@ -59,15 +50,10 @@ export class VocabMasteryService {
                 ? Math.min(10, mastery.masteryScore + 1)
                 : Math.max(0, mastery.masteryScore - 1);
 
-            const updatedMastery = await this.prismaService.vocabMastery.update({
-                where: {
-                    id: mastery.id,
-                },
-                data: {
-                    masteryScore: newMasteryScore,
-                    correctCount: newCorrectCount,
-                    incorrectCount: newIncorrectCount,
-                },
+            const updatedMastery = await this.vocabMasteryRepository.update(mastery.id, {
+                masteryScore: newMasteryScore,
+                correctCount: newCorrectCount,
+                incorrectCount: newIncorrectCount,
             });
 
             await this.saveHistory(mastery.id, newMasteryScore, newCorrectCount, newIncorrectCount);
@@ -85,13 +71,11 @@ export class VocabMasteryService {
         incorrectCount: number,
     ) {
         try {
-            await this.prismaService.vocabMasteryHistory.create({
-                data: {
-                    vocabMasteryId,
-                    masteryScore,
-                    correctCount,
-                    incorrectCount,
-                },
+            await this.vocabMasteryRepository.createHistory({
+                vocabMastery: { connect: { id: vocabMasteryId } },
+                masteryScore,
+                correctCount,
+                incorrectCount,
             });
         } catch (error: unknown) {
             this.logger.error('Failed to save mastery history', error);
@@ -100,17 +84,7 @@ export class VocabMasteryService {
 
     public async getSummary(userId: string) {
         try {
-            const result = await this.prismaService.vocabMastery.aggregate({
-                where: { userId },
-                _count: { id: true },
-                _sum: {
-                    correctCount: true,
-                    incorrectCount: true,
-                },
-                _avg: {
-                    masteryScore: true,
-                },
-            });
+            const result = await this.vocabMasteryRepository.aggregateByUserId(userId);
 
             // eslint-disable-next-line no-underscore-dangle
             const count = result._count;
@@ -132,30 +106,7 @@ export class VocabMasteryService {
 
     public async getMasteryBySubject(userId: string) {
         try {
-            const result = await this.prismaService.$queryRaw<
-                Array<{
-                    subjectId: string;
-                    subjectName: string;
-                    averageMastery: number;
-                    vocabCount: number;
-                }>
-            >`
-                SELECT 
-                    s.id as "subjectId",
-                    s.name as "subjectName",
-                    AVG(vm.mastery_score)::float as "averageMastery",
-                    COUNT(DISTINCT vm.vocab_id)::int as "vocabCount"
-                FROM vocab_mastery vm
-                INNER JOIN vocab v ON vm.vocab_id = v.id
-                INNER JOIN text_target tt ON v.id = tt.vocab_id
-                INNER JOIN text_target_subject tts ON tt.id = tts.text_target_id
-                INNER JOIN subject s ON tts.subject_id = s.id
-                WHERE vm.user_id = ${userId}
-                GROUP BY s.id, s.name, s."order"
-                ORDER BY s."order" ASC
-            `;
-
-            return result;
+            return await this.vocabMasteryRepository.getMasteryBySubjectRaw(userId);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'getMasteryBySubject', this.errorMapping);
         }
@@ -163,40 +114,11 @@ export class VocabMasteryService {
 
     public async getProgressOverTime(userId: string, startDate?: Date, endDate?: Date) {
         try {
-            const whereConditions: string[] = ['vm.user_id = $1'];
-            const params: unknown[] = [userId];
-            let paramIndex = 2;
-
-            if (startDate) {
-                whereConditions.push(`vmh.created_at >= $${paramIndex}`);
-                params.push(startDate);
-                paramIndex++;
-            }
-
-            if (endDate) {
-                whereConditions.push(`vmh.created_at <= $${paramIndex}`);
-                params.push(endDate);
-                paramIndex++;
-            }
-
-            const whereClause = whereConditions.join(' AND ');
-
-            const sql = `
-      SELECT 
-        DATE(vmh.created_at)::text as date,
-        AVG(vmh.mastery_score)::float as "averageMastery"
-      FROM vocab_mastery_history vmh
-      INNER JOIN vocab_mastery vm ON vmh.vocab_mastery_id = vm.id
-      WHERE ${whereClause}
-      GROUP BY DATE(vmh.created_at)
-      ORDER BY DATE(vmh.created_at) ASC
-    `;
-
-            const result = await this.prismaService.$queryRawUnsafe<
-                Array<{ date: string; averageMastery: number }>
-            >(sql, ...params);
-
-            return result;
+            return await this.vocabMasteryRepository.getProgressOverTimeRaw(
+                userId,
+                startDate,
+                endDate,
+            );
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'getProgressOverTime', this.errorMapping);
         }
@@ -208,31 +130,13 @@ export class VocabMasteryService {
         limit: number = 10,
     ) {
         try {
-            const vocabs = await this.prismaService.vocabMastery.findMany({
-                where: {
-                    userId,
-                    incorrectCount: {
-                        gte: minIncorrect,
-                    },
-                },
-                include: {
-                    vocab: {
-                        include: {
-                            sourceLanguage: true,
-                            targetLanguage: true,
-                            textTargets: {
-                                take: 1,
-                            },
-                        },
-                    },
-                },
-                orderBy: {
-                    incorrectCount: 'desc',
-                },
-                take: limit,
-            });
+            const vocabs = await this.vocabMasteryRepository.findTopProblematic(
+                userId,
+                minIncorrect,
+                limit,
+            );
 
-            return vocabs.map((vm) => ({
+            return vocabs.map((vm: any) => ({
                 vocabId: vm.vocabId,
                 vocab: new VocabDto(vm.vocab),
                 incorrectCount: vm.incorrectCount,
@@ -246,37 +150,7 @@ export class VocabMasteryService {
 
     public async getMasteryDistribution(userId: string) {
         try {
-            const result = await this.prismaService.$queryRaw<
-                Array<{
-                    scoreRange: string;
-                    count: number;
-                }>
-            >`
-                SELECT 
-                    CASE 
-                        WHEN mastery_score = 0 THEN '0'
-                        WHEN mastery_score BETWEEN 1 AND 2 THEN '1-2'
-                        WHEN mastery_score BETWEEN 3 AND 4 THEN '3-4'
-                        WHEN mastery_score BETWEEN 5 AND 6 THEN '5-6'
-                        WHEN mastery_score BETWEEN 7 AND 8 THEN '7-8'
-                        WHEN mastery_score BETWEEN 9 AND 10 THEN '9-10'
-                    END as "scoreRange",
-                    COUNT(*)::int as count
-                FROM vocab_mastery
-                WHERE user_id = ${userId}
-                GROUP BY 
-                    CASE 
-                        WHEN mastery_score = 0 THEN '0'
-                        WHEN mastery_score BETWEEN 1 AND 2 THEN '1-2'
-                        WHEN mastery_score BETWEEN 3 AND 4 THEN '3-4'
-                        WHEN mastery_score BETWEEN 5 AND 6 THEN '5-6'
-                        WHEN mastery_score BETWEEN 7 AND 8 THEN '7-8'
-                        WHEN mastery_score BETWEEN 9 AND 10 THEN '9-10'
-                    END
-                ORDER BY MIN(mastery_score)
-            `;
-
-            return result;
+            return await this.vocabMasteryRepository.getMasteryDistributionRaw(userId);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'getMasteryDistribution', this.errorMapping);
         }

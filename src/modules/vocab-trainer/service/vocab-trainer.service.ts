@@ -14,7 +14,7 @@ import { MultipleChoiceQuestion } from '../../ai/util/type.util';
 import { PrismaErrorHandler } from '../../common/handler';
 import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
-import { buildPrismaWhere, getOrderBy, getPagination } from '../../common/util';
+import { getOrderBy, getPagination } from '../../common/util';
 import { NotificationService } from '../../notification/service';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
@@ -30,6 +30,7 @@ import {
     VocabTrainerQueryParamsInput,
 } from '../model';
 import { SubmitTranslationAudioResponseDto } from '../model/submit-translation-audio-response.dto';
+import { VocabTrainerRepository } from '../repository';
 import {
     EReminderRepeat,
     evaluateMultipleChoiceAnswers,
@@ -61,6 +62,7 @@ export class VocabTrainerService {
     };
 
     public constructor(
+        private readonly vocabTrainerRepository: VocabTrainerRepository,
         private readonly prismaService: PrismaService,
         private readonly reminderService: ReminderService,
         private readonly aiService: AiService,
@@ -89,39 +91,13 @@ export class VocabTrainerService {
                 'createdAt',
             ) as Prisma.VocabTrainerOrderByWithRelationInput;
 
-            const where = buildPrismaWhere<
-                VocabTrainerQueryParamsInput,
-                Prisma.VocabTrainerWhereInput
-            >(query, {
-                stringFields: ['name', 'userId'],
-                enumFields: ['questionType'],
-                customMap: (input, w) => {
-                    // Add user filter if userId provided
-                    if (userId) {
-                        (w as Prisma.VocabTrainerWhereInput).userId = userId;
-                    }
-                    // Handle status array filtering
-                    if (input.status && Array.isArray(input.status) && input.status.length > 0) {
-                        (w as Prisma.VocabTrainerWhereInput).status = {
-                            in: input.status,
-                        };
-                    }
-                },
-            });
-
-            const [totalItems, trainers] = await Promise.all([
-                this.prismaService.vocabTrainer.count({ where }),
-                this.prismaService.vocabTrainer.findMany({
-                    where,
-                    include: {
-                        vocabAssignments: true,
-                        results: true,
-                    },
-                    orderBy,
-                    skip,
-                    take,
-                }),
-            ]);
+            const { totalItems, trainers } = await this.vocabTrainerRepository.findWithPagination(
+                query,
+                userId,
+                skip,
+                take,
+                orderBy,
+            );
             const items = trainers.map((trainer) => new VocabTrainerDto(trainer));
             return new PaginationDto<VocabTrainerDto>(items, totalItems, page, pageSize);
         } catch (error: unknown) {
@@ -141,13 +117,7 @@ export class VocabTrainerService {
                 where.userId = userId;
             }
 
-            const trainer = await this.prismaService.vocabTrainer.findFirst({
-                where,
-                include: {
-                    vocabAssignments: true,
-                    results: true,
-                },
-            });
+            const trainer = await this.vocabTrainerRepository.findById(id, userId);
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
@@ -169,30 +139,16 @@ export class VocabTrainerService {
                 where.userId = userId;
             }
 
-            const trainer = await this.prismaService.vocabTrainer.findFirst({
-                where,
-                include: {
-                    vocabAssignments: {
-                        include: {
-                            vocab: {
-                                include: {
-                                    textTargets: true,
-                                },
-                            },
-                        },
-                    },
-                    results: true,
-                },
-            });
+            const trainer = await this.vocabTrainerRepository.findByIdWithVocabs(id, userId);
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
 
             // -----------------------------Create multiple choice questions-------------------------------
             if (trainer.questionType === QuestionType.MULTIPLE_CHOICE) {
-                const dataVocabAssignments: VocabWithTextTargets[] = trainer.vocabAssignments.map(
-                    (vocabAssignment) => vocabAssignment.vocab,
-                );
+                const dataVocabAssignments: VocabWithTextTargets[] = (
+                    trainer as VocabTrainer & { vocabAssignments: Array<{ vocab: VocabWithTextTargets }> }
+                ).vocabAssignments.map((vocabAssignment) => vocabAssignment.vocab);
 
                 // Generate AI-powered multiple choice questions
                 const aiQuestions: MultipleChoiceQuestion[] =
@@ -211,8 +167,9 @@ export class VocabTrainerService {
                     vocabId: string;
                 }> = [];
 
-                trainer.vocabAssignments.forEach((assignment) => {
-                    const vocab = assignment.vocab;
+                (trainer as VocabTrainer & { vocabAssignments: Array<{ vocab: VocabWithTextTargets }> })
+                    .vocabAssignments.forEach((assignment) => {
+                        const vocab = assignment.vocab;
 
                     if (!vocab.textTargets || vocab.textTargets.length === 0) {
                         return;
@@ -244,8 +201,9 @@ export class VocabTrainerService {
             } else if (trainer.questionType === QuestionType.FLIP_CARD) {
                 const flipCardQuestions: FlipCardQuestion[] = [];
 
-                trainer.vocabAssignments.forEach((assignment) => {
-                    const vocab = assignment.vocab;
+                (trainer as VocabTrainer & { vocabAssignments: Array<{ vocab: VocabWithTextTargets }> })
+                    .vocabAssignments.forEach((assignment) => {
+                        const vocab = assignment.vocab;
 
                     // Randomly decide direction for this vocab (true = source->target, false = target->source)
                     const isSourceToTarget = Math.random() < 0.5;
@@ -269,22 +227,25 @@ export class VocabTrainerService {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 trainer.questionAnswers = JSON.parse(JSON.stringify(flipCardQuestions));
             } else if (trainer.questionType === QuestionType.TRANSLATION_AUDIO) {
-                if (trainer.vocabAssignments.length === 0) {
+                const trainerWithVocabs = trainer as VocabTrainer & {
+                    vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+                };
+                if (trainerWithVocabs.vocabAssignments.length === 0) {
                     trainer.questionAnswers = [];
                 } else {
-                    const firstVocab = trainer.vocabAssignments[0].vocab;
+                    const firstVocab = trainerWithVocabs.vocabAssignments[0].vocab;
                     const targetLanguage = firstVocab.targetLanguageCode;
                     const sourceLanguage = firstVocab.sourceLanguageCode;
 
                     const targetLanguageWords: string[] = [];
                     const sourceLanguageWords: string[] = [];
-                    trainer.vocabAssignments.forEach((assignment) => {
+                    trainerWithVocabs.vocabAssignments.forEach((assignment) => {
                         const vocab = assignment.vocab;
                         if (!sourceLanguageWords.includes(vocab.textSource)) {
                             sourceLanguageWords.push(vocab.textSource);
                         }
                         if (vocab.textTargets && vocab.textTargets.length > 0) {
-                            vocab.textTargets.forEach((tt) => {
+                            vocab.textTargets.forEach((tt: { textTarget: string }) => {
                                 if (!targetLanguageWords.includes(tt.textTarget)) {
                                     targetLanguageWords.push(tt.textTarget);
                                 }
@@ -309,11 +270,8 @@ export class VocabTrainerService {
                         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                         trainer.questionAnswers = dialogue;
 
-                        await this.prismaService.vocabTrainer.update({
-                            where: { id: trainer.id },
-                            data: {
-                                questionAnswers: dialogue,
-                            },
+                        await this.vocabTrainerRepository.update(trainer.id, {
+                            questionAnswers: dialogue,
                         });
                     } else {
                         trainer.questionAnswers = [];
@@ -340,20 +298,10 @@ export class VocabTrainerService {
                 where.userId = user.id;
             }
 
-            const trainer = (await this.prismaService.vocabTrainer.findFirst({
-                where,
-                include: {
-                    vocabAssignments: {
-                        include: {
-                            vocab: {
-                                include: {
-                                    textTargets: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            })) as unknown as VocabTrainerWithTypedAnswers & {
+            const trainer = (await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
+                id,
+                user.id,
+            )) as unknown as VocabTrainerWithTypedAnswers & {
                 vocabAssignments?: Array<{
                     vocab: VocabWithTextTargets;
                 }>;
@@ -388,9 +336,11 @@ export class VocabTrainerService {
                 }
             });
 
-            // Fallback: map from vocabAssignments by text matching
-            if (trainer.vocabAssignments) {
-                trainer.vocabAssignments.forEach((assignment) => {
+            const trainerWithVocabs = trainer as unknown as VocabTrainer & {
+                vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+            };
+            if (trainerWithVocabs.vocabAssignments) {
+                trainerWithVocabs.vocabAssignments.forEach((assignment) => {
                     const vocab = assignment.vocab;
                     vocabIdMap.set(vocab.textSource, vocab.id);
                     vocab.textTargets?.forEach((tt) => {
@@ -407,10 +357,8 @@ export class VocabTrainerService {
             );
 
             // Batch insert all results
-            await this.prismaService.vocabTrainerResult.deleteMany({
-                where: { vocabTrainerId: trainer.id },
-            });
-            await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
+            await this.vocabTrainerRepository.deleteResultsByTrainerId(trainer.id);
+            await this.vocabTrainerRepository.createResults(createResults);
 
             // Update mastery scores for each vocab
             for (const resultItem of createResults) {
@@ -459,13 +407,10 @@ export class VocabTrainerService {
                 );
             }
 
-            await this.prismaService.vocabTrainer.update({
-                where: { id: trainer.id },
-                data: {
-                    reminderRepeat: passCount,
-                    reminderLastRemind: new Date(),
-                    reminderDisabled: false,
-                },
+            await this.vocabTrainerRepository.update(trainer.id, {
+                reminderRepeat: passCount,
+                reminderLastRemind: new Date(),
+                reminderDisabled: false,
             });
 
             await this.scheduleReminderForTrainer(
@@ -475,19 +420,12 @@ export class VocabTrainerService {
                 `${process.env.FRONTEND_URL}/${trainer.id}/exam/multiple-choice`,
             );
 
-            // Update trainer status if needed
-            const result = await this.prismaService.vocabTrainer.update({
-                where: { id: trainer.id },
-                data: {
-                    name: trainer.name,
-                    status: overallStatus,
-                    countTime,
-                    setCountTime: trainer.setCountTime,
-                    updatedAt: new Date(),
-                },
-                include: {
-                    results: true,
-                },
+            const result = await this.vocabTrainerRepository.update(trainer.id, {
+                name: trainer.name,
+                status: overallStatus,
+                countTime,
+                setCountTime: trainer.setCountTime,
+                updatedAt: new Date(),
             });
 
             return new VocabTrainerDto(
@@ -513,20 +451,10 @@ export class VocabTrainerService {
                 where.userId = user.id;
             }
 
-            const trainer = await this.prismaService.vocabTrainer.findFirst({
-                where,
-                include: {
-                    vocabAssignments: {
-                        include: {
-                            vocab: {
-                                include: {
-                                    textTargets: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
+            const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
+                id,
+                user.id,
+            );
 
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
@@ -541,7 +469,10 @@ export class VocabTrainerService {
                 let matchedVocabAssignment = null;
                 let answerType: 'textSource' | 'textTarget' = 'textTarget';
 
-                for (const vocabAssignment of trainer.vocabAssignments) {
+                const trainerWithVocabs = trainer as VocabTrainer & {
+                    vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+                };
+                for (const vocabAssignment of trainerWithVocabs.vocabAssignments) {
                     const vocabItem = vocabAssignment.vocab;
 
                     if (vocabItem.textSource === answerSubmission.systemAnswer) {
@@ -552,7 +483,8 @@ export class VocabTrainerService {
 
                     if (vocabItem.textTargets && vocabItem.textTargets.length > 0) {
                         const matchingTextTarget = vocabItem.textTargets.find(
-                            (textTarget) => textTarget.textTarget === answerSubmission.systemAnswer,
+                            (textTarget: { textTarget: string }) =>
+                                textTarget.textTarget === answerSubmission.systemAnswer,
                         );
                         if (matchingTextTarget) {
                             matchedVocabAssignment = vocabAssignment;
@@ -605,10 +537,8 @@ export class VocabTrainerService {
                 } as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string });
             }
 
-            await this.prismaService.vocabTrainerResult.deleteMany({
-                where: { vocabTrainerId: trainer.id },
-            });
-            await this.prismaService.vocabTrainerResult.createMany({ data: createResults });
+            await this.vocabTrainerRepository.deleteResultsByTrainerId(trainer.id);
+            await this.vocabTrainerRepository.createResults(createResults);
 
             // Update mastery scores for each vocab
             for (const resultItem of createResults) {
@@ -656,13 +586,10 @@ export class VocabTrainerService {
                 );
             }
 
-            await this.prismaService.vocabTrainer.update({
-                where: { id: trainer.id },
-                data: {
-                    reminderRepeat: passCount,
-                    reminderLastRemind: new Date(),
-                    reminderDisabled: false,
-                },
+            await this.vocabTrainerRepository.update(trainer.id, {
+                reminderRepeat: passCount,
+                reminderLastRemind: new Date(),
+                reminderDisabled: false,
             });
 
             await this.scheduleReminderForTrainer(
@@ -672,18 +599,12 @@ export class VocabTrainerService {
                 `${process.env.FRONTEND_URL}/${trainer.id}/exam/fill-in-blank`,
             );
 
-            const result = await this.prismaService.vocabTrainer.update({
-                where: { id: trainer.id },
-                data: {
-                    name: trainer.name,
-                    status: overallStatus,
-                    countTime,
-                    setCountTime: trainer.setCountTime,
-                    updatedAt: new Date(),
-                },
-                include: {
-                    results: true,
-                },
+            const result = await this.vocabTrainerRepository.update(trainer.id, {
+                name: trainer.name,
+                status: overallStatus,
+                countTime,
+                setCountTime: trainer.setCountTime,
+                updatedAt: new Date(),
             });
 
             return new VocabTrainerDto(
@@ -709,20 +630,10 @@ export class VocabTrainerService {
                 where.userId = user.id;
             }
 
-            const trainer = await this.prismaService.vocabTrainer.findFirst({
-                where,
-                include: {
-                    vocabAssignments: {
-                        include: {
-                            vocab: {
-                                include: {
-                                    textTargets: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
+            const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
+                id,
+                user.id,
+            );
 
             if (!trainer) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
@@ -758,7 +669,10 @@ export class VocabTrainerService {
                 throw new BadRequestException('Dialogue is empty');
             }
 
-            const firstVocab = trainer.vocabAssignments[0]?.vocab;
+            const trainerWithVocabs = trainer as unknown as VocabTrainer & {
+                vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+            };
+            const firstVocab = trainerWithVocabs.vocabAssignments[0]?.vocab;
             if (!firstVocab) {
                 throw new BadRequestException('No vocab assignments found');
             }
@@ -767,7 +681,7 @@ export class VocabTrainerService {
             const targetLanguage = firstVocab.targetLanguageCode;
 
             const sourceWords: string[] = [];
-            trainer.vocabAssignments.forEach((assignment) => {
+            trainerWithVocabs.vocabAssignments.forEach((assignment) => {
                 const vocab = assignment.vocab;
                 if (!sourceWords.includes(vocab.textSource)) {
                     sourceWords.push(vocab.textSource);
@@ -786,20 +700,12 @@ export class VocabTrainerService {
                 vocabTrainerId: trainer.id,
             });
 
-            await this.prismaService.vocabTrainer.update({
-                where: { id: trainer.id },
-                data: {
-                    countTime,
-                    updatedAt: new Date(),
-                },
+            await this.vocabTrainerRepository.update(trainer.id, {
+                countTime,
+                updatedAt: new Date(),
             });
 
-            const result = await this.prismaService.vocabTrainer.findFirst({
-                where: { id: trainer.id },
-                include: {
-                    results: true,
-                },
-            });
+            const result = await this.vocabTrainerRepository.findById(trainer.id);
 
             if (!result) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found after update`);
@@ -824,47 +730,31 @@ export class VocabTrainerService {
     public async create(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
         try {
             const { vocabAssignmentIds = [], ...trainerData } = input;
-            const trainer = await this.prismaService.vocabTrainer.create({
-                data: {
-                    name: trainerData.name,
-                    status: trainerData.status ?? TrainerStatus.PENDING,
-                    questionType: trainerData.questionType ?? QuestionType.MULTIPLE_CHOICE,
-                    reminderTime: trainerData.reminderTime ?? 0,
-                    countTime: trainerData.countTime ?? 0,
-                    setCountTime: trainerData.setCountTime ?? 0,
-                    reminderDisabled: trainerData.reminderDisabled ?? false,
-                    reminderRepeat: trainerData.reminderRepeat ?? 0,
-                    reminderLastRemind: trainerData.reminderLastRemind ?? new Date(),
-                    userId,
-                },
-                include: {
-                    vocabAssignments: true,
-                    results: true,
-                },
+            const trainer = await this.vocabTrainerRepository.create({
+                name: trainerData.name,
+                status: trainerData.status ?? TrainerStatus.PENDING,
+                questionType: trainerData.questionType ?? QuestionType.MULTIPLE_CHOICE,
+                reminderTime: trainerData.reminderTime ?? 0,
+                countTime: trainerData.countTime ?? 0,
+                setCountTime: trainerData.setCountTime ?? 0,
+                reminderDisabled: trainerData.reminderDisabled ?? false,
+                reminderRepeat: trainerData.reminderRepeat ?? 0,
+                reminderLastRemind: trainerData.reminderLastRemind ?? new Date(),
+                user: { connect: { id: userId } },
+                vocabAssignments:
+                    vocabAssignmentIds.length > 0
+                        ? {
+                              create: vocabAssignmentIds.map((vocabId) => ({
+                                  vocab: { connect: { id: vocabId } },
+                              })),
+                          }
+                        : undefined,
             });
-
-            // Create vocab assignments if any
-            if (vocabAssignmentIds.length > 0) {
-                await Promise.all(
-                    vocabAssignmentIds.map(async (vocabId) =>
-                        this.prismaService.vocabTrainerWord.create({
-                            data: {
-                                vocabTrainerId: trainer.id,
-                                vocabId,
-                            },
-                        }),
-                    ),
-                );
-            }
 
             // Fetch the trainer again to include the new assignments
-            const trainerWithAssignments = await this.prismaService.vocabTrainer.findUnique({
-                where: { id: trainer.id },
-                include: {
-                    vocabAssignments: true,
-                    results: true,
-                },
-            });
+            const trainerWithAssignments = await this.vocabTrainerRepository.findById(
+                trainer.id,
+            );
 
             if (!trainerWithAssignments) {
                 throw new NotFoundException(
@@ -898,7 +788,7 @@ export class VocabTrainerService {
                 where.userId = userId;
             }
 
-            const existing = await this.prismaService.vocabTrainer.findFirst({ where });
+            const existing = await this.vocabTrainerRepository.findById(id, userId);
             if (!existing) {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
@@ -960,23 +850,16 @@ export class VocabTrainerService {
                 });
             }
 
-            const trainer = await this.prismaService.vocabTrainer.update({
-                where: { id },
-                data: {
-                    name: trainerData.name,
-                    status: trainerData.status,
-                    questionType: trainerData.questionType ?? existing.questionType,
-                    reminderTime: trainerData.reminderTime ?? existing.reminderTime,
-                    countTime: trainerData.countTime ?? existing.countTime,
-                    setCountTime: trainerData.setCountTime ?? existing.setCountTime,
-                    reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
-                    reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
-                    reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
-                },
-                include: {
-                    vocabAssignments: true,
-                    results: true,
-                },
+            const trainer = await this.vocabTrainerRepository.update(id, {
+                name: trainerData.name,
+                status: trainerData.status,
+                questionType: trainerData.questionType ?? existing.questionType,
+                reminderTime: trainerData.reminderTime ?? existing.reminderTime,
+                countTime: trainerData.countTime ?? existing.countTime,
+                setCountTime: trainerData.setCountTime ?? existing.setCountTime,
+                reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
+                reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
+                reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
             });
 
             return new VocabTrainerDto(trainer);
@@ -997,13 +880,7 @@ export class VocabTrainerService {
                 where.userId = userId;
             }
 
-            const trainer = await this.prismaService.vocabTrainer.delete({
-                where,
-                include: {
-                    vocabAssignments: true,
-                    results: true,
-                },
-            });
+            const trainer = await this.vocabTrainerRepository.delete(id, userId);
             return new VocabTrainerDto(trainer);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.errorMapping);

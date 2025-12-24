@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigScope, Prisma } from '@prisma/client';
-import { PrismaService } from '../../common';
+import { Prisma } from '@prisma/client';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { ConfigDto } from '../model';
+import { ConfigRepository } from '../repository';
 
 @Injectable()
 export class ConfigService {
@@ -18,18 +18,11 @@ export class ConfigService {
         P2003: 'Invalid config data provided',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {}
+    public constructor(private readonly configRepository: ConfigRepository) {}
 
     public async getSystemConfig(key: string): Promise<ConfigDto> {
         try {
-            const config = await this.prismaService.config.findFirst({
-                where: {
-                    scope: ConfigScope.SYSTEM,
-                    userId: null,
-                    key,
-                    isActive: true,
-                },
-            });
+            const config = await this.configRepository.findSystemConfig(key);
 
             if (!config) {
                 throw new NotFoundException(`System config with key "${key}" not found`);
@@ -47,14 +40,7 @@ export class ConfigService {
 
     public async getUserConfig(userId: string, key: string): Promise<ConfigDto> {
         try {
-            const config = await this.prismaService.config.findFirst({
-                where: {
-                    scope: ConfigScope.USER,
-                    userId,
-                    key,
-                    isActive: true,
-                },
-            });
+            const config = await this.configRepository.findUserConfig(userId, key);
 
             if (!config) {
                 throw new NotFoundException(`User config with key "${key}" not found`);
@@ -72,32 +58,10 @@ export class ConfigService {
 
     public async getConfig(userId: string | null, key: string): Promise<unknown> {
         try {
-            if (userId) {
-                const userConfig = await this.prismaService.config.findFirst({
-                    where: {
-                        scope: ConfigScope.USER,
-                        userId,
-                        key,
-                        isActive: true,
-                    },
-                });
+            const config = await this.configRepository.findConfig(userId, key);
 
-                if (userConfig) {
-                    return userConfig.value;
-                }
-            }
-
-            const systemConfig = await this.prismaService.config.findFirst({
-                where: {
-                    scope: ConfigScope.SYSTEM,
-                    userId: null,
-                    key,
-                    isActive: true,
-                },
-            });
-
-            if (systemConfig) {
-                return systemConfig.value;
+            if (config) {
+                return config.value;
             }
 
             if (key === 'ai.model') {
@@ -113,31 +77,11 @@ export class ConfigService {
 
     public async setSystemConfig(key: string, value: Prisma.InputJsonValue): Promise<ConfigDto> {
         try {
-            const existing = await this.prismaService.config.findFirst({
-                where: {
-                    scope: ConfigScope.SYSTEM,
-                    userId: null,
-                    key,
-                },
-            });
+            const existing = await this.configRepository.findSystemConfigForUpdate(key);
 
             const config = existing
-                ? await this.prismaService.config.update({
-                      where: { id: existing.id },
-                      data: {
-                          value,
-                          isActive: true,
-                      },
-                  })
-                : await this.prismaService.config.create({
-                      data: {
-                          scope: ConfigScope.SYSTEM,
-                          userId: null,
-                          key,
-                          value,
-                          isActive: true,
-                      },
-                  });
+                ? await this.configRepository.updateSystemConfig(existing.id, value)
+                : await this.configRepository.createSystemConfig(key, value);
 
             return new ConfigDto(config);
         } catch (error: unknown) {
@@ -152,26 +96,7 @@ export class ConfigService {
         value: Prisma.InputJsonValue,
     ): Promise<ConfigDto> {
         try {
-            const config = await this.prismaService.config.upsert({
-                where: {
-                    scope_userId_key: {
-                        scope: ConfigScope.USER,
-                        userId,
-                        key,
-                    },
-                },
-                update: {
-                    value,
-                    isActive: true,
-                },
-                create: {
-                    scope: ConfigScope.USER,
-                    userId,
-                    key,
-                    value,
-                    isActive: true,
-                },
-            });
+            const config = await this.configRepository.upsertUserConfig(userId, key, value);
 
             return new ConfigDto(config);
         } catch (error: unknown) {
@@ -182,23 +107,13 @@ export class ConfigService {
 
     public async deleteSystemConfig(key: string): Promise<ConfigDto> {
         try {
-            const config = await this.prismaService.config.findFirst({
-                where: {
-                    scope: ConfigScope.SYSTEM,
-                    userId: null,
-                    key,
-                },
-            });
+            const config = await this.configRepository.findSystemConfigForUpdate(key);
 
             if (!config) {
                 throw new NotFoundException(`System config with key "${key}" not found`);
             }
 
-            const deletedConfig = await this.prismaService.config.delete({
-                where: {
-                    id: config.id,
-                },
-            });
+            const deletedConfig = await this.configRepository.deleteConfig(config.id);
 
             return new ConfigDto(deletedConfig);
         } catch (error: unknown) {
@@ -212,23 +127,13 @@ export class ConfigService {
 
     public async deleteUserConfig(userId: string, key: string): Promise<ConfigDto> {
         try {
-            const config = await this.prismaService.config.findFirst({
-                where: {
-                    scope: ConfigScope.USER,
-                    userId,
-                    key,
-                },
-            });
+            const config = await this.configRepository.findUserConfigForUpdate(userId, key);
 
             if (!config) {
                 throw new NotFoundException(`User config with key "${key}" not found`);
             }
 
-            const deletedConfig = await this.prismaService.config.delete({
-                where: {
-                    id: config.id,
-                },
-            });
+            const deletedConfig = await this.configRepository.deleteConfig(config.id);
 
             return new ConfigDto(deletedConfig);
         } catch (error: unknown) {

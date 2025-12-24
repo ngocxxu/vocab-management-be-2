@@ -5,12 +5,13 @@ import { NotificationModule } from '../notification/notification.module';
 import { ReminderModule } from '../reminder/reminder.module';
 import { VocabModule } from '../vocab/vocab.module';
 import { VocabTrainerController } from './controller';
+import { VocabTrainerRepository } from './repository';
 import { VocabTrainerService } from './service';
 
 @Module({
     imports: [CommonModule, ReminderModule, AiModule, NotificationModule, VocabModule],
     controllers: [VocabTrainerController],
-    providers: [VocabTrainerService],
+    providers: [VocabTrainerRepository, VocabTrainerService],
     exports: [VocabTrainerService],
 })
 export class VocabTrainerModule {}
