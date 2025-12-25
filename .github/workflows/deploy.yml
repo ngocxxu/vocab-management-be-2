@@ -92,9 +92,6 @@ jobs:
           # Cache layers to build faster (Performance Optimization)
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
-            NEXT_PUBLIC_SOCKET_URL=${{ secrets.NEXT_PUBLIC_SOCKET_URL }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ steps.bump.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:latest
