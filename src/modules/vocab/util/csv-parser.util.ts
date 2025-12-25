@@ -1,5 +1,6 @@
 import csv from 'csv-parser';
-import { Readable } from 'stream';
+import { EventEmitter } from 'node:events';
+import { Readable, Transform } from 'node:stream';
 import { VocabDto } from '../model/vocab.dto';
 
 // Interface for CSV row data to avoid any type issues
@@ -33,8 +34,10 @@ export class CsvParserUtil {
 
             const stream = Readable.from(buffer.toString());
 
-            stream
-                .pipe(csv())
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+            const csvStream = stream.pipe(csv()) as Transform & EventEmitter;
+
+            csvStream
                 .on('data', (row: Record<string, string>) => {
                     // Convert CSV row to CsvRowData
                     const csvRow: CsvRowData = {
@@ -104,8 +107,8 @@ export class CsvParserUtil {
         }
 
         // Check for unknown headers
-        const allValidHeaders = [...requiredHeaders, ...optionalHeaders];
-        const unknownHeaders = headers.filter((header) => !allValidHeaders.includes(header));
+        const allValidHeaders = new Set([...requiredHeaders, ...optionalHeaders]);
+        const unknownHeaders = headers.filter((header) => !allValidHeaders.has(header));
 
         return unknownHeaders.length === 0;
     }
@@ -166,32 +169,46 @@ export class CsvParserUtil {
                 const subjects =
                     textTarget.textTargetSubjects
                         ?.map((tts) => tts.subject?.name || '')
-                        .filter((name) => name)
+                        .filter(Boolean)
                         .join(', ') || '';
 
                 const subjectsEscaped = this.escapeCsvField(subjects);
 
-                const example =
-                    textTarget.vocabExamples && textTarget.vocabExamples.length > 0
-                        ? textTarget.vocabExamples[0]
-                        : undefined;
+                const examples = textTarget.vocabExamples || [];
 
-                const exampleSource = this.escapeCsvField(example?.source || '');
-                const exampleTarget = this.escapeCsvField(example?.target || '');
+                if (examples.length === 0) {
+                    const row = [
+                        textSource,
+                        textTargetValue,
+                        wordType,
+                        grammar,
+                        explanationSource,
+                        explanationTarget,
+                        subjectsEscaped,
+                        '',
+                        '',
+                    ];
+                    rows.push(row.join(','));
+                } else {
+                    for (const example of examples) {
+                        const exampleSource = this.escapeCsvField(example?.source || '');
+                        const exampleTarget = this.escapeCsvField(example?.target || '');
 
-                const row = [
-                    textSource,
-                    textTargetValue,
-                    wordType,
-                    grammar,
-                    explanationSource,
-                    explanationTarget,
-                    subjectsEscaped,
-                    exampleSource,
-                    exampleTarget,
-                ];
+                        const row = [
+                            textSource,
+                            textTargetValue,
+                            wordType,
+                            grammar,
+                            explanationSource,
+                            explanationTarget,
+                            subjectsEscaped,
+                            exampleSource,
+                            exampleTarget,
+                        ];
 
-                rows.push(row.join(','));
+                        rows.push(row.join(','));
+                    }
+                }
             }
         }
 
@@ -208,7 +225,7 @@ export class CsvParserUtil {
             return '';
         }
 
-        const escaped = field.replace(/"/g, '""');
+        const escaped = field.replaceAll('"', '""');
 
         if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
             return `"${escaped}"`;
