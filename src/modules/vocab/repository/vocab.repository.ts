@@ -27,7 +27,7 @@ export class VocabRepository {
             vocabs: Vocab[];
         }>(RedisPrefix.VOCAB, cacheKey);
 
-        if (cached && cached.vocabs && Array.isArray(cached.vocabs)) {
+        if (cached?.vocabs && Array.isArray(cached.vocabs)) {
             return cached;
         }
 
@@ -93,15 +93,12 @@ export class VocabRepository {
         ]);
 
         const result = { totalItems, vocabs: vocabs || [] };
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, cacheKey, result);
+        await this.setJsonCacheSafely(cacheKey, result);
 
         return result;
     }
 
-    public async findRandom(
-        count: number,
-        userId?: string,
-    ): Promise<Vocab[]> {
+    public async findRandom(count: number, userId?: string): Promise<Vocab[]> {
         const cacheKey = `random:${count}:${userId || 'all'}`;
 
         const cached = await this.redisService.jsonGetWithPrefix<Vocab[]>(
@@ -128,9 +125,7 @@ export class VocabRepository {
         }
 
         const shuffled = allIds.sort(() => 0.5 - Math.random());
-        const selectedIds = shuffled
-            .slice(0, Math.min(count, allIds.length))
-            .map((x) => x.id);
+        const selectedIds = shuffled.slice(0, Math.min(count, allIds.length)).map((x) => x.id);
 
         const vocabs = await this.prismaService.vocab.findMany({
             where: { id: { in: selectedIds } },
@@ -149,16 +144,13 @@ export class VocabRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, cacheKey, vocabs, 300);
+        await this.setJsonCacheSafely(cacheKey, vocabs, 300);
 
         return vocabs;
     }
 
-    public async findById(
-        id: string,
-        userId?: string,
-    ): Promise<Vocab | null> {
-        const cached = await this.redisService.getObjectWithPrefix<Vocab>(
+    public async findById(id: string, userId?: string): Promise<Vocab | null> {
+        const cached = await this.redisService.jsonGetWithPrefix<Vocab>(
             RedisPrefix.VOCAB,
             `id:${id}`,
         );
@@ -194,7 +186,7 @@ export class VocabRepository {
         });
 
         if (vocab) {
-            await this.redisService.setObjectWithPrefix(RedisPrefix.VOCAB, `id:${id}`, vocab);
+            await this.setJsonCacheSafely(`id:${id}`, vocab);
         }
 
         return vocab;
@@ -220,7 +212,7 @@ export class VocabRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, `id:${vocab.id}`, vocab);
+        await this.setJsonCacheSafely(`id:${vocab.id}`, vocab);
 
         return vocab;
     }
@@ -246,7 +238,7 @@ export class VocabRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, `id:${id}`, vocab);
+        await this.setJsonCacheSafely(`id:${id}`, vocab);
 
         return vocab;
     }
@@ -302,7 +294,9 @@ export class VocabRepository {
         });
     }
 
-    public async findWordTypesByNames(names: string[]): Promise<Array<{ id: string; name: string }>> {
+    public async findWordTypesByNames(
+        names: string[],
+    ): Promise<Array<{ id: string; name: string }>> {
         return this.prismaService.wordType.findMany({
             where: {
                 OR: names.map((name) => ({
@@ -313,7 +307,10 @@ export class VocabRepository {
         });
     }
 
-    public async findSubjectsByNames(names: string[], userId: string): Promise<Array<{ id: string; name: string }>> {
+    public async findSubjectsByNames(
+        names: string[],
+        userId: string,
+    ): Promise<Array<{ id: string; name: string }>> {
         return this.prismaService.subject.findMany({
             where: {
                 userId,
@@ -325,7 +322,10 @@ export class VocabRepository {
         });
     }
 
-    public async findLanguageFolderById(id: string, userId: string): Promise<{ id: string } | null> {
+    public async findLanguageFolderById(
+        id: string,
+        userId: string,
+    ): Promise<{ id: string } | null> {
         return this.prismaService.languageFolder.findFirst({
             where: { id, userId },
             select: { id: true },
@@ -352,7 +352,27 @@ export class VocabRepository {
     }
 
     public async updateCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
-        await this.redisService.updateObjectFieldsWithPrefix(RedisPrefix.VOCAB, `id:${id}`, fields);
+        const cached = await this.redisService.jsonGetWithPrefix<Vocab>(
+            RedisPrefix.VOCAB,
+            `id:${id}`,
+        );
+
+        if (cached) {
+            const updated = { ...cached, ...fields };
+            await this.setJsonCacheSafely(`id:${id}`, updated);
+        }
+    }
+
+    private async setJsonCacheSafely(key: string, data: unknown, ttl?: number): Promise<void> {
+        try {
+            await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, key, data, ttl);
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('wrong Redis type')) {
+                await this.redisService.delWithPrefix(RedisPrefix.VOCAB, key);
+                await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, key, data, ttl);
+            } else {
+                throw error;
+            }
+        }
     }
 }
-
