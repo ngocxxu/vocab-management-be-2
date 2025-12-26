@@ -80,11 +80,18 @@ export class VocabTrainerDto {
         | { speaker: string; text: string }
     )[];
 
+    @ApiProperty({
+        description: 'Job ID for async question generation (only present when questions are being generated)',
+        required: false,
+    })
+    public jobId?: string;
+
     public constructor(
         entity: VocabTrainer & {
             vocabAssignments?: VocabTrainerWord[];
             results?: VocabTrainerResult[];
             questionAnswers?: JsonValue[];
+            jobId?: string;
         },
     ) {
         const isMultipleChoice = entity.questionType === QuestionType.MULTIPLE_CHOICE;
@@ -106,6 +113,7 @@ export class VocabTrainerDto {
         this.updatedAt = entity.updatedAt;
         this.vocabAssignments = entity.vocabAssignments?.map((a) => new VocabTrainerWordDto(a));
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
+        this.jobId = entity.jobId;
 
         if (isTranslationAudio) {
             this.questionAnswers = entity.questionAnswers as Array<{

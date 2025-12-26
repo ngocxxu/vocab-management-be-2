@@ -143,11 +143,6 @@ export class VocabTrainerService {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
 
-            const isQuestionAnswersExist =
-                trainer.questionAnswers &&
-                Array.isArray(trainer.questionAnswers) &&
-                trainer.questionAnswers.length > 0;
-
             // -----------------------------Create multiple choice questions-------------------------------
             if (trainer.questionType === QuestionType.MULTIPLE_CHOICE) {
                 const dataVocabAssignments: VocabWithTextTargets[] = (
@@ -156,15 +151,23 @@ export class VocabTrainerService {
                     }
                 ).vocabAssignments.map((vocabAssignment) => vocabAssignment.vocab);
 
+                // Check if questions already exist
+                const isQuestionAnswersExist =
+                    trainer.questionAnswers &&
+                    Array.isArray(trainer.questionAnswers) &&
+                    trainer.questionAnswers.length > 0;
+
                 if (!isQuestionAnswersExist) {
                     // Queue generation job
-                   await this.aiService.queueMultipleChoiceGeneration({
+                    const { jobId } = await this.aiService.queueMultipleChoiceGeneration({
                         vocabTrainerId: trainer.id,
                         vocabList: dataVocabAssignments,
                         userId: trainer.userId,
                     });
 
                     trainer.questionAnswers = [];
+                    // Add jobId to trainer object for response
+                    (trainer as VocabTrainer & { jobId?: string }).jobId = jobId;
                 }
             } else if (trainer.questionType === QuestionType.FILL_IN_THE_BLANK) {
                 const fillInBlankQuestions: Array<{
@@ -292,7 +295,11 @@ export class VocabTrainerService {
                 }
             }
 
-            return new VocabTrainerDto(trainer);
+            const trainerDto = new VocabTrainerDto(trainer);
+            if ((trainer as VocabTrainer & { jobId?: string }).jobId) {
+                trainerDto.jobId = (trainer as VocabTrainer & { jobId?: string }).jobId;
+            }
+            return trainerDto;
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
         }
@@ -475,16 +482,20 @@ export class VocabTrainerService {
 
             const { countTime, wordTestInputs } = input;
 
-            const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
-            let correctAnswers = 0;
+            const trainerWithVocabs = trainer as VocabTrainer & {
+                vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+            };
+
+            const evaluationsToProcess: Array<{
+                answerSubmission: (typeof wordTestInputs)[0];
+                vocab: VocabWithTextTargets;
+                answerType: 'textSource' | 'textTarget';
+            }> = [];
 
             for (const answerSubmission of wordTestInputs) {
                 let matchedVocabAssignment = null;
                 let answerType: 'textSource' | 'textTarget' = 'textTarget';
 
-                const trainerWithVocabs = trainer as VocabTrainer & {
-                    vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
-                };
                 for (const vocabAssignment of trainerWithVocabs.vocabAssignments) {
                     const vocabItem = vocabAssignment.vocab;
 
@@ -514,115 +525,40 @@ export class VocabTrainerService {
                     continue;
                 }
 
-                const vocab = matchedVocabAssignment.vocab;
+                evaluationsToProcess.push({
+                    answerSubmission,
+                    vocab: matchedVocabAssignment.vocab,
+                    answerType,
+                });
+            }
 
-                let isCorrect = false;
-                let explanation: string | undefined;
-                try {
-                    const evaluation = await this.aiService.evaluateFillInBlankAnswer(
-                        vocab,
-                        answerSubmission.userAnswer,
-                        answerSubmission.systemAnswer,
-                        answerType,
-                        user.id,
-                    );
-                    isCorrect = evaluation.isCorrect;
-                    explanation = evaluation.explanation;
-                } catch (error) {
-                    this.logger.error(
-                        `Error evaluating answer for systemAnswer "${answerSubmission.systemAnswer}":`,
-                        error,
-                    );
-                    isCorrect = false;
-                }
-
-                if (isCorrect) {
-                    correctAnswers++;
-                }
-
-                createResults.push({
+            if (evaluationsToProcess.length > 0) {
+                const { jobId } = await this.aiService.queueFillInBlankEvaluation({
                     vocabTrainerId: trainer.id,
-                    vocabId: vocab.id,
-                    status: isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
-                    userSelected: answerSubmission.userAnswer,
-                    systemSelected: answerSubmission.systemAnswer,
-                    data: { explanation: explanation || undefined },
-                } as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string });
-            }
-
-            await this.vocabTrainerRepository.deleteResultsByTrainerId(trainer.id);
-            await this.vocabTrainerRepository.createResults(createResults);
-
-            // Update mastery scores for each vocab
-            for (const resultItem of createResults) {
-                const vocabId = (
-                    resultItem as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string }
-                ).vocabId;
-                if (vocabId) {
-                    const isCorrect = resultItem.status === TrainerStatus.PASSED;
-                    await this.vocabMasteryService.updateMastery(vocabId, user.id, isCorrect);
-                }
-            }
-
-            const totalQuestions = wordTestInputs.length;
-            const scorePercentage = (correctAnswers / totalQuestions) * 100;
-            const overallStatus =
-                scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
-
-            const passCount =
-                overallStatus === TrainerStatus.PASSED
-                    ? (trainer.reminderRepeat || 0) + 1
-                    : trainer.reminderRepeat || 0;
-
-            const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
-
-            if (shouldDelete) {
-                await this.notificationService.create({
-                    type: NotificationType.VOCAB_TRAINER,
-                    action: NotificationAction.CREATE,
-                    priority: PriorityLevel.HIGH,
-                    data: {
-                        trainerName: trainer.name,
-                        message: 'Your test has been completed after 6 passes',
-                        completedAt: new Date().toISOString(),
-                    },
-                    expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
-                    isActive: true,
-                    recipientUserIds: [user.id],
+                    evaluations: evaluationsToProcess.map((item) => ({
+                        vocab: item.vocab,
+                        userAnswer: item.answerSubmission.userAnswer,
+                        systemAnswer: item.answerSubmission.systemAnswer,
+                        questionType: item.answerType,
+                        vocabId: item.vocab.id,
+                    })),
+                    answerSubmissions: wordTestInputs,
+                    userId: user.id,
                 });
 
-                await this.delete(trainer.id, user.id);
-                return new VocabTrainerDto(
-                    trainer as unknown as VocabTrainer & {
-                        questionAnswers?: MultipleChoiceQuestionDto[];
-                    },
-                );
+                (trainer as VocabTrainer & { jobId?: string }).jobId = jobId;
             }
 
             await this.vocabTrainerRepository.update(trainer.id, {
-                reminderRepeat: passCount,
-                reminderLastRemind: new Date(),
-                reminderDisabled: false,
-            });
-
-            await this.scheduleReminderForTrainer(
-                user,
-                trainer,
-                scorePercentage,
-                `${process.env.FRONTEND_URL}/${trainer.id}/exam/fill-in-blank`,
-            );
-
-            const result = await this.vocabTrainerRepository.update(trainer.id, {
-                name: trainer.name,
-                status: overallStatus,
                 countTime,
                 setCountTime: trainer.setCountTime,
                 updatedAt: new Date(),
             });
 
             return new VocabTrainerDto(
-                result as unknown as VocabTrainer & {
+                trainer as unknown as VocabTrainer & {
                     questionAnswers?: MultipleChoiceQuestionDto[];
+                    jobId?: string;
                 },
             );
         } catch (error: unknown) {

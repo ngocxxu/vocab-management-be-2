@@ -101,4 +101,29 @@ export class NotificationGateway
         });
         this.logger.log(`Multiple choice generation progress sent to user ${userId}: ${status}`);
     }
+
+    // Emit fill-in-blank evaluation progress to specific user
+    public emitFillInBlankEvaluationProgress(
+        userId: string,
+        jobId: string,
+        status: 'evaluating' | 'completed' | 'failed',
+        data?: {
+            evaluations?: Array<{ isCorrect: boolean; explanation?: string }>;
+            results?: Array<{
+                status: string;
+                userSelected: string;
+                systemSelected: string;
+                data?: { explanation?: string };
+            }>;
+            error?: string;
+        },
+    ): void {
+        this.server.to(`user-${userId}`).emit('fill-in-blank-evaluation-progress', {
+            jobId,
+            status,
+            data,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`Fill-in-blank evaluation progress sent to user ${userId}: ${status}`);
+    }
 }

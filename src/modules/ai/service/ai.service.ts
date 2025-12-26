@@ -20,6 +20,8 @@ export class AiService {
         private readonly audioEvaluationQueue: Queue,
         @InjectQueue(EReminderType.MULTIPLE_CHOICE_GENERATION)
         private readonly multipleChoiceQueue: Queue,
+        @InjectQueue(EReminderType.FILL_IN_BLANK_EVALUATION)
+        private readonly fillInBlankEvaluationQueue: Queue,
     ) {}
 
     /**
@@ -105,18 +107,102 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         userId?: string,
     ): Promise<MultipleChoiceQuestion[]> {
         try {
-            const questions: MultipleChoiceQuestion[] = [];
-
-            for (const vocab of vocabList) {
-                const question = await this.generateQuestionForVocab(vocab, 0, userId);
-                if (question) {
-                    questions.push(question);
-                }
+            if (vocabList.length === 0) {
+                return [];
             }
 
-            return questions;
+            return await this.generateAllQuestionsInBatch(vocabList, userId);
         } catch (error) {
             this.logger.error('Error generating multiple choice questions:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Evaluate all fill-in-blank answers in a single batch request
+     */
+    public async evaluateAllFillInBlankAnswers(
+        evaluations: Array<{
+            vocab: VocabWithTextTargets;
+            userAnswer: string;
+            systemAnswer: string;
+            questionType: 'textSource' | 'textTarget';
+        }>,
+        userId?: string,
+    ): Promise<Array<{ isCorrect: boolean; explanation?: string }>> {
+        if (evaluations.length === 0) {
+            return [];
+        }
+
+        const evaluationDetails = evaluations
+            .map((evaluationItem, idx) => {
+                const vocab = evaluationItem.vocab;
+                const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
+                const questionContext =
+                    evaluationItem.questionType === 'textSource'
+                        ? `What is the translation of "${vocab.textSource}" in ${vocab.targetLanguageCode}?`
+                        : `What is the translation of "${evaluationItem.systemAnswer}" in ${vocab.sourceLanguageCode}?`;
+
+                return (
+                    `${idx + 1}. Source language: ${vocab.sourceLanguageCode}, ` +
+                    `Target language: ${vocab.targetLanguageCode}, ` +
+                    `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
+                    `Question: ${questionContext}, ` +
+                    `Correct answer: "${evaluationItem.systemAnswer}", ` +
+                    `Student's answer: "${evaluationItem.userAnswer}"`
+                );
+            })
+            .join('\n\n');
+
+        const prompt = `
+You are a language learning assistant. Evaluate if students' answers are semantically correct and contextually appropriate.
+
+Answer evaluations:
+${evaluationDetails}
+
+Task: Evaluate each answer and determine if it's semantically correct and contextually appropriate as a translation/meaning of the correct answer.
+
+For each answer, consider:
+1. Semantic equivalence (same meaning)
+2. Contextual appropriateness
+3. Acceptable variations (different forms, synonyms, etc.)
+4. Common translation alternatives
+
+Format your response as JSON array:
+[
+    {
+        "answerIndex": 0,
+        "isCorrect": true/false,
+        "explanation": "brief explanation in Vietnamese of why the answer is correct or incorrect"
+    },
+    ...
+]
+
+Return ONLY the JSON array, no markdown formatting, no code blocks, no additional text.
+        `;
+
+        try {
+            const provider = await this.providerFactory.getProvider(userId);
+            const text = await provider.generateContent(prompt, userId);
+
+            const batchResponse = this.parseBatchEvaluationResponse(text);
+
+            const results: Array<{ isCorrect: boolean; explanation?: string }> = [];
+            evaluations.forEach((_, idx) => {
+                const responseItem = batchResponse.find((item) => item.answerIndex === idx);
+                if (responseItem) {
+                    results.push({
+                        isCorrect: responseItem.isCorrect,
+                        explanation: responseItem.explanation,
+                    });
+                } else {
+                    results.push({ isCorrect: false });
+                }
+            });
+
+            return results;
+        } catch (error) {
+            this.logger.error('Error evaluating fill-in-blank answers in batch:', error);
             throw error;
         }
     }
@@ -237,6 +323,28 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const job = await this.multipleChoiceQueue.add('generate-questions', {
             ...params,
         } as MultipleChoiceGenerationJobData);
+
+        return { jobId: job.id || '' };
+    }
+
+    public async queueFillInBlankEvaluation(params: {
+        vocabTrainerId: string;
+        evaluations: Array<{
+            vocab: VocabWithTextTargets;
+            userAnswer: string;
+            systemAnswer: string;
+            questionType: 'textSource' | 'textTarget';
+            vocabId: string;
+        }>;
+        answerSubmissions: Array<{
+            userAnswer: string;
+            systemAnswer: string;
+        }>;
+        userId: string;
+    }): Promise<{ jobId: string }> {
+        const job = await this.fillInBlankEvaluationQueue.add('evaluate-answers', {
+            ...params,
+        } as Omit<import('../processor/fill-in-blank-evaluation.processor').FillInBlankEvaluationJobData, 'jobId'>);
 
         return { jobId: job.id || '' };
     }
@@ -566,7 +674,7 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     /**
      * Generate a single question for a vocabulary item
      */
-    private async generateQuestionForVocab(
+    public async generateQuestionForVocab(
         vocab: VocabWithTextTargets,
         retryCount = 0,
         userId?: string,
@@ -595,6 +703,186 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
 
             return null;
         }
+    }
+
+    /**
+     * Generate all multiple choice questions in a single batch request
+     */
+    private async generateAllQuestionsInBatch(
+        vocabList: VocabWithTextTargets[],
+        userId?: string,
+    ): Promise<MultipleChoiceQuestion[]> {
+        const vocabItems: Array<{
+            index: number;
+            vocab: VocabWithTextTargets;
+            questionType: 'source' | 'target';
+            selectedTarget?: string;
+        }> = [];
+
+        vocabList.forEach((vocab, index) => {
+            if (!vocab.textTargets || vocab.textTargets.length === 0) {
+                return;
+            }
+
+            const isAskingSource = Math.random() < AI_CONFIG.sourceQuestionProbability;
+            const selectedTarget =
+                vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
+
+            vocabItems.push({
+                index,
+                vocab,
+                questionType: isAskingSource ? 'source' : 'target',
+                selectedTarget: selectedTarget.textTarget,
+            });
+        });
+
+        if (vocabItems.length === 0) {
+            return [];
+        }
+
+        const vocabDetails = vocabItems
+            .map((item, idx) => {
+                const vocab = item.vocab;
+                const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
+                const questionDirection =
+                    item.questionType === 'source'
+                        ? `What is the translation of "${vocab.textSource}" in ${vocab.targetLanguageCode}?`
+                        : `What is the translation of "${item.selectedTarget}" in ${vocab.sourceLanguageCode}?`;
+                const correctAnswer =
+                    item.questionType === 'source' ? item.selectedTarget : vocab.textSource;
+
+                return (
+                    `${idx + 1}. Source: "${vocab.textSource}", Target(s): "${targetTexts}", ` +
+                    `Languages: ${vocab.sourceLanguageCode} → ${vocab.targetLanguageCode}, ` +
+                    `Question: ${questionDirection}, Correct Answer: "${correctAnswer}"`
+                );
+            })
+            .join('\n');
+
+        const prompt = `
+You are a language learning assistant. Generate multiple choice questions for vocabulary practice.
+
+Vocabulary items:
+${vocabDetails}
+
+Task: Create exactly ${
+            vocabItems.length
+        } multiple choice questions, one for each vocabulary item above.
+
+Requirements for each question:
+1. The question should ask for the translation as specified
+2. Provide exactly ${AI_CONFIG.questionCount} options (A, B, C, D)
+3. One option must be the correct answer as specified
+4. Generate ${AI_CONFIG.questionCount - 1} plausible but incorrect options that are:
+   - Similar length to the correct answer
+   - Related to the same topic/context
+   - Common words in the target language
+   - Not obviously wrong
+
+For each question, determine the question type:
+- If question asks "What is the translation of [source] in [target language]?" → type should be "textTarget"
+- If question asks "What is the translation of [target] in [source language]?" → type should be "textSource"
+
+Format your response as JSON array:
+[
+    {
+        "vocabIndex": 0,
+        "type": "textTarget" or "textSource",
+        "content": "What is the translation of 'word1' in Vietnamese?",
+        "options": [
+            {"label": "correct_answer", "value": "correct_answer"},
+            {"label": "wrong_option_1", "value": "wrong_option_1"},
+            {"label": "wrong_option_2", "value": "wrong_option_2"},
+            {"label": "wrong_option_3", "value": "wrong_option_3"}
+        ],
+        "correctAnswer": "correct_answer"
+    },
+    ...
+]
+
+Return ONLY the JSON array, no markdown formatting, no code blocks, no additional text.
+        `;
+
+        const provider = await this.providerFactory.getProvider(userId);
+        const text = await provider.generateContent(prompt, userId);
+
+        const batchResponse = this.parseBatchQuestionsResponse(text);
+
+        const questions: MultipleChoiceQuestion[] = [];
+        batchResponse.forEach((item) => {
+            if (item.vocabIndex >= 0 && item.vocabIndex < vocabItems.length) {
+                const shuffledOptions = shuffleArray(item.options);
+
+                questions.push({
+                    correctAnswer: item.correctAnswer,
+                    type: item.type as 'textSource' | 'textTarget',
+                    content: item.content,
+                    options: shuffledOptions,
+                });
+            }
+        });
+
+        return questions;
+    }
+
+    /**
+     * Parse batch questions response from AI
+     */
+    private parseBatchQuestionsResponse(text: string): Array<{
+        vocabIndex: number;
+        type: string;
+        content: string;
+        options: Array<{ label: string; value: string }>;
+        correctAnswer: string;
+    }> {
+        let jsonText = text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const parsed = JSON.parse(jsonText) as Array<{
+            vocabIndex: number;
+            type: string;
+            content: string;
+            options: Array<{ label: string; value: string }>;
+            correctAnswer: string;
+        }>;
+
+        if (!Array.isArray(parsed)) {
+            throw new TypeError('Invalid batch response format: expected array');
+        }
+
+        return parsed;
+    }
+
+    /**
+     * Parse batch evaluation response from AI
+     */
+    private parseBatchEvaluationResponse(text: string): Array<{
+        answerIndex: number;
+        isCorrect: boolean;
+        explanation?: string;
+    }> {
+        let jsonText = text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const parsed = JSON.parse(jsonText) as Array<{
+            answerIndex: number;
+            isCorrect: boolean;
+            explanation?: string;
+        }>;
+
+        if (!Array.isArray(parsed)) {
+            throw new TypeError('Invalid batch evaluation response format: expected array');
+        }
+
+        return parsed;
     }
 
     /**
