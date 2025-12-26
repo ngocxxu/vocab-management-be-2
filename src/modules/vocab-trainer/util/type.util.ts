@@ -1,5 +1,15 @@
 import { Prisma, VocabTrainer } from '@prisma/client';
 
+export enum EQuestionType {
+    MULTIPLE_CHOICE = 'multiple-choice',
+    FLIP_CARD = 'flip-card',
+    FILL_IN_THE_BLANK = 'fill-in-blank',
+    MATCHING = 'matching',
+    TRUE_OR_FALSE = 'true-or-false',
+    SHORT_ANSWER = 'short-answer',
+    TRANSLATION_AUDIO = 'translation-audio',
+}
+
 export enum EReminderRepeat {
     MAX_REPEAT = 6,
 }

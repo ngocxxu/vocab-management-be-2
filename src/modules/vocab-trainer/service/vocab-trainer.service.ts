@@ -31,6 +31,7 @@ import {
 import { SubmitTranslationAudioResponseDto } from '../model/submit-translation-audio-response.dto';
 import { VocabTrainerRepository } from '../repository';
 import {
+    EQuestionType,
     EReminderRepeat,
     evaluateMultipleChoiceAnswers,
     VocabTrainerWithTypedAnswers,
@@ -437,7 +438,7 @@ export class VocabTrainerService {
                 user,
                 trainer,
                 scorePercentage,
-                `${process.env.FRONTEND_URL}/${trainer.id}/exam/multiple-choice`,
+                `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.MULTIPLE_CHOICE}`,
             );
 
             const result = await this.vocabTrainerRepository.update(trainer.id, {
@@ -863,7 +864,7 @@ export class VocabTrainerService {
                 lastName: user.lastName,
                 testName: trainer.name,
                 repeatDays: '2',
-                examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
+                examUrl,
             },
         };
 

@@ -9,7 +9,7 @@ import { NotificationService } from '../../notification/service';
 import { ReminderService } from '../../reminder/service';
 import { EEmailTemplate, EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import { VocabMasteryService } from '../../vocab/service/vocab-mastery.service';
-import { EReminderRepeat, VocabWithTextTargets } from '../../vocab-trainer/util';
+import { EQuestionType, EReminderRepeat, VocabWithTextTargets } from '../../vocab-trainer/util';
 import { AiService } from '../service/ai.service';
 
 export interface FillInBlankEvaluationJobData {
@@ -157,6 +157,8 @@ export class FillInBlankEvaluationProcessor {
                         (Date.now() - lastRemindDate.getTime()) / (1000 * 60 * 60 * 24),
                     );
 
+                    const examUrl = `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.FILL_IN_THE_BLANK}`;
+
                     if (daysSinceLastRemind >= 2 || !trainer.reminderLastRemind) {
                         const sendDataReminder = {
                             data: {
@@ -164,7 +166,7 @@ export class FillInBlankEvaluationProcessor {
                                 lastName: user.lastName,
                                 testName: trainer.name,
                                 repeatDays: '2',
-                                examUrl: `${process.env.FRONTEND_URL}/${trainer.id}`,
+                                examUrl,
                             },
                         };
 
@@ -174,7 +176,7 @@ export class FillInBlankEvaluationProcessor {
                                 scorePercentage,
                                 trainerId: trainer.id,
                                 questionType: trainer.questionType,
-                                examUrl: `${process.env.FRONTEND_URL}/${trainer.id}/exam/fill-in-blank`,
+                                examUrl,
                             },
                         };
 
