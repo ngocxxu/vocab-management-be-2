@@ -886,7 +886,7 @@ export class VocabTrainerService {
         const nextReminderTime = new Date(
             lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
         );
-        const delayInMs = Math.max(0, nextReminderTime.getTime() - new Date().getTime());
+        const delayInMs = Math.max(0, nextReminderTime.getTime() - Date.now());
 
         await this.reminderService.scheduleReminder(
             user.email,
@@ -894,12 +894,6 @@ export class VocabTrainerService {
             EEmailTemplate.EXAM_REMINDER,
             sendDataReminder.data,
             delayInMs,
-        );
-
-        await this.reminderService.sendImmediateCreateNotification(
-            [user.id],
-            EReminderTitle.VOCAB_TRAINER,
-            sendDataNotification.data,
         );
 
         await this.reminderService.scheduleCreateNotification(
