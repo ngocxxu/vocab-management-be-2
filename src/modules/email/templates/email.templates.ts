@@ -4,8 +4,14 @@ import { TemplateData } from '../util/type';
 export class EmailTemplates {
     private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map(
         [
-            [EEmailTemplate.REMINDER, (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
-            [EEmailTemplate.EXAM_REMINDER, (data: TemplateData) => EmailTemplates.examReminderTemplate(data)],
+            [
+                EEmailTemplate.REMINDER,
+                (data: TemplateData) => EmailTemplates.reminderTemplate(data),
+            ],
+            [
+                EEmailTemplate.EXAM_REMINDER,
+                (data: TemplateData) => EmailTemplates.examReminderTemplate(data),
+            ],
             [EEmailTemplate.WELCOME, (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
         ],
     );

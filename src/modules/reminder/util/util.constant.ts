@@ -3,6 +3,7 @@ export enum EReminderType {
     NOTIFICATION = 'notification',
     NOTIFICATION_FCM = 'notification_fcm',
     AUDIO_EVALUATION = 'audio-evaluation',
+    MULTIPLE_CHOICE_GENERATION = 'multiple-choice-generation',
 }
 
 export enum EReminderTitle {

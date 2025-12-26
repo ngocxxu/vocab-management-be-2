@@ -10,7 +10,6 @@ import {
     VocabTrainer,
 } from '@prisma/client';
 import { AiService } from '../../ai/service/ai.service';
-import { MultipleChoiceQuestion } from '../../ai/util/type.util';
 import { PrismaErrorHandler } from '../../common/handler';
 import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
@@ -144,21 +143,29 @@ export class VocabTrainerService {
                 throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
             }
 
+            const isQuestionAnswersExist =
+                trainer.questionAnswers &&
+                Array.isArray(trainer.questionAnswers) &&
+                trainer.questionAnswers.length > 0;
+
             // -----------------------------Create multiple choice questions-------------------------------
             if (trainer.questionType === QuestionType.MULTIPLE_CHOICE) {
                 const dataVocabAssignments: VocabWithTextTargets[] = (
-                    trainer as VocabTrainer & { vocabAssignments: Array<{ vocab: VocabWithTextTargets }> }
+                    trainer as VocabTrainer & {
+                        vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+                    }
                 ).vocabAssignments.map((vocabAssignment) => vocabAssignment.vocab);
 
-                // Generate AI-powered multiple choice questions
-                const aiQuestions: MultipleChoiceQuestion[] =
-                    await this.aiService.generateMultipleChoiceQuestions(
-                        dataVocabAssignments,
-                        trainer.userId,
-                    );
+                if (!isQuestionAnswersExist) {
+                    // Queue generation job
+                   await this.aiService.queueMultipleChoiceGeneration({
+                        vocabTrainerId: trainer.id,
+                        vocabList: dataVocabAssignments,
+                        userId: trainer.userId,
+                    });
 
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                trainer.questionAnswers = JSON.parse(JSON.stringify(aiQuestions));
+                    trainer.questionAnswers = [];
+                }
             } else if (trainer.questionType === QuestionType.FILL_IN_THE_BLANK) {
                 const fillInBlankQuestions: Array<{
                     correctAnswer: string;
@@ -167,9 +174,12 @@ export class VocabTrainerService {
                     vocabId: string;
                 }> = [];
 
-                (trainer as VocabTrainer & { vocabAssignments: Array<{ vocab: VocabWithTextTargets }> })
-                    .vocabAssignments.forEach((assignment) => {
-                        const vocab = assignment.vocab;
+                (
+                    trainer as VocabTrainer & {
+                        vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+                    }
+                ).vocabAssignments.forEach((assignment) => {
+                    const vocab = assignment.vocab;
 
                     if (!vocab.textTargets || vocab.textTargets.length === 0) {
                         return;
@@ -201,9 +211,12 @@ export class VocabTrainerService {
             } else if (trainer.questionType === QuestionType.FLIP_CARD) {
                 const flipCardQuestions: FlipCardQuestion[] = [];
 
-                (trainer as VocabTrainer & { vocabAssignments: Array<{ vocab: VocabWithTextTargets }> })
-                    .vocabAssignments.forEach((assignment) => {
-                        const vocab = assignment.vocab;
+                (
+                    trainer as VocabTrainer & {
+                        vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+                    }
+                ).vocabAssignments.forEach((assignment) => {
+                    const vocab = assignment.vocab;
 
                     // Randomly decide direction for this vocab (true = source->target, false = target->source)
                     const isSourceToTarget = Math.random() < 0.5;
@@ -752,9 +765,7 @@ export class VocabTrainerService {
             });
 
             // Fetch the trainer again to include the new assignments
-            const trainerWithAssignments = await this.vocabTrainerRepository.findById(
-                trainer.id,
-            );
+            const trainerWithAssignments = await this.vocabTrainerRepository.findById(trainer.id);
 
             if (!trainerWithAssignments) {
                 throw new NotFoundException(
@@ -808,9 +819,11 @@ export class VocabTrainerService {
                             reminderTime: trainerData.reminderTime ?? existing.reminderTime,
                             countTime: trainerData.countTime ?? existing.countTime,
                             setCountTime: trainerData.setCountTime ?? existing.setCountTime,
-                            reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
+                            reminderDisabled:
+                                trainerData.reminderDisabled ?? existing.reminderDisabled,
                             reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
-                            reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+                            reminderLastRemind:
+                                trainerData.reminderLastRemind ?? existing.reminderLastRemind,
                         },
                         include: {
                             vocabAssignments: true,

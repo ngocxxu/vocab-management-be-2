@@ -5,7 +5,8 @@ import { Queue } from 'bullmq';
 import { EReminderType } from '../../reminder/util';
 import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
-import { AudioEvaluationJobData } from '../processor/ai.processor';
+import { AudioEvaluationJobData } from '../processor/audio-evaluation.processor';
+import { MultipleChoiceGenerationJobData } from '../processor/multiple-choice-generation.processor';
 import { AiProviderFactory } from '../provider/ai-provider.factory';
 import { AI_CONFIG, QUESTION_TYPES } from '../util/const.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../util/type.util';
@@ -17,6 +18,8 @@ export class AiService {
         private readonly providerFactory: AiProviderFactory,
         @InjectQueue(EReminderType.AUDIO_EVALUATION)
         private readonly audioEvaluationQueue: Queue,
+        @InjectQueue(EReminderType.MULTIPLE_CHOICE_GENERATION)
+        private readonly multipleChoiceQueue: Queue,
     ) {}
 
     /**
@@ -222,6 +225,18 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const job = await this.audioEvaluationQueue.add('evaluate-audio', {
             ...params,
         } as Omit<AudioEvaluationJobData, 'jobId'>);
+
+        return { jobId: job.id || '' };
+    }
+
+    public async queueMultipleChoiceGeneration(params: {
+        vocabTrainerId: string;
+        vocabList: VocabWithTextTargets[];
+        userId: string;
+    }): Promise<{ jobId: string }> {
+        const job = await this.multipleChoiceQueue.add('generate-questions', {
+            ...params,
+        } as MultipleChoiceGenerationJobData);
 
         return { jobId: job.id || '' };
     }

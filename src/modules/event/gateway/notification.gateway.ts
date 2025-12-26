@@ -10,6 +10,7 @@ import {
     ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { MultipleChoiceQuestion } from '../../ai/util/type.util';
 
 @WebSocketGateway({
     cors: { origin: '*', credentials: true },
@@ -83,5 +84,21 @@ export class NotificationGateway
             timestamp: new Date().toISOString(),
         });
         this.logger.log(`Audio evaluation progress sent to user ${userId}: ${status}`);
+    }
+
+    // Emit multiple choice generation progress to specific user
+    public emitMultipleChoiceGenerationProgress(
+        userId: string,
+        jobId: string,
+        status: 'generating' | 'completed' | 'failed',
+        data?: { questions?: MultipleChoiceQuestion[]; error?: string },
+    ): void {
+        this.server.to(`user-${userId}`).emit('multiple-choice-generation-progress', {
+            jobId,
+            status,
+            data,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`Multiple choice generation progress sent to user ${userId}: ${status}`);
     }
 }

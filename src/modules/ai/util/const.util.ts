@@ -24,7 +24,7 @@ export const AI_CONFIG: AiServiceConfig = {
     questionCount: 4,
     passingScore: 70,
     sourceQuestionProbability: 0.5,
-    maxRetries: 2,
+    maxRetries: 0,
     retryDelayMs: 1000,
     models: DEFAULT_MODEL_FALLBACK_ORDER,
 } as const;

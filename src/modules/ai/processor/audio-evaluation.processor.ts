@@ -22,7 +22,7 @@ export interface AudioEvaluationJobData {
 
 @Injectable()
 @Processor(EReminderType.AUDIO_EVALUATION)
-export class AiProcessor {
+export class AudioEvaluationProcessor {
     public constructor(
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
@@ -112,3 +112,4 @@ export class AiProcessor {
         }
     }
 }
+
