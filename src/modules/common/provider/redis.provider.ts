@@ -106,9 +106,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         key: string,
         field: string,
         value: string,
+        ttl?: number,
     ): Promise<number> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
-        return this.redisClient.hset(fullKey, field, value);
+        const result = await this.redisClient.hset(fullKey, field, value);
+        const finalTtl = ttl || this.configService.get('redis.ttl') || 3600;
+        await this.redisClient.expire(fullKey, finalTtl);
+        return result;
     }
 
     public async hgetWithPrefix(
@@ -270,8 +274,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Hash operations (without prefix)
-    public async hset(key: string, field: string, value: string): Promise<number> {
-        return this.redisClient.hset(key, field, value);
+    public async hset(key: string, field: string, value: string, ttl?: number): Promise<number> {
+        const result = await this.redisClient.hset(key, field, value);
+        const finalTtl = ttl || this.configService.get('redis.ttl') || 3600;
+        await this.redisClient.expire(key, finalTtl);
+        return result;
     }
 
     public async hget(key: string, field: string): Promise<string | null> {
@@ -338,9 +345,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     ): Promise<void> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
         await this.redisClient.call('JSON.SET', fullKey, '$', JSON.stringify(data));
-        if (ttl && ttl > 0) {
-            await this.redisClient.expire(fullKey, ttl);
-        }
+        const finalTtl = ttl || this.configService.get('redis.ttl') || 3600;
+        await this.redisClient.expire(fullKey, finalTtl);
     }
 
     public async jsonGetWithPrefix<T>(prefix: RedisPrefix, key: string): Promise<T | null> {
