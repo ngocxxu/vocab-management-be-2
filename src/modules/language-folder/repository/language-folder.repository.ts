@@ -14,7 +14,7 @@ export class LanguageFolderRepository {
     ) {}
 
     public async findByUserId(userId: string): Promise<LanguageFolder[]> {
-        const cached = await this.redisService.jsonGetWithPrefix<LanguageFolder[]>(
+        const cached = await this.redisService.jsonGet<LanguageFolder[]>(
             RedisPrefix.LANGUAGE_FOLDER,
             `user:${userId}`,
         );
@@ -33,7 +33,7 @@ export class LanguageFolderRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(
+        await this.redisService.jsonSet(
             RedisPrefix.LANGUAGE_FOLDER,
             `user:${userId}`,
             folders,
@@ -79,7 +79,7 @@ export class LanguageFolderRepository {
     }
 
     public async findById(id: string, userId?: string): Promise<LanguageFolder | null> {
-        const cached = await this.redisService.jsonGetWithPrefix<LanguageFolder>(
+        const cached = await this.redisService.jsonGet<LanguageFolder>(
             RedisPrefix.LANGUAGE_FOLDER,
             `id:${id}`,
         );
@@ -107,15 +107,15 @@ export class LanguageFolderRepository {
 
         if (folder) {
             try {
-                await this.redisService.jsonSetWithPrefix(
+                await this.redisService.jsonSet(
                     RedisPrefix.LANGUAGE_FOLDER,
                     `id:${id}`,
                     folder,
                 );
             } catch (error) {
                 if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                    await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
-                    await this.redisService.jsonSetWithPrefix(
+                    await this.redisService.del(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+                    await this.redisService.jsonSet(
                         RedisPrefix.LANGUAGE_FOLDER,
                         `id:${id}`,
                         folder,
@@ -144,14 +144,14 @@ export class LanguageFolderRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(
+        await this.redisService.jsonSet(
             RedisPrefix.LANGUAGE_FOLDER,
             `id:${folder.id}`,
             folder,
         );
 
         if (folder.userId) {
-            await this.redisService.delWithPrefix(
+            await this.redisService.del(
                 RedisPrefix.LANGUAGE_FOLDER,
                 `user:${folder.userId}`,
             );
@@ -173,10 +173,10 @@ export class LanguageFolderRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`, folder);
+        await this.redisService.jsonSet(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`, folder);
 
         if (folder.userId) {
-            await this.redisService.delWithPrefix(
+            await this.redisService.del(
                 RedisPrefix.LANGUAGE_FOLDER,
                 `user:${folder.userId}`,
             );
@@ -201,9 +201,9 @@ export class LanguageFolderRepository {
             },
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+        await this.redisService.del(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
         if (folder.userId) {
-            await this.redisService.delWithPrefix(
+            await this.redisService.del(
                 RedisPrefix.LANGUAGE_FOLDER,
                 `user:${folder.userId}`,
             );
@@ -217,6 +217,6 @@ export class LanguageFolderRepository {
     }
 
     public async clearCacheById(id: string): Promise<void> {
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+        await this.redisService.del(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
     }
 }

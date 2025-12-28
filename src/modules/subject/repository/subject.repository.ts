@@ -14,7 +14,7 @@ export class SubjectRepository {
     ) {}
 
     public async findByUserId(userId: string): Promise<Subject[]> {
-        const cached = await this.redisService.jsonGetWithPrefix<Subject[]>(
+        const cached = await this.redisService.jsonGet<Subject[]>(
             RedisPrefix.SUBJECT,
             `userId:${userId}`,
         );
@@ -31,20 +31,13 @@ export class SubjectRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(
-            RedisPrefix.SUBJECT,
-            `userId:${userId}`,
-            subjects,
-        );
+        await this.redisService.jsonSet(RedisPrefix.SUBJECT, `userId:${userId}`, subjects);
 
         return subjects;
     }
 
     public async findById(id: string, userId?: string): Promise<Subject | null> {
-        const cached = await this.redisService.jsonGetWithPrefix<Subject>(
-            RedisPrefix.SUBJECT,
-            `id:${id}`,
-        );
+        const cached = await this.redisService.jsonGet<Subject>(RedisPrefix.SUBJECT, `id:${id}`);
         if (cached) {
             if (userId && cached.userId !== userId) {
                 return null;
@@ -63,15 +56,11 @@ export class SubjectRepository {
 
         if (subject) {
             try {
-                await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
+                await this.redisService.jsonSet(RedisPrefix.SUBJECT, `id:${id}`, subject);
             } catch (error) {
                 if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                    await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
-                    await this.redisService.jsonSetWithPrefix(
-                        RedisPrefix.SUBJECT,
-                        `id:${id}`,
-                        subject,
-                    );
+                    await this.redisService.del(RedisPrefix.SUBJECT, `id:${id}`);
+                    await this.redisService.jsonSet(RedisPrefix.SUBJECT, `id:${id}`, subject);
                 } else {
                     throw error;
                 }
@@ -123,26 +112,18 @@ export class SubjectRepository {
         });
 
         try {
-            await this.redisService.jsonSetWithPrefix(
-                RedisPrefix.SUBJECT,
-                `id:${subject.id}`,
-                subject,
-            );
+            await this.redisService.jsonSet(RedisPrefix.SUBJECT, `id:${subject.id}`, subject);
         } catch (error) {
             if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${subject.id}`);
-                await this.redisService.jsonSetWithPrefix(
-                    RedisPrefix.SUBJECT,
-                    `id:${subject.id}`,
-                    subject,
-                );
+                await this.redisService.del(RedisPrefix.SUBJECT, `id:${subject.id}`);
+                await this.redisService.jsonSet(RedisPrefix.SUBJECT, `id:${subject.id}`, subject);
             } else {
                 throw error;
             }
         }
 
         if (subject.userId) {
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
+            await this.redisService.del(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
         }
 
         return subject;
@@ -155,18 +136,18 @@ export class SubjectRepository {
         });
 
         try {
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
+            await this.redisService.jsonSet(RedisPrefix.SUBJECT, `id:${id}`, subject);
         } catch (error) {
             if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
-                await this.redisService.jsonSetWithPrefix(RedisPrefix.SUBJECT, `id:${id}`, subject);
+                await this.redisService.del(RedisPrefix.SUBJECT, `id:${id}`);
+                await this.redisService.jsonSet(RedisPrefix.SUBJECT, `id:${id}`, subject);
             } else {
                 throw error;
             }
         }
 
         if (subject.userId) {
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
+            await this.redisService.del(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
         }
 
         return subject;
@@ -210,9 +191,9 @@ export class SubjectRepository {
             where,
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${id}`);
+        await this.redisService.del(RedisPrefix.SUBJECT, `id:${id}`);
         if (subject.userId) {
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
+            await this.redisService.del(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
         }
 
         return subject;
@@ -220,11 +201,11 @@ export class SubjectRepository {
 
     public async clearUserCache(userId: string): Promise<void> {
         try {
-            await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `userId:${userId}`);
+            await this.redisService.del(RedisPrefix.SUBJECT, `userId:${userId}`);
 
             const subjects = await this.findIdsByUserId(userId);
             for (const subject of subjects) {
-                await this.redisService.delWithPrefix(RedisPrefix.SUBJECT, `id:${subject.id}`);
+                await this.redisService.del(RedisPrefix.SUBJECT, `id:${subject.id}`);
             }
         } catch (error) {
             this.logger.warn(`Failed to clear subject cache: ${error}`);

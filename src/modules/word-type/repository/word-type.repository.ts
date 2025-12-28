@@ -12,10 +12,7 @@ export class WordTypeRepository {
     ) {}
 
     public async findAll(): Promise<WordType[]> {
-        const cached = await this.redisService.jsonGetWithPrefix<WordType[]>(
-            RedisPrefix.WORD_TYPE,
-            'all',
-        );
+        const cached = await this.redisService.jsonGet<WordType[]>(RedisPrefix.WORD_TYPE, 'all');
         if (cached) {
             return cached;
         }
@@ -26,16 +23,13 @@ export class WordTypeRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.WORD_TYPE, 'all', wordTypes);
+        await this.redisService.jsonSet(RedisPrefix.WORD_TYPE, 'all', wordTypes);
 
         return wordTypes;
     }
 
     public async findById(id: string): Promise<WordType | null> {
-        const cached = await this.redisService.getObjectWithPrefix<WordType>(
-            RedisPrefix.WORD_TYPE,
-            `id:${id}`,
-        );
+        const cached = await this.redisService.jsonGet<WordType>(RedisPrefix.WORD_TYPE, `id:${id}`);
         if (cached) {
             return cached;
         }
@@ -45,11 +39,7 @@ export class WordTypeRepository {
         });
 
         if (wordType) {
-            await this.redisService.setObjectWithPrefix(
-                RedisPrefix.WORD_TYPE,
-                `id:${id}`,
-                wordType,
-            );
+            await this.redisService.jsonSet(RedisPrefix.WORD_TYPE, `id:${id}`, wordType);
         }
 
         return wordType;
@@ -66,7 +56,7 @@ export class WordTypeRepository {
             data,
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
+        await this.redisService.del(RedisPrefix.WORD_TYPE, 'all');
 
         return wordType;
     }
@@ -77,8 +67,8 @@ export class WordTypeRepository {
             data,
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
-        await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, `id:${id}`);
+        await this.redisService.del(RedisPrefix.WORD_TYPE, 'all');
+        await this.redisService.del(RedisPrefix.WORD_TYPE, `id:${id}`);
 
         return wordType;
     }
@@ -88,10 +78,9 @@ export class WordTypeRepository {
             where: { id },
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, 'all');
-        await this.redisService.delWithPrefix(RedisPrefix.WORD_TYPE, `id:${id}`);
+        await this.redisService.del(RedisPrefix.WORD_TYPE, 'all');
+        await this.redisService.del(RedisPrefix.WORD_TYPE, `id:${id}`);
 
         return wordType;
     }
 }
-

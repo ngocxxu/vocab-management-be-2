@@ -22,7 +22,7 @@ export class VocabRepository {
     ): Promise<{ totalItems: number; vocabs: Vocab[] }> {
         const cacheKey = `list:${JSON.stringify({ ...query, userId })}`;
 
-        const cached = await this.redisService.jsonGetWithPrefix<{
+        const cached = await this.redisService.jsonGet<{
             totalItems: number;
             vocabs: Vocab[];
         }>(RedisPrefix.VOCAB, cacheKey);
@@ -33,7 +33,7 @@ export class VocabRepository {
 
         // Clear invalid cache if exists
         if (cached) {
-            await this.redisService.delWithPrefix(RedisPrefix.VOCAB, cacheKey);
+            await this.redisService.del(RedisPrefix.VOCAB, cacheKey);
         }
 
         const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
@@ -101,10 +101,7 @@ export class VocabRepository {
     public async findRandom(count: number, userId?: string): Promise<Vocab[]> {
         const cacheKey = `random:${count}:${userId || 'all'}`;
 
-        const cached = await this.redisService.jsonGetWithPrefix<Vocab[]>(
-            RedisPrefix.VOCAB,
-            cacheKey,
-        );
+        const cached = await this.redisService.jsonGet<Vocab[]>(RedisPrefix.VOCAB, cacheKey);
 
         if (cached) {
             return cached;
@@ -150,10 +147,7 @@ export class VocabRepository {
     }
 
     public async findById(id: string, userId?: string): Promise<Vocab | null> {
-        const cached = await this.redisService.jsonGetWithPrefix<Vocab>(
-            RedisPrefix.VOCAB,
-            `id:${id}`,
-        );
+        const cached = await this.redisService.jsonGet<Vocab>(RedisPrefix.VOCAB, `id:${id}`);
         if (cached) {
             if (userId && cached.userId !== userId) {
                 return null;
@@ -268,7 +262,7 @@ export class VocabRepository {
             },
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.VOCAB, `id:${id}`);
+        await this.redisService.del(RedisPrefix.VOCAB, `id:${id}`);
 
         return vocab;
     }
@@ -337,7 +331,7 @@ export class VocabRepository {
     }
 
     public async clearCacheById(id: string): Promise<void> {
-        await this.redisService.delWithPrefix(RedisPrefix.VOCAB, `id:${id}`);
+        await this.redisService.del(RedisPrefix.VOCAB, `id:${id}`);
     }
 
     public async clearListCaches(): Promise<void> {
@@ -347,15 +341,12 @@ export class VocabRepository {
         );
 
         if (filteredKeys.length > 0) {
-            await this.redisService.getClient().del(...filteredKeys);
+            await this.redisService.client.del(...filteredKeys);
         }
     }
 
     public async updateCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
-        const cached = await this.redisService.jsonGetWithPrefix<Vocab>(
-            RedisPrefix.VOCAB,
-            `id:${id}`,
-        );
+        const cached = await this.redisService.jsonGet<Vocab>(RedisPrefix.VOCAB, `id:${id}`);
 
         if (cached) {
             const updated = { ...cached, ...fields };
@@ -365,11 +356,11 @@ export class VocabRepository {
 
     private async setJsonCacheSafely(key: string, data: unknown, ttl?: number): Promise<void> {
         try {
-            await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, key, data, ttl);
+            await this.redisService.jsonSet(RedisPrefix.VOCAB, key, data, ttl);
         } catch (error) {
             if (error instanceof Error && error.message.includes('wrong Redis type')) {
-                await this.redisService.delWithPrefix(RedisPrefix.VOCAB, key);
-                await this.redisService.jsonSetWithPrefix(RedisPrefix.VOCAB, key, data, ttl);
+                await this.redisService.del(RedisPrefix.VOCAB, key);
+                await this.redisService.jsonSet(RedisPrefix.VOCAB, key, data, ttl);
             } else {
                 throw error;
             }

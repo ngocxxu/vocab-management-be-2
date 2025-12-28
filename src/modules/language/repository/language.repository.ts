@@ -12,7 +12,7 @@ export class LanguageRepository {
     ) {}
 
     public async findAll(): Promise<Language[]> {
-        const cached = await this.redisService.jsonGetWithPrefix<Language[]>(
+        const cached = await this.redisService.jsonGet<Language[]>(
             RedisPrefix.LANGUAGE,
             'all',
         );
@@ -26,13 +26,13 @@ export class LanguageRepository {
             },
         });
 
-        await this.redisService.jsonSetWithPrefix(RedisPrefix.LANGUAGE, 'all', languages);
+        await this.redisService.jsonSet(RedisPrefix.LANGUAGE, 'all', languages);
 
         return languages;
     }
 
     public async findById(id: string): Promise<Language | null> {
-        const cached = await this.redisService.getObjectWithPrefix<Language>(
+        const cached = await this.redisService.jsonGet<Language>(
             RedisPrefix.LANGUAGE,
             `id:${id}`,
         );
@@ -45,7 +45,7 @@ export class LanguageRepository {
         });
 
         if (language) {
-            await this.redisService.setObjectWithPrefix(
+            await this.redisService.jsonSet(
                 RedisPrefix.LANGUAGE,
                 `id:${id}`,
                 language,
@@ -66,7 +66,7 @@ export class LanguageRepository {
             data,
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
+        await this.redisService.del(RedisPrefix.LANGUAGE, 'all');
 
         return language;
     }
@@ -77,8 +77,8 @@ export class LanguageRepository {
             data,
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, `id:${id}`);
+        await this.redisService.del(RedisPrefix.LANGUAGE, 'all');
+        await this.redisService.del(RedisPrefix.LANGUAGE, `id:${id}`);
 
         return language;
     }
@@ -88,8 +88,8 @@ export class LanguageRepository {
             where: { id },
         });
 
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, 'all');
-        await this.redisService.delWithPrefix(RedisPrefix.LANGUAGE, `id:${id}`);
+        await this.redisService.del(RedisPrefix.LANGUAGE, 'all');
+        await this.redisService.del(RedisPrefix.LANGUAGE, `id:${id}`);
 
         return language;
     }
