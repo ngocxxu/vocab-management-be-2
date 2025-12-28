@@ -5,6 +5,12 @@ export interface Config {
 
     readonly SWAGGER_ENABLE: number;
 
+    readonly SWAGGER_PREFIX: string;
+
+    readonly SWAGGER_USER: string;
+
+    readonly SWAGGER_PASSWORD: string;
+
     readonly JWT_SECRET: string;
 
     readonly JWT_ISSUER: string;

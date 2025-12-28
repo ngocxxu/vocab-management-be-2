@@ -2,8 +2,8 @@ import { INestApplication, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response, NextFunction } from 'express';
+import basicAuth from 'express-basic-auth';
 import multer from 'multer';
-
 import { ApplicationModule } from './modules/app.module';
 import { CommonModule, LogInterceptor } from './modules/common';
 
@@ -17,12 +17,9 @@ const API_DEFAULT_PREFIX = '/api/v1/';
 /**
  * The defaults below are dedicated to Swagger configuration, change them
  * following your needs (change at least the title & description).
- *
- * @todo Change the constants below following your API requirements
  */
 const SWAGGER_TITLE = 'Passenger API';
 const SWAGGER_DESCRIPTION = 'API used for passenger management';
-const SWAGGER_PREFIX = '/docs';
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 const DEFAULT_REQUEST_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -81,11 +78,21 @@ function getCorsOptions() {
  * This method mutates the given `app` to register a new module dedicated to
  * Swagger API documentation. Any request performed on `SWAGGER_PREFIX` will
  * receive a documentation page as response.
- *
- * @todo See the `nestjs/swagger` NPM package documentation to customize the
- *       code below with API keys, security requirements, tags and more.
  */
 function createSwagger(app: INestApplication) {
+    const username = process.env.SWAGGER_USER;
+    const password = process.env.SWAGGER_PASSWORD;
+
+    if (username && password && process.env.NODE_ENV !== 'production') {
+        // Use basic auth for swagger
+        app.use(
+            basicAuth({
+                users: { [username]: password },
+                challenge: true,
+            }),
+        );
+    }
+
     const options = new DocumentBuilder()
         .setTitle(SWAGGER_TITLE)
         .setDescription(SWAGGER_DESCRIPTION)
@@ -93,7 +100,7 @@ function createSwagger(app: INestApplication) {
         .build();
 
     const document = SwaggerModule.createDocument(app, options);
-    SwaggerModule.setup(SWAGGER_PREFIX, app, document);
+    SwaggerModule.setup(process.env.SWAGGER_PREFIX || '/', app, document);
 }
 
 /**
