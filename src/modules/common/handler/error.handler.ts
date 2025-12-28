@@ -1,5 +1,6 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import axios from 'axios';
 
 // Define context types for better type safety
 export type ErrorContext =
@@ -119,9 +120,16 @@ export class PrismaErrorHandler {
             }
         }
 
-        // Handle other types of errors
+        if (axios.isAxiosError(error)) {
+            const statusCode = error.response?.status;
+            if (statusCode === 429) {
+                throw new BadRequestException('Rate limit exceeded. Please try again later.');
+            }
+            throw error;
+        }
+
         if (error instanceof Error) {
-            throw new Error(`Database operation failed: ${error.message}`);
+            throw error;
         }
 
         throw new Error('An unexpected error occurred');

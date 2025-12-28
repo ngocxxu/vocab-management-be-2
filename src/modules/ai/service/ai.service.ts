@@ -652,19 +652,14 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             const parsedResponse = this.parseDialogueResponse(text);
             return parsedResponse;
         } catch (error) {
-            this.logger.error(`Error generating dialogue (attempt ${retryCount + 1}):`, error);
+            const isRateLimitError = axios.isAxiosError(error) && error.response?.status === 429;
 
-            if (retryCount < AI_CONFIG.maxRetries) {
-                this.logger.warn('Retrying dialogue generation...');
-                await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1));
-                return this.generateDialogueForVocabs(
-                    targetLanguageWords,
-                    sourceLanguageWords,
-                    targetLanguage,
-                    sourceLanguage,
-                    userId,
-                    retryCount + 1,
+            if (isRateLimitError) {
+                this.logger.warn(
+                    `Rate limit exceeded when generating dialogue (attempt ${retryCount + 1}):`,
                 );
+            } else {
+                this.logger.error(`Error generating dialogue (attempt ${retryCount + 1}):`, error);
             }
 
             throw error;

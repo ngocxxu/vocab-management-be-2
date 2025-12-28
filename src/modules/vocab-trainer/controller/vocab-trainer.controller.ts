@@ -14,6 +14,7 @@ import {
     UsePipes,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { QuestionType, User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '../../common';
 import { Roles } from '../../common/decorator';
@@ -64,6 +65,7 @@ export class VocabTrainerController {
     }
 
     @Get(':id/exam')
+    @Throttle({ default: { limit: 20, ttl: 60000 } })
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.STAFF])
     @ApiOperation({ summary: 'Find vocab trainer by ID and exam' })

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { ConfigService } from '../../config/service';
 import { AI_CONFIG } from '../util/const.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
@@ -81,8 +81,7 @@ export class OpenRouterProvider implements IAiProvider {
                     ?.message?.content || ''
             );
         } catch (error) {
-            // Handle error centrally (Log detailed error from Axios if needed)
-            this.logger.error('OpenRouter API Error:', error);
+            this.handleApiError(error, 'generateContent', openRouterModelName);
             throw error;
         }
     }
@@ -159,5 +158,39 @@ export class OpenRouterProvider implements IAiProvider {
 
         this.logger.warn(`Unknown audio MIME type: ${mimeType}, defaulting to wav`);
         return 'wav';
+    }
+
+    private handleApiError(error: unknown, operation: string, modelName: string): void {
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError<{ error?: { message?: string; type?: string } }>;
+            const statusCode = axiosError.response?.status;
+            const errorData = axiosError.response?.data;
+
+            let errorMessage = `OpenRouter API ${operation} failed`;
+            if (statusCode === 401) {
+                errorMessage = 'OpenRouter API: Unauthorized. Please check your API key.';
+            } else if (statusCode === 402) {
+                errorMessage = 'OpenRouter API: Payment required. Please check your account credits.';
+            } else if (statusCode === 404) {
+                errorMessage = `OpenRouter API: Model "${modelName}" not found or endpoint not available.`;
+            } else if (statusCode === 429) {
+                errorMessage = 'OpenRouter API: Rate limit exceeded. Please try again later.';
+            } else if (statusCode === 400) {
+                errorMessage = `OpenRouter API: Bad request. ${errorData?.error?.message || ''}`;
+            } else if (statusCode) {
+                errorMessage = `OpenRouter API: Request failed with status ${statusCode}. ${
+                    errorData?.error?.message || ''
+                }`;
+            }
+
+            this.logger.error(`${errorMessage}`, {
+                statusCode,
+                errorData,
+                model: modelName,
+                operation,
+            });
+        } else {
+            this.logger.error(`OpenRouter API ${operation} error:`, error);
+        }
     }
 }

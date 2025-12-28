@@ -302,7 +302,10 @@ export class VocabTrainerService {
             }
             return trainerDto;
         } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
+            if (error instanceof Prisma.PrismaClientKnownRequestError) {
+                PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
+            }
+            throw error;
         }
     }
 

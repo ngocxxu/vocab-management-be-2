@@ -1,11 +1,15 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
-
 import { APP_GUARD } from '@nestjs/core';
+// eslint-disable-next-line import/no-extraneous-dependencies
+import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
+// eslint-disable-next-line import/no-extraneous-dependencies
+import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { AuthGuard, CommonModule } from './common';
+import { UserThrottlerGuard } from './common/security/user-throttler.guard';
 import { ConfigModule } from './config/config.module';
 import { EmailModule } from './email/email.module';
 import { EventsModule } from './event/module';
@@ -36,6 +40,19 @@ import { WordTypeModule } from './word-type/word-type.module';
         BullModule.registerQueue({
             name: EReminderType.AUDIO_EVALUATION,
         }),
+        ThrottlerModule.forRootAsync({
+            useFactory: (): ThrottlerModuleOptions => ({
+                throttlers: [
+                    {
+                        ttl: 60000,
+                        limit: 50,
+                    },
+                ],
+                storage: new ThrottlerStorageRedisService(
+                    process.env.REDIS_URL || 'redis://localhost:6379',
+                ) as unknown as ThrottlerStorage,
+            }),
+        }),
         CommonModule,
         AuthModule,
         ConfigModule,
@@ -59,6 +76,10 @@ import { WordTypeModule } from './word-type/word-type.module';
         {
             provide: APP_GUARD,
             useClass: AuthGuard,
+        },
+        {
+            provide: APP_GUARD,
+            useClass: UserThrottlerGuard,
         },
     ],
 })
