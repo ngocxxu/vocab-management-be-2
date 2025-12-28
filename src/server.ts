@@ -80,10 +80,11 @@ function getCorsOptions() {
  * receive a documentation page as response.
  */
 function createSwagger(app: INestApplication) {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
     const username = process.env.SWAGGER_USER;
     const password = process.env.SWAGGER_PASSWORD;
 
-    if (username && password && process.env.NODE_ENV !== 'production') {
+    if (username && password && !isDevelopment) {
         // Use basic auth for swagger
         app.use(
             basicAuth({
