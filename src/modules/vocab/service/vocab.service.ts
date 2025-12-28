@@ -37,36 +37,41 @@ export class VocabService {
     ) {}
 
     /**
-     * Type guard to ensure CsvRowData properties are properly typed
+     * Type guard to validate and normalize CsvRowData properties
      */
-    private static assertCsvRowData(row: CsvRowData): CsvRowData {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-        const anyRow = row as any;
+    private static assertCsvRowData(row: unknown): CsvRowData {
+        if (!row || typeof row !== 'object') {
+            throw new Error('Invalid CSV row: must be an object');
+        }
+
+        const rowObj = row as Record<string, unknown>;
+
+        const getStringValue = (key: string): string | undefined => {
+            const value = rowObj[key];
+            if (value === null || value === undefined) {
+                return undefined;
+            }
+            const stringValue = String(value).trim();
+            return stringValue.length > 0 ? stringValue : undefined;
+        };
+
+        const textSource = getStringValue('textSource');
+        const textTarget = getStringValue('textTarget');
+
+        if (!textSource || !textTarget) {
+            throw new Error('Invalid CSV row: textSource and textTarget are required');
+        }
+
         return {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            textSource: String(anyRow.textSource),
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            textTarget: String(anyRow.textTarget),
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            wordType: anyRow.wordType ? String(anyRow.wordType) : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            grammar: anyRow.grammar ? String(anyRow.grammar) : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            explanationSource: anyRow.explanationSource
-                ? // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                  String(anyRow.explanationSource)
-                : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            explanationTarget: anyRow.explanationTarget
-                ? // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                  String(anyRow.explanationTarget)
-                : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            subjects: anyRow.subjects ? String(anyRow.subjects) : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            exampleSource: anyRow.exampleSource ? String(anyRow.exampleSource) : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            exampleTarget: anyRow.exampleTarget ? String(anyRow.exampleTarget) : undefined,
+            textSource,
+            textTarget,
+            wordType: getStringValue('wordType'),
+            grammar: getStringValue('grammar'),
+            explanationSource: getStringValue('explanationSource'),
+            explanationTarget: getStringValue('explanationTarget'),
+            subjects: getStringValue('subjects'),
+            exampleSource: getStringValue('exampleSource'),
+            exampleTarget: getStringValue('exampleTarget'),
         };
     }
 

@@ -59,10 +59,7 @@ export class ConfigRepository {
         });
     }
 
-    public async createSystemConfig(
-        key: string,
-        value: Prisma.InputJsonValue,
-    ): Promise<Config> {
+    public async createSystemConfig(key: string, value: Prisma.InputJsonValue): Promise<Config> {
         return this.prismaService.config.create({
             data: {
                 scope: ConfigScope.SYSTEM,
@@ -81,6 +78,38 @@ export class ConfigRepository {
                 value,
                 isActive: true,
             },
+        });
+    }
+
+    public async upsertSystemConfig(key: string, value: Prisma.InputJsonValue): Promise<Config> {
+        return this.prismaService.$transaction(async (tx) => {
+            const existing = await tx.config.findFirst({
+                where: {
+                    scope: ConfigScope.SYSTEM,
+                    userId: null,
+                    key,
+                },
+            });
+
+            if (existing) {
+                return tx.config.update({
+                    where: { id: existing.id },
+                    data: {
+                        value,
+                        isActive: true,
+                    },
+                });
+            }
+
+            return tx.config.create({
+                data: {
+                    scope: ConfigScope.SYSTEM,
+                    userId: null,
+                    key,
+                    value,
+                    isActive: true,
+                },
+            });
         });
     }
 
@@ -117,4 +146,3 @@ export class ConfigRepository {
         });
     }
 }
-

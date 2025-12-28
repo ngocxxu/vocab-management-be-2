@@ -111,6 +111,10 @@ export class SubjectService {
         updateSubjectData: SubjectInput,
         userId?: string,
     ): Promise<SubjectDto> {
+        if (!id) {
+            throw new Error('Subject ID is required');
+        }
+
         try {
             const existingSubject = await this.subjectRepository.findById(id, userId);
 
@@ -143,7 +147,7 @@ export class SubjectService {
                 userId,
             );
 
-            await this.subjectRepository.updateMany(
+            await this.subjectRepository.updateManyInTransaction(
                 subjects.map((subject) => ({
                     id: subject.id,
                     data: { order: orderMap.get(subject.id) },

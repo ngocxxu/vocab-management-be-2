@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, VocabMastery } from '@prisma/client';
+import { Prisma, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
 import { PrismaService } from '../../common';
+
+export type VocabMasteryWithVocab = VocabMastery & {
+    vocab: Vocab & {
+        sourceLanguage: Language;
+        targetLanguage: Language;
+        textTargets: TextTarget[];
+    };
+};
 
 @Injectable()
 export class VocabMasteryRepository {
@@ -133,7 +141,7 @@ export class VocabMasteryRepository {
         userId: string,
         minIncorrect: number,
         limit: number,
-    ): Promise<VocabMastery[]> {
+    ): Promise<VocabMasteryWithVocab[]> {
         return this.prismaService.vocabMastery.findMany({
             where: {
                 userId,

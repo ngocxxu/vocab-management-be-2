@@ -21,6 +21,10 @@ export class ConfigService {
     public constructor(private readonly configRepository: ConfigRepository) {}
 
     public async getSystemConfig(key: string): Promise<ConfigDto> {
+        if (!key || key.trim().length === 0) {
+            throw new Error('Config key is required');
+        }
+
         try {
             const config = await this.configRepository.findSystemConfig(key);
 
@@ -39,6 +43,14 @@ export class ConfigService {
     }
 
     public async getUserConfig(userId: string, key: string): Promise<ConfigDto> {
+        if (!userId) {
+            throw new Error('User ID is required');
+        }
+
+        if (!key || key.trim().length === 0) {
+            throw new Error('Config key is required');
+        }
+
         try {
             const config = await this.configRepository.findUserConfig(userId, key);
 
@@ -76,14 +88,16 @@ export class ConfigService {
     }
 
     public async setSystemConfig(key: string, value: Prisma.InputJsonValue): Promise<ConfigDto> {
+        if (!key || key.trim().length === 0) {
+            throw new Error('Config key is required');
+        }
+
+        if (value === null || value === undefined) {
+            throw new Error('Config value is required');
+        }
+
         try {
-            const existing = await this.configRepository.findSystemConfigForUpdate(key);
-
-            const config = existing
-                ? await this.configRepository.updateSystemConfig(existing.id, value)
-                : await this.configRepository.createSystemConfig(key, value);
-
-            return new ConfigDto(config);
+            return await this.configRepository.upsertSystemConfig(key, value);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'setSystemConfig', this.configErrorMapping);
             throw error;
@@ -95,6 +109,18 @@ export class ConfigService {
         key: string,
         value: Prisma.InputJsonValue,
     ): Promise<ConfigDto> {
+        if (!userId) {
+            throw new Error('User ID is required');
+        }
+
+        if (!key || key.trim().length === 0) {
+            throw new Error('Config key is required');
+        }
+
+        if (value === null || value === undefined) {
+            throw new Error('Config value is required');
+        }
+
         try {
             const config = await this.configRepository.upsertUserConfig(userId, key, value);
 

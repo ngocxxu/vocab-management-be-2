@@ -118,6 +118,8 @@ export class PrismaErrorHandler {
                         throw new Error(message);
                 }
             }
+
+            throw new Error(`Prisma error ${error.code}: ${error.message}`);
         }
 
         if (axios.isAxiosError(error)) {

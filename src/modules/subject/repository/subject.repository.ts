@@ -185,6 +185,21 @@ export class SubjectRepository {
         );
     }
 
+    public async updateManyInTransaction(
+        updates: Array<{ id: string; data: Prisma.SubjectUpdateInput }>,
+    ): Promise<void> {
+        await this.prismaService.$transaction(async (tx) => {
+            await Promise.all(
+                updates.map(async (update) =>
+                    tx.subject.update({
+                        where: { id: update.id },
+                        data: update.data,
+                    }),
+                ),
+            );
+        });
+    }
+
     public async delete(id: string, userId?: string): Promise<Subject> {
         const where: { id: string; userId?: string } = { id };
         if (userId) {
