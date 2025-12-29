@@ -2,10 +2,10 @@ import { Controller, Delete, Get, HttpCode, HttpStatus, UseGuards } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../decorator/roles.decorator';
+import { LoggerService } from '../provider/logger.service';
+import { RedisService } from '../provider/redis.provider';
 import { RolesGuard } from '../security/roles.guard';
 import { CacheManagerService } from '../service/cache-manager.service';
-import { RedisService } from '../provider/redis.provider';
-import { LoggerService } from '../provider/logger.service';
 
 @Controller('cache')
 @ApiTags('cache')
@@ -84,6 +84,3 @@ export class CacheController {
         return { message: 'Redis database flushed successfully' };
     }
 }
-
-
-

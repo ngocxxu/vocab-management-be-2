@@ -40,6 +40,9 @@ import { WordTypeModule } from './word-type/word-type.module';
         BullModule.registerQueue({
             name: EReminderType.AUDIO_EVALUATION,
         }),
+        BullModule.registerQueue({
+            name: EReminderType.VOCAB_TRANSLATION,
+        }),
         ThrottlerModule.forRootAsync({
             useFactory: (): ThrottlerModuleOptions => ({
                 throttlers: [

@@ -1,14 +1,24 @@
+import { InjectQueue } from '@nestjs/bull';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AiService } from '../../ai/service/ai.service';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { LoggerService } from '../../common/provider/logger.service';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
-import { BulkDeleteInput, VocabDto, VocabInput } from '../model';
-import { CsvImportQueryDto, CsvImportResponseDto, CsvImportErrorDto, CsvRowDto } from '../model';
+import { EReminderType } from '../../reminder/util';
+import {
+    BulkDeleteInput,
+    CsvImportErrorDto,
+    CsvImportQueryDto,
+    CsvImportResponseDto,
+    CsvRowDto,
+    VocabDto,
+    VocabInput,
+} from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
+import { VocabTranslationJobData } from '../processor/vocab-translation.processor';
 import { VocabRepository } from '../repository';
 import { CsvParserUtil, CsvRowData } from '../util/csv-parser.util';
 
@@ -33,7 +43,8 @@ export class VocabService {
         private readonly vocabRepository: VocabRepository,
         private readonly prismaService: PrismaService,
         private readonly logger: LoggerService,
-        private readonly aiService: AiService,
+        @InjectQueue(EReminderType.VOCAB_TRANSLATION)
+        private readonly vocabTranslationQueue: Queue<VocabTranslationJobData>,
     ) {}
 
     /**
@@ -178,44 +189,34 @@ export class VocabService {
                 languageFolderId,
             }: VocabInput = createVocabData;
 
-            // If textTargets is not empty, check if any target is empty and generate it using AI
-            if (textSource && textTargets && textTargets.length > 0) {
-                const emptyTarget = textTargets.find((target) => !target.textTarget);
-                if (emptyTarget) {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-                    const aiGeneratedTarget = await this.aiService.translateVocab(
-                        textSource,
-                        sourceLanguageCode,
-                        targetLanguageCode,
-                        emptyTarget.subjectIds || [],
-                        userId,
-                    );
-
-                    Object.assign(emptyTarget, {
-                        textTarget: aiGeneratedTarget.textTarget,
-                        grammar: aiGeneratedTarget.grammar,
-                        explanationSource: aiGeneratedTarget.explanationSource,
-                        explanationTarget: aiGeneratedTarget.explanationTarget,
-                        vocabExamples: aiGeneratedTarget.vocabExamples || [],
-                    });
-                }
-            } else if (textSource && textTargets && textTargets.length === 0) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-                const aiGeneratedTarget = await this.aiService.translateVocab(
-                    textSource,
-                    sourceLanguageCode,
-                    targetLanguageCode,
-                    [],
-                    userId,
-                );
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-                createVocabData.textTargets.push(aiGeneratedTarget);
-            }
-
             // Validate that source and target languages are different
             if (sourceLanguageCode === targetLanguageCode) {
                 throw new Error('Source and target languages must be different');
             }
+
+            const shouldQueueTranslation =
+                textSource && textTargets?.find((target) => !target.textTarget);
+            const emptyTextTarget = textTargets?.find(
+                (target) => !target.textTarget || target.textTarget.trim() === '',
+            );
+
+            // Get subjectIds from empty textTarget if available
+            const subjectIdsForTranslation = emptyTextTarget?.subjectIds?.length
+                ? emptyTextTarget.subjectIds
+                : createVocabData.subjectIds || [];
+
+            const textTargetsToCreate =
+                shouldQueueTranslation && !textTargets?.length
+                    ? [
+                          {
+                              textTarget: '',
+                              grammar: '',
+                              explanationSource: '',
+                              explanationTarget: '',
+                              subjectIds: subjectIdsForTranslation,
+                          },
+                      ]
+                    : textTargets;
 
             const vocab = await this.vocabRepository.create({
                 textSource,
@@ -224,7 +225,7 @@ export class VocabService {
                 languageFolder: { connect: { id: languageFolderId } },
                 user: { connect: { id: userId } },
                 textTargets: {
-                    create: textTargets.map((target) => ({
+                    create: textTargetsToCreate.map((target) => ({
                         textTarget: target.textTarget,
                         grammar: target.grammar,
                         explanationSource: target.explanationSource,
@@ -252,6 +253,17 @@ export class VocabService {
                     })),
                 },
             });
+
+            if (shouldQueueTranslation) {
+                await this.vocabTranslationQueue.add('translate-vocab', {
+                    vocabId: vocab.id,
+                    textSource,
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    subjectIds: subjectIdsForTranslation, // Sửa dòng này
+                    userId,
+                });
+            }
 
             await this.vocabRepository.clearListCaches();
 
