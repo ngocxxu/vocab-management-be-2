@@ -95,3 +95,41 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:${{ steps.bump.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/vocab-be:latest
+            
+      - name: Notify Discord Failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          ESCAPED_MSG=$(echo "$COMMIT_MSG" | head -c 200)
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+
+          jq -n \
+            --arg username "GitHub CI Monitor" \
+            --arg avatar "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" \
+            --arg title "Build/Push Failed" \
+            --arg desc "Pipeline failed on branch **${{ github.ref_name }}**." \
+            --arg sha "${{ github.sha }}" \
+            --arg msg "$ESCAPED_MSG" \
+            --arg actor "${{ github.actor }}" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+              username: $username,
+              avatar_url: $avatar,
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 15158332,
+                timestamp: $timestamp,
+                description: $desc,
+                fields: [
+                  { name: "Commit Message", value: $msg, inline: false },
+                  { name: "Commit Hash", value: ("`" + ($sha | strflocaltime)[0:7] + "`"), inline: true },
+                  { name: "Author", value: $actor, inline: true },
+                  { name: "View Logs", value: ("[Click Here](" + $url + ")"), inline: true }
+                ],
+                footer: { text: "Check GitHub Actions for details" }
+              }]
+            }' | curl -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK"
