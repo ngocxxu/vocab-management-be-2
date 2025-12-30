@@ -15,8 +15,10 @@ import {
     StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiConsumes } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
+import { AiService } from '../../ai/service/ai.service';
 import { LoggerService, RolesGuard } from '../../common';
 import { CurrentUser, Roles } from '../../common/decorator';
 import { PaginationDto } from '../../common/model/pagination.dto';
@@ -31,6 +33,7 @@ import {
     ProgressOverTimeDto,
     TopProblematicVocabDto,
     MasteryDistributionDto,
+    CreateTextTargetInput,
 } from '../model';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 import { VocabService, VocabMasteryService } from '../service';
@@ -59,6 +62,7 @@ export class VocabController {
         private readonly logger: LoggerService,
         private readonly vocabService: VocabService,
         private readonly vocabMasteryService: VocabMasteryService,
+        private readonly aiService: AiService,
     ) {}
 
     @Get()
@@ -116,6 +120,46 @@ export class VocabController {
         @CurrentUser() user: User,
     ): Promise<VocabDto[]> {
         return this.vocabService.createBulk(input, user.id);
+    }
+
+    @Post('generate/text-target')
+    @Throttle({ default: { limit: 20, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @ApiOperation({ summary: 'Generate text target content using AI' })
+    @ApiResponse({ status: HttpStatus.OK, type: CreateTextTargetInput })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input parameters' })
+    public async generateTextTarget(
+        @Body()
+        input: { textSource: string; sourceLanguageCode: string; targetLanguageCode: string },
+        @CurrentUser() user: User,
+    ): Promise<CreateTextTargetInput> {
+        if (!input.textSource || !input.sourceLanguageCode || !input.targetLanguageCode) {
+            throw new BadRequestException(
+                'textSource, sourceLanguageCode, and targetLanguageCode are required',
+            );
+        }
+
+        try {
+            const result = await this.aiService.translateVocab(
+                input.textSource,
+                input.sourceLanguageCode,
+                input.targetLanguageCode,
+                undefined,
+                user.id,
+            );
+
+            this.logger.info(
+                `Generated text target for user ${user.id}, textSource: ${input.textSource}`,
+            );
+            return result;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(
+                `Failed to generate text target for user ${user.id}: ${errorMessage}`,
+            );
+            throw new BadRequestException(`Failed to generate text target: ${errorMessage}`);
+        }
     }
 
     @Put(':id')
