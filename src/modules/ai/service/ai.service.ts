@@ -162,11 +162,14 @@ ${evaluationDetails}
 
 Task: Evaluate each answer and determine if it's semantically correct and contextually appropriate as a translation/meaning of the correct answer.
 
+IMPORTANT: Each vocabulary item may have multiple correct answers (listed as "Target word(s)").
+
 For each answer, consider:
-1. Semantic equivalence (same meaning)
-2. Contextual appropriateness
-3. Acceptable variations (different forms, synonyms, etc.)
-4. Common translation alternatives
+1. Exact match: If the student's answer exactly matches any of the correct answers listed in "Target word(s)", mark it as correct
+2. Semantic equivalence (same meaning) to any of the correct answers
+3. Contextual appropriateness
+4. Acceptable variations (different forms, synonyms, etc.) of any correct answer
+5. Common translation alternatives that match any of the correct answers
 
 Format your response as JSON array:
 [
