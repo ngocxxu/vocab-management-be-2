@@ -44,7 +44,8 @@ export class AuthGuard implements CanActivate {
         }
 
         if (!token) {
-            return false;
+            this.logger.error('No authentication token provided');
+            throw new UnauthorizedException('No authentication token provided');
         }
 
         try {
@@ -71,7 +72,7 @@ export class AuthGuard implements CanActivate {
             if (err instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(err);
             }
-            this.logger.error(err instanceof Error ? err.message : String(err));
+            this.logger.error('Token verification failed');
             throw new UnauthorizedException('Token verification failed');
         }
     }
@@ -86,19 +87,26 @@ export class AuthGuard implements CanActivate {
 
     private extractTokenFromCookies(cookieHeader: string | undefined): string | null {
         if (!cookieHeader) {
+            this.logger.debug('No cookie header in request');
             return null;
         }
 
         const cookies = this.parseCookies(cookieHeader);
-        return cookies[CookieUtil.getAccessTokenCookieName()] || null;
+        const token = cookies[CookieUtil.getAccessTokenCookieName()];
+
+        if (!token) {
+            this.logger.debug('Access token cookie not found');
+        }
+
+        return token || null;
     }
 
     private parseCookies(cookieHeader: string): Record<string, string> {
         return Object.fromEntries(
-            cookieHeader.split(';').map(cookie => {
+            cookieHeader.split(';').map((cookie) => {
                 const [key, ...v] = cookie.trim().split('=');
                 return [key, decodeURIComponent(v.join('='))];
-            })
+            }),
         );
     }
 }
