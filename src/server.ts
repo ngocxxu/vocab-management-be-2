@@ -2,7 +2,6 @@ import { INestApplication, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response, NextFunction } from 'express';
-import basicAuth from 'express-basic-auth';
 import multer from 'multer';
 import { ApplicationModule } from './modules/app.module';
 import { CommonModule, LogInterceptor } from './modules/common';
@@ -89,19 +88,19 @@ function getCorsOptions() {
  * receive a documentation page as response.
  */
 function createSwagger(app: INestApplication) {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    const username = process.env.SWAGGER_USER;
-    const password = process.env.SWAGGER_PASSWORD;
+    // const isDevelopment = process.env.NODE_ENV !== 'production';
+    // const username = process.env.SWAGGER_USER;
+    // const password = process.env.SWAGGER_PASSWORD;
 
-    if (username && password && !isDevelopment) {
-        // Use basic auth for swagger
-        app.use(
-            basicAuth({
-                users: { [username]: password },
-                challenge: true,
-            }),
-        );
-    }
+    // if (username && password && !isDevelopment) {
+    //     // Use basic auth for swagger
+    //     app.use(
+    //         basicAuth({
+    //             users: { [username]: password },
+    //             challenge: true,
+    //         }),
+    //     );
+    // }
 
     const options = new DocumentBuilder()
         .setTitle(SWAGGER_TITLE)
