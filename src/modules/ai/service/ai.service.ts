@@ -2,6 +2,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Queue } from 'bullmq';
+import { LanguageRepository } from '../../language/repository';
 import { EReminderType } from '../../reminder/util';
 import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
@@ -13,9 +14,11 @@ import { EvaluationResult, MultipleChoiceQuestion } from '../util/type.util';
 @Injectable()
 export class AiService {
     private readonly logger = new Logger(AiService.name);
+    private readonly languageNameCache = new Map<string, string>();
 
     public constructor(
         private readonly providerFactory: AiProviderFactory,
+        private readonly languageRepository: LanguageRepository,
         @InjectQueue(EReminderType.AUDIO_EVALUATION)
         private readonly audioEvaluationQueue: Queue,
         @InjectQueue(EReminderType.MULTIPLE_CHOICE_GENERATION)
@@ -134,25 +137,27 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             return [];
         }
 
-        const evaluationDetails = evaluations
-            .map((evaluationItem, idx) => {
-                const vocab = evaluationItem.vocab;
-                const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
-                const questionContext =
-                    evaluationItem.questionType === 'textSource'
-                        ? `What is the translation of "${vocab.textSource}" in ${vocab.targetLanguageCode}?`
-                        : `What is the translation of "${evaluationItem.systemAnswer}" in ${vocab.sourceLanguageCode}?`;
+        const evaluationDetailsPromises = evaluations.map(async (evaluationItem, idx) => {
+            const vocab = evaluationItem.vocab;
+            const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
+            const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
+            const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
+            const questionContext =
+                evaluationItem.questionType === 'textSource'
+                    ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
+                    : `What is the translation of "${evaluationItem.systemAnswer}" in ${sourceLanguageName}?`;
 
-                return (
-                    `${idx + 1}. Source language: ${vocab.sourceLanguageCode}, ` +
-                    `Target language: ${vocab.targetLanguageCode}, ` +
-                    `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
-                    `Question: ${questionContext}, ` +
-                    `Correct answer: "${evaluationItem.systemAnswer}", ` +
-                    `Student's answer: "${evaluationItem.userAnswer}"`
-                );
-            })
-            .join('\n\n');
+            return (
+                `${idx + 1}. Source language: ${sourceLanguageName}, ` +
+                `Target language: ${targetLanguageName}, ` +
+                `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
+                `Question: ${questionContext}, ` +
+                `Correct answer: "${evaluationItem.systemAnswer}", ` +
+                `Student's answer: "${evaluationItem.userAnswer}"`
+            );
+        });
+
+        const evaluationDetails = (await Promise.all(evaluationDetailsPromises)).join('\n\n');
 
         const prompt = `
 You are a language learning assistant. Evaluate if students' answers are semantically correct and contextually appropriate.
@@ -222,8 +227,8 @@ Return ONLY the JSON array, no markdown formatting, no code blocks, no additiona
         retryCount = 0,
     ): Promise<{ isCorrect: boolean; explanation?: string }> {
         try {
-            const sourceLanguage = vocab.sourceLanguageCode;
-            const targetLanguage = vocab.targetLanguageCode;
+            const sourceLanguage = await this.getLanguageName(vocab.sourceLanguageCode);
+            const targetLanguage = await this.getLanguageName(vocab.targetLanguageCode);
             const sourceText = vocab.textSource;
             const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
 
@@ -425,8 +430,8 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const {
             targetDialogue,
             transcript,
-            sourceLanguage,
-            targetLanguage,
+            sourceLanguage: sourceLanguageCode,
+            targetLanguage: targetLanguageCode,
             sourceWords,
             targetStyle,
             targetAudience,
@@ -435,6 +440,9 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         } = params;
 
         try {
+            const sourceLanguage = await this.getLanguageName(sourceLanguageCode);
+            const targetLanguage = await this.getLanguageName(targetLanguageCode);
+
             const dialogueText = targetDialogue
                 .map((item) => `${item.speaker}: "${item.text}"`)
                 .join('\n');
@@ -616,16 +624,19 @@ ${context ? `Context: ${context}` : ''}
         retryCount = 0,
     ): Promise<{ dialogue: Array<{ speaker: string; text: string }>; vocabWordsUsed: string[] }> {
         try {
+            const targetLanguageName = await this.getLanguageName(targetLanguage);
+            const sourceLanguageName = await this.getLanguageName(sourceLanguage);
+
             const wordsList = targetLanguageWords.join(', ');
             const sourceWordsList = sourceLanguageWords.join(', ');
             const prompt = `
 You are a language learning assistant. Generate a natural dialogue between two speakers (A and B) 
-in ${targetLanguage} that incorporates ALL of the following vocabulary words naturally:
+in ${targetLanguageName} that incorporates ALL of the following vocabulary words naturally:
 
-Vocabulary words (${targetLanguage}): ${wordsList}
+Vocabulary words (${targetLanguageName}): ${wordsList}
 
 Important context:
-- This dialogue will be translated by the user from ${targetLanguage} to ${sourceLanguage}
+- This dialogue will be translated by the user from ${targetLanguageName} to ${sourceLanguageName}
 - When the user translates this dialogue, they MUST use the source words or their synonyms: ${sourceWordsList}
 - The dialogue should be structured so that when translated, it naturally requires the use of these source words
 
@@ -738,24 +749,26 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
             return [];
         }
 
-        const vocabDetails = vocabItems
-            .map((item, idx) => {
-                const vocab = item.vocab;
-                const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
-                const questionDirection =
-                    item.questionType === 'source'
-                        ? `What is the translation of "${vocab.textSource}" in ${vocab.targetLanguageCode}?`
-                        : `What is the translation of "${item.selectedTarget}" in ${vocab.sourceLanguageCode}?`;
-                const correctAnswer =
-                    item.questionType === 'source' ? item.selectedTarget : vocab.textSource;
+        const vocabDetailsPromises = vocabItems.map(async (item, idx) => {
+            const vocab = item.vocab;
+            const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
+            const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
+            const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
+            const questionDirection =
+                item.questionType === 'source'
+                    ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
+                    : `What is the translation of "${item.selectedTarget}" in ${sourceLanguageName}?`;
+            const correctAnswer =
+                item.questionType === 'source' ? item.selectedTarget : vocab.textSource;
 
-                return (
-                    `${idx + 1}. Source: "${vocab.textSource}", Target(s): "${targetTexts}", ` +
-                    `Languages: ${vocab.sourceLanguageCode} → ${vocab.targetLanguageCode}, ` +
-                    `Question: ${questionDirection}, Correct Answer: "${correctAnswer}"`
-                );
-            })
-            .join('\n');
+            return (
+                `${idx + 1}. Source: "${vocab.textSource}", Target(s): "${targetTexts}", ` +
+                `Languages: ${sourceLanguageName} → ${targetLanguageName}, ` +
+                `Question: ${questionDirection}, Correct Answer: "${correctAnswer}"`
+            );
+        });
+
+        const vocabDetails = (await Promise.all(vocabDetailsPromises)).join('\n');
 
         const prompt = `
 You are a language learning assistant. Generate multiple choice questions for vocabulary practice.
@@ -908,6 +921,29 @@ Return ONLY the JSON array, no markdown formatting, no code blocks, no additiona
     }
 
     /**
+     * Get language name from code with caching to avoid N+1 queries
+     */
+    private async getLanguageName(code: string): Promise<string> {
+        if (!code) {
+            throw new Error('Language code is required');
+        }
+
+        const cached = this.languageNameCache.get(code);
+        if (cached) {
+            return cached;
+        }
+
+        const language = await this.languageRepository.findByCode(code);
+        if (!language) {
+            this.logger.warn(`Language not found for code: ${code}, using code as fallback`);
+            return code;
+        }
+
+        this.languageNameCache.set(code, language.name);
+        return language.name;
+    }
+
+    /**
      * Common method to generate question with prompt template
      */
     private async generateQuestionWithPrompt(
@@ -1031,10 +1067,13 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const correctTarget =
             vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
 
+        const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
+        const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
+
         const promptData = {
             questionType: 'source' as const,
-            sourceLanguage: vocab.sourceLanguageCode,
-            targetLanguage: vocab.targetLanguageCode,
+            sourceLanguage: sourceLanguageName,
+            targetLanguage: targetLanguageName,
             sourceText: vocab.textSource,
             targetText: correctTarget.textTarget,
             correctAnswer: correctTarget.textTarget,
@@ -1062,10 +1101,13 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const selectedTarget =
             vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
 
+        const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
+        const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
+
         const promptData = {
             questionType: 'target' as const,
-            sourceLanguage: vocab.sourceLanguageCode,
-            targetLanguage: vocab.targetLanguageCode,
+            sourceLanguage: sourceLanguageName,
+            targetLanguage: targetLanguageName,
             sourceText: vocab.textSource,
             targetText: selectedTarget.textTarget,
             correctAnswer: vocab.textSource,

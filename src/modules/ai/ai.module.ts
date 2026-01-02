@@ -3,6 +3,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { CommonModule } from '../common';
 import { ConfigModule } from '../config';
 import { EventsModule } from '../event/module';
+import { LanguageModule } from '../language/language.module';
 import { NotificationModule } from '../notification/notification.module';
 import { ReminderModule } from '../reminder/reminder.module';
 import { EReminderType } from '../reminder/util';
@@ -21,6 +22,7 @@ import { AiService } from './service/ai.service';
         CommonModule,
         ConfigModule,
         EventsModule,
+        LanguageModule,
         NotificationModule,
         ReminderModule,
         forwardRef(() => VocabModule),

@@ -8,6 +8,6 @@ import { LanguageService } from './service';
     imports: [CommonModule],
     controllers: [LanguageController],
     providers: [LanguageRepository, LanguageService],
-    exports: [LanguageService],
+    exports: [LanguageService, LanguageRepository],
 })
 export class LanguageModule {}
