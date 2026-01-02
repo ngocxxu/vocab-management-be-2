@@ -58,10 +58,6 @@ function getCorsOptions() {
     const commonHeaders = [
         'Content-Type',
         'X-Requested-With',
-        'Authorization',
-        'Accept',
-        'User-Agent',
-        'Cookie',
     ];
 
     if (isDevelopment) {
@@ -88,6 +84,7 @@ function getCorsOptions() {
  * receive a documentation page as response.
  */
 function createSwagger(app: INestApplication) {
+    // TODO: Basic auth make error when login on nextjs frontend
     // const isDevelopment = process.env.NODE_ENV !== 'production';
     // const username = process.env.SWAGGER_USER;
     // const password = process.env.SWAGGER_PASSWORD;
