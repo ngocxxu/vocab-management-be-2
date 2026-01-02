@@ -56,12 +56,21 @@ function getCorsOptions() {
     const isDevelopment = process.env.NODE_ENV !== 'production';
     const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || [];
 
+    const commonHeaders = [
+        'Content-Type',
+        'X-Requested-With',
+        'Authorization',
+        'Accept',
+        'User-Agent',
+        'Cookie',
+    ];
+
     if (isDevelopment) {
         return {
-            origin: true, // Allow all origins in development
+            origin: true,
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'X-Requested-With'],
+            allowedHeaders: commonHeaders,
         };
     }
 
@@ -69,7 +78,7 @@ function getCorsOptions() {
         origin: allowedOrigins.length > 0 ? allowedOrigins : false,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'X-Requested-With'],
+        allowedHeaders: commonHeaders,
     };
 }
 
@@ -179,6 +188,9 @@ async function bootstrap(): Promise<void> {
         logger: ['error', 'warn', 'log'],
     });
 
+    // Enable CORS early to handle preflight requests properly
+    app.enableCors(getCorsOptions());
+
     const maxFileSize = parseIntEnv('MAX_FILE_SIZE', DEFAULT_MAX_FILE_SIZE);
     const requestTimeout = parseIntEnv('REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT);
 
@@ -201,9 +213,6 @@ async function bootstrap(): Promise<void> {
 
     const logInterceptor = app.select(CommonModule).get(LogInterceptor);
     app.useGlobalInterceptors(logInterceptor);
-
-    // Enable CORS with environment-based configuration
-    app.enableCors(getCorsOptions());
 
     const port = process.env.API_PORT || API_DEFAULT_PORT;
     const host = '0.0.0.0';

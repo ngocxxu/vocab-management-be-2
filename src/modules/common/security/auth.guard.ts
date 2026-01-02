@@ -25,6 +25,12 @@ export class AuthGuard implements CanActivate {
     }
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
+        const request = context.switchToHttp().getRequest<RequestWithUser & Request>();
+
+        if (request.method === 'OPTIONS') {
+            return true;
+        }
+
         const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
             context.getHandler(),
             context.getClass(),
@@ -32,8 +38,6 @@ export class AuthGuard implements CanActivate {
         if (isPublic) {
             return true;
         }
-
-        const request = context.switchToHttp().getRequest<RequestWithUser & Request>();
 
         // Try to get token from cookies first, then from Authorization header
         let token = this.extractTokenFromCookies(request.headers.cookie);
