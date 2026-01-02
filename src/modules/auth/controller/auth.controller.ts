@@ -12,7 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { Response, Request } from 'express';
 
 import { CookieUtil, LoggerService } from '../../common';
-import { Public } from '../../common/decorator';
+import { ExcludeFromSwaggerIf, Public } from '../../common/decorator';
 import { UserDto } from '../../user/model';
 import {
     OAuthPipe,
@@ -38,6 +38,8 @@ import {
 } from '../model';
 import { AuthService } from '../service';
 
+const isProduction = (process.env.NODE_ENV ?? '') === 'production';
+
 @Controller('auth')
 @ApiTags('authentication')
 export class AuthController {
@@ -48,6 +50,8 @@ export class AuthController {
 
     @Post('signup')
     @Public()
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    @ExcludeFromSwaggerIf(isProduction)
     @ApiOperation({ summary: 'Register user with email and password' })
     @ApiResponse({
         status: HttpStatus.CREATED,
@@ -90,6 +94,8 @@ export class AuthController {
 
     @Post('oauth')
     @Public()
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    @ExcludeFromSwaggerIf(isProduction)
     @ApiOperation({ summary: 'Sign in with OAuth provider' })
     @ApiResponse({
         status: HttpStatus.OK,
