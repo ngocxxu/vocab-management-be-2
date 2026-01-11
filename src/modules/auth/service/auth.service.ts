@@ -31,7 +31,7 @@ export class AuthService {
     /**
      * Register user with email and password
      */
-    public async signUp(input: SignUpInput): Promise<UserDto> {
+    public async signUp(input: SignUpInput): Promise<SignInResponse> {
         try {
             const { email, password, firstName, lastName, phone, avatar, role } = input;
 
@@ -73,7 +73,28 @@ export class AuthService {
                 throw new Error('User data is missing from Supabase response');
             }
 
-            return new UserDto(user);
+            // 3. If session exists, return it. Otherwise, sign in to get session
+            let session = data.session;
+            if (!session) {
+                const signInResult = await this.supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+
+                if (signInResult.error) {
+                    this.handleAuthError(signInResult.error, 'signUp');
+                }
+                if (!signInResult.data.session) {
+                    throw new UnauthorizedException('No session data returned after signup');
+                }
+                session = signInResult.data.session;
+            }
+
+            return {
+                session: new SessionDto(session, new UserDto(user)),
+                accessToken: session.access_token,
+                refreshToken: session.refresh_token,
+            };
         } catch (error) {
             if (error instanceof PrismaClientKnownRequestError) {
                 PrismaErrorHandler.handle(error);

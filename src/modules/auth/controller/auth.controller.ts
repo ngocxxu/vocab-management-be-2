@@ -61,9 +61,16 @@ export class AuthController {
         status: HttpStatus.BAD_REQUEST,
         description: 'Registration failed',
     })
-    public async signUp(@Body(SignUpPipe) input: SignUpInput): Promise<UserDto> {
+    public async signUp(
+        @Body(SignUpPipe) input: SignUpInput,
+        @Res({ passthrough: true }) response: Response,
+    ): Promise<SessionDto> {
         const result = await this.authService.signUp(input);
-        return result;
+        this.logger.info(`User signed up successfully with email: ${input.email}`);
+
+        CookieUtil.setAuthCookies(response, result.accessToken, result.refreshToken);
+
+        return result.session;
     }
 
     @Post('signin')
