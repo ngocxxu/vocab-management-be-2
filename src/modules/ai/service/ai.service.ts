@@ -10,7 +10,7 @@ import { WordTypeRepository } from '../../word-type/repository';
 import { AudioEvaluationJobData } from '../processor/audio-evaluation.processor';
 import { MultipleChoiceGenerationJobData } from '../processor/multiple-choice-generation.processor';
 import { AiProviderFactory } from '../provider/ai-provider.factory';
-import { AI_CONFIG, QUESTION_TYPES } from '../util/const.util';
+import { AI_CONFIG } from '../util/const.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../util/type.util';
 @Injectable()
 export class AiService {
@@ -167,7 +167,7 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
                 `Target language: ${targetLanguageName}, ` +
                 `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
                 `Question: ${questionContext}, ` +
-                `Correct answer: "${evaluationItem.systemAnswer}", ` +
+                `Correct answer (List): "${targetTexts}", ` +
                 `Student's answer: "${evaluationItem.userAnswer}"`
             );
         });
@@ -189,13 +189,18 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
            - *Logic:* If the student's text is identical to the target text after trimming spaces and lowercase conversion, mark it TRUE.
         
         2. **Source-Based Validation (Fix for synonyms)**:
-           - Do NOT strictly limit the "Correct Answer" to the provided list. The list is non-exhaustive.
-           - Evaluate the relationship between the **Student's Answer** and the **Original Question (Source Term)** directly.
-           - If the student's answer is a valid, natural translation or a close synonym of the Source Term (even if not listed in the "Correct Answer" field), mark it TRUE.
+           - Evaluate the relationship between the **Student's Answer** and the **Source Word** directly.
+           - If the student's answer is a valid, natural translation or a close synonym of the Source Word (even if not listed in the "Target word(s)"), mark it TRUE.
         
-        3. **Subset & Context**:
-           - If the source term has multiple meanings (e.g., "A, B") and the student answers with only "A", it is CORRECT.
-           - Accept dialect variations or common alternative translations if they are widely used.
+        3. **Multi-Value & Partial Match (Crucial for Vocabulary)**:
+           - When the "Target word(s)" or "Correct answer" contains multiple meanings separated by commas (e.g., "Meaning A, Meaning B"):
+             - **ONE OF MANY:** The student is CORRECT if they provide **ANY ONE** of the meanings (e.g., just "Meaning A").
+             - **ALL:** The student is CORRECT if they provide **ALL** meanings (e.g., "Meaning A, Meaning B").
+             - **SYNONYM:** The student is CORRECT if they provide a valid synonym for **ANY** of the meanings.
+           - *Example:* Source "조직에 편입하다", Targets "gia nhập tổ chức, sát nhập tổ chức".
+             - Student answers "gia nhập tổ chức" -> MARK TRUE.
+             - Student answers "sát nhập tổ chức" -> MARK TRUE.
+             - Student answers "gia nhập tổ chức, sát nhập tổ chức" -> MARK TRUE.
         
         OUTPUT FORMAT:
         Return ONLY a valid JSON array. No markdown, no code blocks.
@@ -205,7 +210,7 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
             {
                 "answerIndex": 0,
                 "isCorrect": true/false,
-                "explanation": "Brief explanation in Vietnamese. If accepted as a synonym/variant, mention it."
+                "explanation": "Brief explanation in Vietnamese. Explicitly state if the answer is one of the valid meanings."
             }
         ]
         `;
@@ -232,96 +237,6 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
             return results;
         } catch (error) {
             this.logger.error('Error evaluating fill-in-blank answers in batch:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Evaluate fill-in-blank answer using AI
-     */
-    public async evaluateFillInBlankAnswer(
-        vocab: VocabWithTextTargets,
-        userAnswer: string,
-        systemAnswer: string,
-        questionType: 'textSource' | 'textTarget',
-        userId?: string,
-        retryCount = 0,
-    ): Promise<{ isCorrect: boolean; explanation?: string }> {
-        try {
-            const sourceLanguage = await this.getLanguageName(vocab.sourceLanguageCode);
-            const targetLanguage = await this.getLanguageName(vocab.targetLanguageCode);
-            const sourceText = vocab.textSource;
-            const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
-
-            const isAskingSource = questionType === 'textSource';
-            const questionContext = isAskingSource
-                ? `What is the translation of "${sourceText}" in ${targetLanguage}?`
-                : `What is the translation of "${systemAnswer}" in ${sourceLanguage}?`;
-
-            const taskDesc =
-                `Determine if the student's answer "${userAnswer}" is semantically correct ` +
-                `and contextually appropriate as a translation/meaning of "${systemAnswer}" ` +
-                'in the context of this vocabulary.';
-
-            const prompt = `
-You are a language learning assistant. Evaluate if a student's answer is semantically correct and contextually appropriate.
-
-Context:
-- Source language: ${sourceLanguage}
-- Target language: ${targetLanguage}
-- Source word: "${sourceText}"
-- Target word(s): "${targetTexts}"
-- Question: ${questionContext}
-- Correct answer: "${systemAnswer}"
-- Student's answer: "${userAnswer}"
-
-Task: ${taskDesc}
-
-Consider:
-1. Semantic equivalence (same meaning)
-2. Contextual appropriateness
-3. Acceptable variations (different forms, synonyms, etc.)
-4. Common translation alternatives
-
-Format your response as JSON:
-{
-    "isCorrect": true/false,
-    "explanation": "brief explanation by Vietnamese language of why the answer is correct or incorrect"
-}
-
-Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
-            `;
-
-            const provider = await this.providerFactory.getProvider(userId);
-            const text = await provider.generateContent(prompt, userId);
-
-            const parsedResponse = this.parseFillInBlankEvaluationResponse(text);
-
-            return {
-                isCorrect: parsedResponse.isCorrect,
-                explanation: parsedResponse.explanation,
-            };
-        } catch (error) {
-            this.logger.error(
-                `Error evaluating fill-in-blank answer for vocab ${vocab.id} (attempt ${
-                    retryCount + 1
-                }):`,
-                error,
-            );
-
-            if (retryCount < AI_CONFIG.maxRetries) {
-                this.logger.warn(`Retrying evaluation for vocab ${vocab.id}...`);
-                await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1));
-                return this.evaluateFillInBlankAnswer(
-                    vocab,
-                    userAnswer,
-                    systemAnswer,
-                    questionType,
-                    userId,
-                    retryCount + 1,
-                );
-            }
-
             throw error;
         }
     }
@@ -702,40 +617,6 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     }
 
     /**
-     * Generate a single question for a vocabulary item
-     */
-    public async generateQuestionForVocab(
-        vocab: VocabWithTextTargets,
-        retryCount = 0,
-        userId?: string,
-    ): Promise<MultipleChoiceQuestion | null> {
-        try {
-            // Randomly choose whether to ask about source or target
-            const isAskingSource = Math.random() < AI_CONFIG.sourceQuestionProbability;
-
-            if (isAskingSource) {
-                return await this.generateSourceQuestion(vocab, userId);
-            } else {
-                return await this.generateTargetQuestion(vocab, userId);
-            }
-        } catch (error) {
-            this.logger.error(
-                `Error generating question for vocab ${vocab.id} (attempt ${retryCount + 1}):`,
-                error,
-            );
-
-            // Retry logic for transient errors
-            if (retryCount < AI_CONFIG.maxRetries) {
-                this.logger.warn(`Retrying question generation for vocab ${vocab.id}...`);
-                await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1)); // Exponential backoff
-                return this.generateQuestionForVocab(vocab, retryCount + 1);
-            }
-
-            return null;
-        }
-    }
-
-    /**
      * Generate all multiple choice questions in a single batch request
      */
     private async generateAllQuestionsInBatch(
@@ -962,187 +843,6 @@ Return ONLY the JSON array, no markdown formatting, no code blocks, no additiona
 
         this.languageNameCache.set(code, language.name);
         return language.name;
-    }
-
-    /**
-     * Common method to generate question with prompt template
-     */
-    private async generateQuestionWithPrompt(
-        promptData: {
-            questionType: 'source' | 'target';
-            sourceLanguage: string;
-            targetLanguage: string;
-            sourceText: string;
-            targetText: string;
-            correctAnswer: string;
-            correctAnswerLabel: string;
-        },
-        userId?: string,
-    ): Promise<{
-        content: string;
-        options: Array<{ label: string; value: string }>;
-        correctAnswer: string;
-    }> {
-        const isSourceQuestion = promptData.questionType === 'source';
-        const questionText = isSourceQuestion
-            ? `What is the translation of '${promptData.sourceText}' in [target_language]?`
-            : `What is the translation of '${promptData.targetText}' in [source_language]?`;
-
-        const prompt = `
-You are a language learning assistant. Generate a multiple choice question for vocabulary practice.
-
-Context:
-- Source language: ${promptData.sourceLanguage}
-- Target language: ${promptData.targetLanguage}
-- Source text: "${promptData.sourceText}"
-- Target text: "${promptData.targetText}"
-- Correct answer: "${promptData.correctAnswer}"
-
-Task: Create a question asking "${questionText}"
-
-Requirements:
-1. The question should ask for the translation
-2. Provide ${AI_CONFIG.questionCount} options (A, B, C, D)
-3. One option should be the correct answer: "${promptData.correctAnswerLabel}"
-4. Generate ${AI_CONFIG.questionCount - 1} plausible but incorrect options that are:
-   - Similar length to the correct answer
-   - Related to the same topic/context
-   - Common words in the target language
-   - Not obviously wrong
-
-Format your response as JSON:
-{
-    "content": "${questionText}",
-    "options": [
-        {"label": "${promptData.correctAnswerLabel}", "value": "${promptData.correctAnswerLabel}"},
-        {"label": "wrong_option_1", "value": "wrong_option_1"},
-        {"label": "wrong_option_2", "value": "wrong_option_2"},
-        {"label": "wrong_option_3", "value": "wrong_option_3"}
-    ],
-    "correctAnswer": "${promptData.correctAnswerLabel}"
-}
-
-Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
-        `;
-
-        const provider = await this.providerFactory.getProvider(userId);
-        const text = await provider.generateContent(prompt, userId);
-
-        const parsedResponse = this.parseJsonResponse(text);
-
-        const shuffledOptions = shuffleArray(parsedResponse.options);
-
-        return {
-            ...parsedResponse,
-            options: shuffledOptions,
-        };
-    }
-
-    /**
-     * Parse JSON response from AI model
-     */
-    private parseJsonResponse(text: string): {
-        content: string;
-        options: Array<{ label: string; value: string }>;
-        correctAnswer: string;
-    } {
-        let jsonText = text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        return JSON.parse(jsonText) as {
-            content: string;
-            options: Array<{ label: string; value: string }>;
-            correctAnswer: string;
-        };
-    }
-
-    private parseFillInBlankEvaluationResponse(text: string): {
-        isCorrect: boolean;
-        explanation?: string;
-    } {
-        let jsonText = text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        return JSON.parse(jsonText) as {
-            isCorrect: boolean;
-            explanation?: string;
-        };
-    }
-
-    /**
-     * Generate question asking for source text (answer is target)
-     */
-    private async generateSourceQuestion(
-        vocab: VocabWithTextTargets,
-        userId?: string,
-    ): Promise<MultipleChoiceQuestion> {
-        // Randomly select one target text as the correct answer
-        const correctTarget =
-            vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
-
-        const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
-        const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
-
-        const promptData = {
-            questionType: 'source' as const,
-            sourceLanguage: sourceLanguageName,
-            targetLanguage: targetLanguageName,
-            sourceText: vocab.textSource,
-            targetText: correctTarget.textTarget,
-            correctAnswer: correctTarget.textTarget,
-            correctAnswerLabel: correctTarget.textTarget,
-        };
-
-        const parsedResponse = await this.generateQuestionWithPrompt(promptData, userId);
-
-        return {
-            correctAnswer: parsedResponse.correctAnswer,
-            type: QUESTION_TYPES.TARGET,
-            content: parsedResponse.content,
-            options: parsedResponse.options,
-        };
-    }
-
-    /**
-     * Generate question asking for target text (answer is source)
-     */
-    private async generateTargetQuestion(
-        vocab: VocabWithTextTargets,
-        userId?: string,
-    ): Promise<MultipleChoiceQuestion> {
-        // Randomly select one target text
-        const selectedTarget =
-            vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
-
-        const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
-        const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
-
-        const promptData = {
-            questionType: 'target' as const,
-            sourceLanguage: sourceLanguageName,
-            targetLanguage: targetLanguageName,
-            sourceText: vocab.textSource,
-            targetText: selectedTarget.textTarget,
-            correctAnswer: vocab.textSource,
-            correctAnswerLabel: vocab.textSource,
-        };
-
-        const parsedResponse = await this.generateQuestionWithPrompt(promptData, userId);
-
-        return {
-            correctAnswer: parsedResponse.correctAnswer,
-            type: QUESTION_TYPES.SOURCE,
-            content: parsedResponse.content,
-            options: parsedResponse.options,
-        };
     }
 
     private parseEvaluationResponse(text: string): EvaluationResult {
