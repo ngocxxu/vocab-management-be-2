@@ -6,6 +6,7 @@ import { LanguageRepository } from '../../language/repository';
 import { EReminderType } from '../../reminder/util';
 import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/util';
+import { WordTypeRepository } from '../../word-type/repository';
 import { AudioEvaluationJobData } from '../processor/audio-evaluation.processor';
 import { MultipleChoiceGenerationJobData } from '../processor/multiple-choice-generation.processor';
 import { AiProviderFactory } from '../provider/ai-provider.factory';
@@ -19,6 +20,8 @@ export class AiService {
     public constructor(
         private readonly providerFactory: AiProviderFactory,
         private readonly languageRepository: LanguageRepository,
+        private readonly wordTypeRepository: WordTypeRepository,
+
         @InjectQueue(EReminderType.AUDIO_EVALUATION)
         private readonly audioEvaluationQueue: Queue,
         @InjectQueue(EReminderType.MULTIPLE_CHOICE_GENERATION)
@@ -39,24 +42,38 @@ export class AiService {
         retryCount = 0,
     ): Promise<CreateTextTargetInput> {
         try {
+            const allowedWordTypes = await this.wordTypeRepository.findAll();
+            const simplifiedWordTypes = allowedWordTypes.map((wt) => ({
+                id: wt.id,
+                name: wt.name,
+                description: wt.description,
+            }));
+
+            const wordTypeListString = JSON.stringify(simplifiedWordTypes, null, 2);
+
             const prompt = `
-You are a language learning assistant. Translate a vocabulary word from ${sourceLanguageCode} to ${targetLanguageCode}.
+You are an expert linguistic API. Translate a vocabulary word from ${sourceLanguageCode} to ${targetLanguageCode} and classify it strictly according to the provided schema.
 
-Source text: "${textSource}"
-Source language: ${sourceLanguageCode}
-Target language: ${targetLanguageCode}
+Input Data:
+- Source Text: "${textSource}"
+- Source Language: ${sourceLanguageCode}
+- Target Language: ${targetLanguageCode}
 
-Task: Provide a complete translation with:
-1. textTarget: the translated text in ${targetLanguageCode}
-2. grammar: part of speech (noun, verb, adjective, adverb, interjection, preposition, conjunction, pronoun, determiner)
-3. explanationSource: brief explanation of the word in ${sourceLanguageCode}
-4. explanationTarget: brief explanation of the word in ${targetLanguageCode}
-5. vocabExamples: array with 1 example showing usage in sentences
+*** AUTHORIZED WORD TYPES ***
+You must classify the "wordType" field using EXACTLY one of the strings from this list:
+${wordTypeListString}
 
-Format your response as JSON:
+Task Requirements:
+1. textTarget: The translation in ${targetLanguageCode}.
+2. wordType: Select the most accurate 'name' from the Authorized Word Types list above.
+3. explanationSource: Brief meaning in ${sourceLanguageCode}.
+4. explanationTarget: Brief meaning in ${targetLanguageCode}.
+5. vocabExamples: One clear usage example.
+
+Format your response as a JSON object (NO Markdown, NO code blocks):
 {
     "textTarget": "translated_word",
-    "grammar": "part_of_speech",
+    "wordTypeId": "MUST be the exact UUID/ID from the reference list matching the word type",
     "explanationSource": "explanation in source language",
     "explanationTarget": "explanation in target language",
     "vocabExamples": [
@@ -66,9 +83,7 @@ Format your response as JSON:
         }
     ]
 }
-
-Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
-            `;
+`;
 
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);

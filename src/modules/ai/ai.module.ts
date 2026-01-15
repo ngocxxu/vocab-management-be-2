@@ -8,6 +8,7 @@ import { NotificationModule } from '../notification/notification.module';
 import { ReminderModule } from '../reminder/reminder.module';
 import { EReminderType } from '../reminder/util';
 import { VocabModule } from '../vocab/vocab.module';
+import { WordTypeModule } from '../word-type/word-type.module';
 import { AudioEvaluationProcessor } from './processor/audio-evaluation.processor';
 import { FillInBlankEvaluationProcessor } from './processor/fill-in-blank-evaluation.processor';
 import { MultipleChoiceGenerationProcessor } from './processor/multiple-choice-generation.processor';
@@ -25,6 +26,7 @@ import { AiService } from './service/ai.service';
         LanguageModule,
         NotificationModule,
         ReminderModule,
+        WordTypeModule,
         forwardRef(() => VocabModule),
         BullModule.registerQueue({
             name: EReminderType.AUDIO_EVALUATION,

@@ -8,6 +8,6 @@ import { WordTypeService } from './service';
     imports: [CommonModule],
     controllers: [WordTypeController],
     providers: [WordTypeRepository, WordTypeService],
-    exports: [WordTypeService],
+    exports: [WordTypeService, WordTypeRepository],
 })
 export class WordTypeModule {}
