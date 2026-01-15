@@ -48,7 +48,7 @@ export class AuthGuard implements CanActivate {
         }
 
         if (!token) {
-            this.logger.error('No authentication token provided');
+            this.logger.warn('No authentication token provided');
             throw new UnauthorizedException('No authentication token provided');
         }
 

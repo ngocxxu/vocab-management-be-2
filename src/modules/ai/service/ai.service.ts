@@ -197,10 +197,6 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
              - **ONE OF MANY:** The student is CORRECT if they provide **ANY ONE** of the meanings (e.g., just "Meaning A").
              - **ALL:** The student is CORRECT if they provide **ALL** meanings (e.g., "Meaning A, Meaning B").
              - **SYNONYM:** The student is CORRECT if they provide a valid synonym for **ANY** of the meanings.
-           - *Example:* Source "조직에 편입하다", Targets "gia nhập tổ chức, sát nhập tổ chức".
-             - Student answers "gia nhập tổ chức" -> MARK TRUE.
-             - Student answers "sát nhập tổ chức" -> MARK TRUE.
-             - Student answers "gia nhập tổ chức, sát nhập tổ chức" -> MARK TRUE.
         
         OUTPUT FORMAT:
         Return ONLY a valid JSON array. No markdown, no code blocks.
