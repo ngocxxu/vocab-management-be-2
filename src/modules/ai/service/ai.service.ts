@@ -160,33 +160,39 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const evaluationDetails = (await Promise.all(evaluationDetailsPromises)).join('\n\n');
 
         const prompt = `
-You are a language learning assistant. Evaluate if students' answers are semantically correct and contextually appropriate.
-
-Answer evaluations:
-${evaluationDetails}
-
-Task: Evaluate each answer and determine if it's semantically correct and contextually appropriate as a translation/meaning of the correct answer.
-
-IMPORTANT: Each vocabulary item may have multiple correct answers (listed as "Target word(s)").
-
-For each answer, consider:
-1. Exact match: If the student's answer exactly matches any of the correct answers listed in "Target word(s)", mark it as correct
-2. Semantic equivalence (same meaning) to any of the correct answers
-3. Contextual appropriateness
-4. Acceptable variations (different forms, synonyms, etc.) of any correct answer
-5. Common translation alternatives that match any of the correct answers
-
-Format your response as JSON array:
-[
-    {
-        "answerIndex": 0,
-        "isCorrect": true/false,
-        "explanation": "brief explanation in Vietnamese of why the answer is correct or incorrect"
-    },
-    ...
-]
-
-Return ONLY the JSON array, no markdown formatting, no code blocks, no additional text.
+        You are an expert linguistic evaluator. Your task is to assess student translations with semantic flexibility, avoiding rigid string matching.
+        
+        Input Data:
+        ${evaluationDetails}
+        
+        CRITICAL EVALUATION RULES:
+        
+        1. **Normalization (Fix for formatting errors)**:
+           - Before comparing, ignore all case sensitivity (uppercase/lowercase).
+           - LEADING/TRAILING WHITESPACE or extra spaces between words must be IGNORED.
+           - Punctuation differences should be ignored unless they change the meaning.
+           - *Logic:* If the student's text is identical to the target text after trimming spaces and lowercase conversion, mark it TRUE.
+        
+        2. **Source-Based Validation (Fix for synonyms)**:
+           - Do NOT strictly limit the "Correct Answer" to the provided list. The list is non-exhaustive.
+           - Evaluate the relationship between the **Student's Answer** and the **Original Question (Source Term)** directly.
+           - If the student's answer is a valid, natural translation or a close synonym of the Source Term (even if not listed in the "Correct Answer" field), mark it TRUE.
+        
+        3. **Subset & Context**:
+           - If the source term has multiple meanings (e.g., "A, B") and the student answers with only "A", it is CORRECT.
+           - Accept dialect variations or common alternative translations if they are widely used.
+        
+        OUTPUT FORMAT:
+        Return ONLY a valid JSON array. No markdown, no code blocks.
+        Explanation must be in Vietnamese.
+        
+        [
+            {
+                "answerIndex": 0,
+                "isCorrect": true/false,
+                "explanation": "Brief explanation in Vietnamese. If accepted as a synonym/variant, mention it."
+            }
+        ]
         `;
 
         try {
