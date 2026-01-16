@@ -23,6 +23,9 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@bull-board/api": "^6.16.2",
+    "@bull-board/express": "^6.16.2",
+    "@bull-board/nestjs": "^6.16.2",
     "@google/generative-ai": "^0.24.1",
     "@nestjs/bull": "^11.0.2",
     "@nestjs/common": "^10.3.0",
@@ -85,5 +88,16 @@
     "hooks": {
       "pre-commit": "npm run lint"
     }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "msgpackr-extract",
+      "prisma",
+      "protobufjs"
+    ]
   }
 }

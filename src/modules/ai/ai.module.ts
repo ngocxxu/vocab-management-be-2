@@ -1,3 +1,5 @@
+import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Module, forwardRef } from '@nestjs/common';
 import { CommonModule } from '../common';
@@ -34,8 +36,16 @@ import { AiService } from './service/ai.service';
         BullModule.registerQueue({
             name: EReminderType.MULTIPLE_CHOICE_GENERATION,
         }),
+        BullBoardModule.forFeature({
+            name: EReminderType.MULTIPLE_CHOICE_GENERATION,
+            adapter: BullAdapter,
+        }),
         BullModule.registerQueue({
             name: EReminderType.FILL_IN_BLANK_EVALUATION,
+        }),
+        BullBoardModule.forFeature({
+            name: EReminderType.FILL_IN_BLANK_EVALUATION,
+            adapter: BullAdapter,
         }),
     ],
     providers: [

@@ -1,3 +1,5 @@
+import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Module, forwardRef } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
@@ -14,6 +16,10 @@ import { VocabService, VocabMasteryService } from './service';
         forwardRef(() => AiModule),
         BullModule.registerQueue({
             name: EReminderType.VOCAB_TRANSLATION,
+        }),
+        BullBoardModule.forFeature({
+            name: EReminderType.VOCAB_TRANSLATION,
+            adapter: BullAdapter,
         }),
     ],
     controllers: [VocabController],

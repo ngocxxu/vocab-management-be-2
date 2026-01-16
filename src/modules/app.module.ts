@@ -1,3 +1,6 @@
+import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
@@ -31,17 +34,37 @@ import { WordTypeModule } from './word-type/word-type.module';
         BullModule.forRoot({
             redis: process.env.REDIS_URL,
         }),
+        BullBoardModule.forRoot({
+            route: '/admin/queues',
+            adapter: ExpressAdapter,
+        }),
         BullModule.registerQueue({
             name: EReminderType.EMAIL_REMINDER,
+        }),
+        BullBoardModule.forFeature({
+            name: EReminderType.EMAIL_REMINDER,
+            adapter: BullAdapter,
         }),
         BullModule.registerQueue({
             name: EReminderType.NOTIFICATION,
         }),
+        BullBoardModule.forFeature({
+            name: EReminderType.NOTIFICATION,
+            adapter: BullAdapter,
+        }),
         BullModule.registerQueue({
             name: EReminderType.AUDIO_EVALUATION,
         }),
+        BullBoardModule.forFeature({
+            name: EReminderType.AUDIO_EVALUATION,
+            adapter: BullAdapter,
+        }),
         BullModule.registerQueue({
             name: EReminderType.VOCAB_TRANSLATION,
+        }),
+        BullBoardModule.forFeature({
+            name: EReminderType.VOCAB_TRANSLATION,
+            adapter: BullAdapter,
         }),
         ThrottlerModule.forRootAsync({
             useFactory: (): ThrottlerModuleOptions => ({
