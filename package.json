@@ -1,6 +1,6 @@
 {
   "name": "vocab-management",
-  "version": "1.17.2",
+  "version": "1.19.2",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
