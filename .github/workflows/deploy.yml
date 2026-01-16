@@ -126,7 +126,7 @@ jobs:
                 description: $desc,
                 fields: [
                   { name: "Commit Message", value: $msg, inline: false },
-                  { name: "Commit Hash", value: ("`" + ($sha | strflocaltime)[0:7] + "`"), inline: true },
+                  { name: "Commit Hash", value: ("`" + $sha[0:7] + "`"), inline: true },
                   { name: "Author", value: $actor, inline: true },
                   { name: "View Logs", value: ("[Click Here](" + $url + ")"), inline: true }
                 ],
