@@ -161,13 +161,15 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
                 evaluationItem.questionType === 'textSource'
                     ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
                     : `What is the translation of "${evaluationItem.systemAnswer}" in ${sourceLanguageName}?`;
+            const correctAnswer =
+                evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
 
             return (
                 `${idx + 1}. Source language: ${sourceLanguageName}, ` +
                 `Target language: ${targetLanguageName}, ` +
                 `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
                 `Question: ${questionContext}, ` +
-                `Correct answer (List): "${targetTexts}", ` +
+                `Correct answer (List): "${correctAnswer}", ` +
                 `Student's answer: "${evaluationItem.userAnswer}"`
             );
         });
