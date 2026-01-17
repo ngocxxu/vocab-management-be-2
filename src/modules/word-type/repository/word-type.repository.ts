@@ -30,6 +30,7 @@ export class WordTypeRepository {
 
     public async findById(id: string): Promise<WordType | null> {
         const cached = await this.redisService.jsonGet<WordType>(RedisPrefix.WORD_TYPE, `id:${id}`);
+
         if (cached) {
             return cached;
         }
