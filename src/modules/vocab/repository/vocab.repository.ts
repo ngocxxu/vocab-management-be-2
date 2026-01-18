@@ -20,22 +20,17 @@ export class VocabRepository {
         take: number,
         orderBy: Prisma.VocabOrderByWithRelationInput,
     ): Promise<{ totalItems: number; vocabs: Vocab[] }> {
+        // 1. Caching Layer
         const cacheKey = `list:${JSON.stringify({ ...query, userId })}`;
-
         const cached = await this.redisService.jsonGet<{
             totalItems: number;
             vocabs: Vocab[];
         }>(RedisPrefix.VOCAB, cacheKey);
 
-        if (cached?.vocabs && Array.isArray(cached.vocabs)) {
-            return cached;
-        }
+        if (cached?.vocabs && Array.isArray(cached.vocabs)) return cached;
+        if (cached) await this.redisService.del(RedisPrefix.VOCAB, cacheKey);
 
-        // Clear invalid cache if exists
-        if (cached) {
-            await this.redisService.del(RedisPrefix.VOCAB, cacheKey);
-        }
-
+        // 2. Build WHERE Condition
         const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
             stringFields: [
                 'textSource',
@@ -45,56 +40,77 @@ export class VocabRepository {
                 'languageFolderId',
             ],
             customMap: (input, w) => {
-                if (userId) {
-                    (w as Prisma.VocabWhereInput).userId = userId;
-                }
-                if (
-                    input.subjectIds &&
-                    Array.isArray(input.subjectIds) &&
-                    input.subjectIds.length > 0
-                ) {
+                if (userId) (w as Prisma.VocabWhereInput).userId = userId;
+                if (input.subjectIds?.length) {
                     (w as Prisma.VocabWhereInput).textTargets = {
                         some: {
-                            textTargetSubjects: {
-                                some: {
-                                    subjectId: { in: input.subjectIds },
-                                },
-                            },
+                            textTargetSubjects: { some: { subjectId: { in: input.subjectIds } } },
                         },
                     };
                 }
             },
         });
 
-        const [totalItems, vocabs] = await Promise.all([
-            this.prismaService.vocab.count({ where }),
-            this.prismaService.vocab.findMany({
+        // 3. Execution Strategy
+        let result: { totalItems: number; vocabs: Vocab[] };
+        const isMasterySort = query.sortBy === 'masteryScore';
+
+        if (isMasterySort) {
+            const candidates = await this.prismaService.vocab.findMany({
                 where,
-                include: {
-                    sourceLanguage: true,
-                    targetLanguage: true,
-                    languageFolder: true,
-                    textTargets: {
-                        include: {
-                            wordType: true,
-                            vocabExamples: true,
-                            textTargetSubjects: {
-                                include: {
-                                    subject: true,
-                                },
-                            },
-                        },
+                select: {
+                    id: true,
+                    vocabMasteries: {
+                        where: { userId },
+                        select: { masteryScore: true },
+                        take: 1,
                     },
                 },
-                orderBy,
-                skip,
-                take,
-            }),
-        ]);
+            });
 
-        const result = { totalItems, vocabs: vocabs || [] };
+            // Sort in Memory
+            const sortFactor = query.sortOrder === 'asc' ? 1 : -1;
+            candidates.sort((a, b) => {
+                const scoreA = a.vocabMasteries[0]?.masteryScore ?? 0;
+                const scoreB = b.vocabMasteries[0]?.masteryScore ?? 0;
+                return (scoreA - scoreB) * sortFactor;
+            });
+
+            // Pagination in Memory
+            const totalItems = candidates.length;
+            const pagedIds = candidates.slice(skip, skip + take).map((c) => c.id);
+
+            // Fetch Full Data for the specific page
+            let vocabs: Vocab[] = [];
+            if (pagedIds.length > 0) {
+                const unorderedVocabs = await this.prismaService.vocab.findMany({
+                    where: { id: { in: pagedIds } },
+                    include: this.getVocabIncludes(userId),
+                });
+
+                // Restore sort order (WHERE IN does not guarantee order)
+                const vocabMap = new Map(unorderedVocabs.map((v) => [v.id, v]));
+                vocabs = pagedIds.map((id) => vocabMap.get(id)).filter(Boolean) as Vocab[];
+            }
+
+            result = { totalItems, vocabs };
+        } else {
+            // STRATEGY B: Standard Prisma (Efficient for DB-level sorting)
+            const [totalItems, vocabs] = await Promise.all([
+                this.prismaService.vocab.count({ where }),
+                this.prismaService.vocab.findMany({
+                    where,
+                    include: this.getVocabIncludes(userId),
+                    orderBy,
+                    skip,
+                    take,
+                }),
+            ]);
+            result = { totalItems, vocabs: vocabs || [] };
+        }
+
+        // 4. Cache & Return
         await this.setJsonCacheSafely(cacheKey, result);
-
         return result;
     }
 
@@ -138,6 +154,15 @@ export class VocabRepository {
                         },
                     },
                 },
+                vocabMasteries: {
+                    where: {
+                        userId,
+                    },
+                    select: {
+                        masteryScore: true,
+                    },
+                    take: 1,
+                },
             },
         });
 
@@ -175,6 +200,15 @@ export class VocabRepository {
                             },
                         },
                     },
+                },
+                vocabMasteries: {
+                    where: {
+                        userId,
+                    },
+                    select: {
+                        masteryScore: true,
+                    },
+                    take: 1,
                 },
             },
         });
@@ -365,5 +399,25 @@ export class VocabRepository {
                 throw error;
             }
         }
+    }
+
+    private getVocabIncludes(userId: string): Prisma.VocabInclude {
+        return {
+            sourceLanguage: true,
+            targetLanguage: true,
+            languageFolder: true,
+            textTargets: {
+                include: {
+                    wordType: true,
+                    vocabExamples: true,
+                    textTargetSubjects: { include: { subject: true } },
+                },
+            },
+            vocabMasteries: {
+                where: { userId },
+                select: { masteryScore: true },
+                take: 1,
+            },
+        };
     }
 }

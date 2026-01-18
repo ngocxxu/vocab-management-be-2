@@ -1,6 +1,6 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty } from '@nestjs/swagger';
-import { Language, TextTarget, Vocab } from '@prisma/client';
+import { Language, TextTarget, Vocab, VocabMastery } from '@prisma/client';
 import { LanguageDto, TextTargetDto } from '.';
 
 export class VocabDto {
@@ -50,11 +50,19 @@ export class VocabDto {
     })
     public readonly textTargets: TextTargetDto[];
 
+    @ApiProperty({
+        description: 'Mastery score for this vocabulary',
+        example: 5,
+        required: false,
+    })
+    public readonly masteryScore?: number;
+
     public constructor(
         entity: Vocab & {
             sourceLanguage?: Language;
             targetLanguage?: Language;
             textTargets?: TextTarget[];
+            vocabMasteries?: VocabMastery[];
         },
     ) {
         this.id = entity.id;
@@ -72,5 +80,6 @@ export class VocabDto {
             ? new LanguageDto(entity.targetLanguage)
             : undefined;
         this.textTargets = entity.textTargets?.map((target) => new TextTargetDto(target)) ?? [];
+        this.masteryScore = entity.vocabMasteries?.[0]?.masteryScore;
     }
 }
