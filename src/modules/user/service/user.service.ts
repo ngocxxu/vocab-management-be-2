@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { IResponse } from '../../common';
@@ -24,7 +24,13 @@ export class UserService {
     public constructor(private readonly userRepository: UserRepository) {
         this.supabase = createClient(
             process.env.SUPABASE_URL ?? '',
-            process.env.SUPABASE_KEY ?? '',
+            process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false,
+                },
+            },
         );
     }
 
@@ -78,7 +84,7 @@ export class UserService {
             });
 
             if (error) {
-                throw new Error(`Supabase create error: ${error.code}`);
+                throw new Error(`Supabase create error: ${error.message}`);
             }
             if (!data.user) {
                 throw new Error('User data is missing from Supabase response');
@@ -109,17 +115,8 @@ export class UserService {
      */
     public async update(updateUserData: UserInput): Promise<UserDto> {
         try {
-            const {
-                id,
-                email,
-                firstName,
-                lastName,
-                phone,
-                avatar,
-                role,
-                isActive,
-                password,
-            } = updateUserData;
+            const { id, email, firstName, lastName, phone, avatar, role, isActive, password } =
+                updateUserData;
 
             if (!id) {
                 throw new Error('Supabase user ID is required for update');
@@ -132,22 +129,28 @@ export class UserService {
             }
 
             if (password) {
-                const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
-                    password,
-                });
+                const { error } = await this.supabase.auth.admin.updateUserById(
+                    existingUser.supabaseUserId ?? '',
+                    {
+                        password,
+                    },
+                );
                 if (error) {
-                    throw new Error(`Supabase update error: ${error.code}`);
+                    throw new Error(`Supabase update password error: ${error.message}`);
                 }
             }
 
             // 2. Update user in Supabase if email is being changed
             if (email && email !== existingUser.email) {
-                const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
-                    email,
-                });
+                const { error } = await this.supabase.auth.admin.updateUserById(
+                    existingUser.supabaseUserId ?? '',
+                    {
+                        email,
+                    },
+                );
 
                 if (error) {
-                    throw new Error(`Supabase update error: ${error.code}`);
+                    throw new Error(`Supabase update email error: ${error.message}`);
                 }
             }
 
@@ -179,18 +182,20 @@ export class UserService {
         try {
             const existingUser = await this.userRepository.findById(id);
             if (!existingUser) {
-                throw new Error('User not found');
+                throw new NotFoundException('User not found in local database');
             }
-            const { error } = await this.supabase.auth.admin.deleteUser(existingUser.supabaseUserId ?? '');
 
-            if (error) {
-                throw new Error(`Supabase delete error: ${error.code}`);
-            }
+            await this.supabase.auth.admin.deleteUser(
+                existingUser.supabaseUserId ?? '',
+            );
 
             const user = await this.userRepository.delete(id);
 
             return new UserDto({ ...user });
         } catch (error) {
+            if (error instanceof HttpException && error.getStatus()) {
+                throw error;
+            }
             PrismaErrorHandler.handle(error, 'delete', this.userErrorMapping);
         }
     }

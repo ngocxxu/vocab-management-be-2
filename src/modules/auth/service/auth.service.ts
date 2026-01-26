@@ -405,7 +405,7 @@ export class AuthService {
                         lastName: extractedUserData.lastName,
                         phone: extractedUserData.phone,
                         avatar: extractedUserData.avatar,
-                        role: UserRole.CUSTOMER,
+                        role: extractedUserData.role,
                         isActive: true,
                     },
                 });
@@ -468,6 +468,7 @@ export class AuthService {
         lastName: string;
         phone: string | null;
         avatar: string | null;
+        role: UserRole;
     } {
         const metadata = supabaseUser.user_metadata || supabaseUser.raw_user_meta_data || {};
         const email = supabaseUser.email || (metadata.email as string) || '';
@@ -493,12 +494,20 @@ export class AuthService {
 
         const phone = supabaseUser.phone || (metadata.phone as string) || null;
 
+        const roleFromMetadata = metadata.role as string;
+        const validRoles = Object.values(UserRole);
+        const role =
+            roleFromMetadata && validRoles.includes(roleFromMetadata as UserRole)
+                ? (roleFromMetadata as UserRole)
+                : UserRole.STAFF;
+
         return {
             email,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: phone ? phone.trim() : null,
             avatar: avatar ? avatar.trim() : null,
+            role,
         };
     }
 
