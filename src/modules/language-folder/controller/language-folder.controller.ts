@@ -30,7 +30,7 @@ export class LanguageFolderController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Find all language folders (admin only)' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageFolderDto })
     public async find(

@@ -26,9 +26,9 @@ export class SignUpInput {
 
     @ApiPropertyOptional({
         description: 'User role',
-        enum: ['CUSTOMER', 'ADMIN', 'STAFF'],
-        example: 'ADMIN',
-        default: 'ADMIN',
+        enum: ['ADMIN', 'MEMBER', 'GUEST'],
+        example: 'GUEST',
+        default: 'GUEST',
     })
     public readonly role?: UserRole;
 }

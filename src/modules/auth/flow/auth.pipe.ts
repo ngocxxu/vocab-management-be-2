@@ -47,8 +47,8 @@ export class SignUpPipe extends JoiValidationPipe {
                 'string.uri': 'Avatar must be a valid URL',
             }),
 
-            role: Joi.string().valid('CUSTOMER', 'ADMIN', 'STAFF').optional().messages({
-                'any.only': 'Role must be one of: CUSTOMER, ADMIN, STAFF',
+            role: Joi.string().valid('ADMIN', 'MEMBER', 'GUEST').optional().messages({
+                'any.only': 'Role must be one of: ADMIN, MEMBER, GUEST',
             }),
         });
     }

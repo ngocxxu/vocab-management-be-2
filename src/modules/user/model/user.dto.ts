@@ -30,7 +30,7 @@ export class UserDto {
     })
     public readonly avatar?: string;
 
-    @ApiProperty({ description: 'User role', enum: UserRole, example: UserRole.CUSTOMER })
+    @ApiProperty({ description: 'User role', enum: UserRole, example: UserRole.GUEST })
     public readonly role: UserRole;
 
     @ApiProperty({ description: 'User active status', example: true })

@@ -12,8 +12,8 @@ datasource db {
 
 enum UserRole {
   ADMIN
-  STAFF
-  CUSTOMER
+  MEMBER
+  GUEST
 }
 
 enum NotificationType {
@@ -331,7 +331,7 @@ model User {
   lastName               String                  @map("last_name")
   phone                  String?                 @map("phone")
   avatar                 String?                 @map("avatar")
-  role                   UserRole                @default(CUSTOMER) @map("role")
+  role                   UserRole                @default(GUEST) @map("role")
   isActive               Boolean                 @default(true) @map("is_active")
   supabaseUserId         String?                 @unique @map("supabase_user_id")
   createdAt              DateTime                @default(now()) @map("created_at")

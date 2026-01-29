@@ -175,8 +175,8 @@ export class NotificationFilterInput {
 export class SendNotificationToRoleInput {
     @ApiProperty({
         description: 'User role to send notification to',
-        enum: ['ADMIN', 'STAFF', 'CUSTOMER'],
-        example: 'STAFF',
+        enum: ['ADMIN', 'MEMBER', 'GUEST'],
+        example: 'MEMBER',
     })
     public readonly role: string;
 

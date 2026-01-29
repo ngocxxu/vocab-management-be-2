@@ -18,7 +18,7 @@ export class CloudinaryController {
 
     @Get('upload-signature')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Generate Cloudinary upload signature' })
     @ApiResponse({
         status: HttpStatus.OK,

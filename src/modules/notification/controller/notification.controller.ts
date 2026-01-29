@@ -29,7 +29,7 @@ export class NotificationController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Find all notifications (Admin only)' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
     public async find(): Promise<IResponse<NotificationDto[]>> {
@@ -38,7 +38,7 @@ export class NotificationController {
 
     @Get('my')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get current user notifications' })
     @ApiQuery({ name: 'includeDeleted', required: false, type: Boolean })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
@@ -51,7 +51,7 @@ export class NotificationController {
 
     @Get('my/unread')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get unread notifications for current user' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
     public async getMyUnreadNotifications(
@@ -62,7 +62,7 @@ export class NotificationController {
 
     @Get('my/unread-count')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get unread notification count for current user' })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -78,7 +78,7 @@ export class NotificationController {
 
     @Patch(':id/my/mark-as-read')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Mark notification as read for current user' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     public async markAsRead(
@@ -90,7 +90,7 @@ export class NotificationController {
 
     @Patch('my/mark-all-as-read')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Mark all notifications as read for current user' })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -109,7 +109,7 @@ export class NotificationController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find notification by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
@@ -119,7 +119,7 @@ export class NotificationController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Create notification' })
     @ApiResponse({ status: HttpStatus.CREATED, type: NotificationDto })
     public async create(@Body() input: NotificationInput): Promise<NotificationDto> {
@@ -130,7 +130,7 @@ export class NotificationController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Update notification' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
@@ -145,7 +145,7 @@ export class NotificationController {
 
     @Patch(':id/status')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update notification status for current user' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
@@ -171,7 +171,7 @@ export class NotificationController {
 
     @Delete(':id/my')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete notification for current user' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     public async deleteMy(@Param('id') notificationId: string): Promise<NotificationDto> {
@@ -180,7 +180,7 @@ export class NotificationController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.STAFF])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Delete notification (Admin only)' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })

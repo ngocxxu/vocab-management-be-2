@@ -98,7 +98,7 @@ export class UserService {
                 lastName,
                 phone: phone ?? supabaseUser.phone,
                 avatar,
-                role: role ?? UserRole.STAFF,
+                role: role ?? UserRole.MEMBER,
                 isActive: true,
             });
 

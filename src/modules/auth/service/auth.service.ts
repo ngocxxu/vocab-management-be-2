@@ -41,7 +41,7 @@ export class AuthService {
                 password,
                 options: {
                     data: {
-                        role: role ?? UserRole.STAFF,
+                        role: role ?? UserRole.GUEST,
                     },
                 },
             });
@@ -63,7 +63,7 @@ export class AuthService {
                     lastName: lastName && lastName.trim() !== '' ? lastName : '',
                     phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
                     avatar: avatar && avatar.trim() !== '' ? avatar : null,
-                    role: role ?? UserRole.STAFF,
+                    role: role ?? UserRole.GUEST,
                     isActive: true,
                 },
             });
@@ -499,7 +499,7 @@ export class AuthService {
         const role =
             roleFromMetadata && validRoles.includes(roleFromMetadata as UserRole)
                 ? (roleFromMetadata as UserRole)
-                : UserRole.STAFF;
+                : UserRole.GUEST;
 
         return {
             email,
