@@ -25,18 +25,16 @@ export class RolesGuard implements CanActivate {
             throw new UnauthorizedException('User not authenticated');
         }
 
-        if (!request.user.user_metadata?.role) {
+        const role =
+            request.currentUser?.role ?? (request.user.user_metadata?.role as string | undefined);
+        if (!role) {
             throw new ForbiddenException('User has no role assigned');
         }
 
-        const user = request.user;
-        const hasRole = roles.includes(user.user_metadata.role as string);
-
+        const hasRole = roles.includes(role);
         if (!hasRole) {
             throw new ForbiddenException(
-                `Access denied. Required roles: ${roles.join(', ')}, but user has: ${
-                    user.user_metadata.role
-                }`,
+                `Access denied. Required roles: ${roles.join(', ')}, but user has: ${role}`,
             );
         }
 
