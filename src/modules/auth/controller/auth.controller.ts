@@ -177,6 +177,7 @@ export class AuthController {
     }
 
     @Post('refresh')
+    @Public()
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Refresh user session' })
     @ApiResponse({

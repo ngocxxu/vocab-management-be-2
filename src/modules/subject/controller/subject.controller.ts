@@ -29,7 +29,7 @@ export class SubjectController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all subjects' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
     public async find(@CurrentUser() user: User): Promise<IResponse<SubjectDto[]>> {
@@ -38,7 +38,7 @@ export class SubjectController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find subject by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: SubjectDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Subject not found' })
@@ -48,7 +48,7 @@ export class SubjectController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create subject' })
     @ApiResponse({ status: HttpStatus.CREATED, type: SubjectDto })
     public async create(
@@ -62,7 +62,7 @@ export class SubjectController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update subject' })
     @ApiResponse({ status: HttpStatus.OK, type: SubjectDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Subject not found' })
@@ -78,7 +78,7 @@ export class SubjectController {
 
     @Patch('reorder')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Reorder subjects' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
     public async reorder(
@@ -90,7 +90,7 @@ export class SubjectController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete subject' })
     @ApiResponse({ status: HttpStatus.OK, type: SubjectDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Subject not found' })

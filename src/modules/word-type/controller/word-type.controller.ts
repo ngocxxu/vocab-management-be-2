@@ -27,7 +27,7 @@ export class WordTypeController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all word types' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: WordTypeDto })
     public async find(): Promise<IResponse<WordTypeDto[]>> {
@@ -36,7 +36,7 @@ export class WordTypeController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find word type by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })
@@ -46,7 +46,7 @@ export class WordTypeController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create word type' })
     @ApiResponse({ status: HttpStatus.CREATED, type: WordTypeDto })
     public async create(@Body() input: WordTypeInput): Promise<WordTypeDto> {
@@ -57,7 +57,7 @@ export class WordTypeController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update word type' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })
@@ -72,7 +72,7 @@ export class WordTypeController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete word type' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })

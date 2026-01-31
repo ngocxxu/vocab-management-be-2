@@ -40,7 +40,7 @@ export class VocabTrainerController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @UsePipes(VocabTrainerPipe)
     @ApiOperation({ summary: 'Find all vocab trainers' })
     @ApiResponse({ status: HttpStatus.OK, type: PaginationDto })
@@ -53,7 +53,7 @@ export class VocabTrainerController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find vocab trainer by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
@@ -67,7 +67,7 @@ export class VocabTrainerController {
     @Get(':id/exam')
     @Throttle({ default: { limit: 20, ttl: 60000 } })
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find vocab trainer by ID and exam' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
@@ -80,7 +80,7 @@ export class VocabTrainerController {
 
     @Patch(':id/exam')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Submit exam' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({
@@ -107,7 +107,7 @@ export class VocabTrainerController {
                 input as SubmitFillInBlankInput,
                 user,
             );
-        } else if (input.questionType === QuestionType.TRANSLATION_AUDIO) {
+        } else if (input.questionType === QuestionType.TRANSLATION_AUDIO && user.role !== UserRole.GUEST) {
             return this.vocabTrainerService.submitTranslationAudio(
                 id,
                 input as SubmitTranslationAudioInput,
@@ -120,7 +120,7 @@ export class VocabTrainerController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create vocab trainer' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabTrainerDto })
     public async create(
@@ -134,7 +134,7 @@ export class VocabTrainerController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update vocab trainer' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
@@ -150,7 +150,7 @@ export class VocabTrainerController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete vocab trainer' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
@@ -165,7 +165,7 @@ export class VocabTrainerController {
 
     @Post('bulk/delete')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete multiple vocab trainers' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
     public async deleteBulk(

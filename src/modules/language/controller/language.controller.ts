@@ -27,7 +27,7 @@ export class LanguageController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all languages' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageDto })
     public async find(): Promise<IResponse<LanguageDto[]>> {
@@ -36,7 +36,7 @@ export class LanguageController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find language by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language not found' })

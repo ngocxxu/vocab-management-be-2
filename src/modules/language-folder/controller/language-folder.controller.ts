@@ -48,6 +48,8 @@ export class LanguageFolderController {
     }
 
     @Get(':id')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find language folder by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageFolderDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language folder not found' })
@@ -56,6 +58,8 @@ export class LanguageFolderController {
     }
 
     @Post()
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create language folder' })
     @ApiResponse({ status: HttpStatus.CREATED, type: LanguageFolderDto })
     public async create(
@@ -68,6 +72,8 @@ export class LanguageFolderController {
     }
 
     @Put(':id')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update language folder' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageFolderDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language folder not found' })
@@ -86,6 +92,8 @@ export class LanguageFolderController {
     }
 
     @Delete(':id')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete language folder' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageFolderDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language folder not found' })

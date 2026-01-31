@@ -67,7 +67,7 @@ export class VocabController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     public async find(
@@ -79,7 +79,7 @@ export class VocabController {
 
     @Get('random/:count')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find random vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     public async findRandom(
@@ -91,7 +91,7 @@ export class VocabController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find vocab by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
@@ -101,7 +101,7 @@ export class VocabController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create vocab' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
     public async create(@Body() input: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
@@ -164,7 +164,7 @@ export class VocabController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
@@ -180,7 +180,7 @@ export class VocabController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
@@ -192,7 +192,7 @@ export class VocabController {
 
     @Post('bulk/delete')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete multiple vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     public async deleteBulk(
@@ -294,7 +294,7 @@ export class VocabController {
 
     @Get('export/csv')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Export vocabs to CSV file' })
     @ApiResponse({ status: HttpStatus.OK, description: 'CSV file download' })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid query parameters' })
@@ -328,7 +328,7 @@ export class VocabController {
 
     @Get('statistics/summary')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get mastery summary statistics' })
     @ApiResponse({ status: HttpStatus.OK, type: MasterySummaryDto })
     public async getMasterySummary(@CurrentUser() user: User): Promise<MasterySummaryDto> {
@@ -338,7 +338,7 @@ export class VocabController {
 
     @Get('statistics/by-subject')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get mastery scores grouped by subject' })
     @ApiResponse({ status: HttpStatus.OK, type: [MasteryBySubjectDto] })
     public async getMasteryBySubject(@CurrentUser() user: User): Promise<MasteryBySubjectDto[]> {
@@ -348,7 +348,7 @@ export class VocabController {
 
     @Get('statistics/progress')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get mastery progress over time' })
     @ApiResponse({ status: HttpStatus.OK, type: [ProgressOverTimeDto] })
     public async getProgressOverTime(
@@ -364,7 +364,7 @@ export class VocabController {
 
     @Get('statistics/problematic')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get top problematic vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: [TopProblematicVocabDto] })
     public async getTopProblematicVocabs(
@@ -380,7 +380,7 @@ export class VocabController {
 
     @Get('statistics/distribution')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get mastery score distribution' })
     @ApiResponse({ status: HttpStatus.OK, type: [MasteryDistributionDto] })
     public async getMasteryDistribution(
