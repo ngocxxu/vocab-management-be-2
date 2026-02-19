@@ -11,6 +11,7 @@ export enum RedisPrefix {
     WORD_TYPE = 'word-type:',
     LANGUAGE = 'language:',
     LANGUAGE_FOLDER = 'language-folder:',
+    QUOTA = 'quota:',
 }
 
 export class RedisKeyManager {
@@ -109,6 +110,11 @@ export class RedisKeyManager {
         byUser: (userId: string) => this.generateKey(RedisPrefix.NOTIFICATION, 'user', userId),
         unread: (userId: string) => this.generateKey(RedisPrefix.NOTIFICATION, 'unread', userId),
         count: (userId: string) => this.generateKey(RedisPrefix.NOTIFICATION, 'count', userId),
+    };
+
+    public static readonly quota = {
+        vocabDaily: (userId: string, dateStr: string) =>
+            this.generateKey(RedisPrefix.QUOTA, 'vocab', userId, dateStr),
     };
 
     /**

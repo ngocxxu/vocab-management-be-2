@@ -1,7 +1,8 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { getOrderBy, getPagination, IResponse, PaginationDto } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { PlanQuotaService } from '../../plan/service/plan-quota.service';
 import { LanguageFolderDto, LanguageFolderInput } from '../model';
 import { LanguageFolderParamsInput } from '../model/language-folder-params.input';
 import { LanguageFolderRepository } from '../repository';
@@ -20,7 +21,10 @@ export class LanguageFolderService {
         P2003: 'Invalid language folder data provided',
     };
 
-    public constructor(private readonly languageFolderRepository: LanguageFolderRepository) {}
+    public constructor(
+        private readonly languageFolderRepository: LanguageFolderRepository,
+        private readonly planQuotaService: PlanQuotaService,
+    ) {}
 
     /**
      * Find all language folders for a specific user
@@ -116,8 +120,12 @@ export class LanguageFolderService {
     public async create(
         createFolderData: LanguageFolderInput,
         userId: string,
+        role?: UserRole,
     ): Promise<LanguageFolderDto> {
         try {
+            if (role !== undefined) {
+                await this.planQuotaService.assertCreationQuota(userId, role, 'languageFolder');
+            }
             const {
                 name,
                 folderColor,

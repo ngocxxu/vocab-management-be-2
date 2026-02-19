@@ -66,7 +66,7 @@ export class LanguageFolderController {
         @Body(LanguageFolderPipe) input: LanguageFolderInput,
         @CurrentUser() user: User,
     ): Promise<LanguageFolderDto> {
-        const folder = await this.languageFolderService.create(input, user.id);
+        const folder = await this.languageFolderService.create(input, user.id, user.role);
         this.logger.info(`Created new language folder with ID ${folder.id} for user ${user.id}`);
         return folder;
     }

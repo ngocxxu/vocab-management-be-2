@@ -1,12 +1,13 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
 import { PaginationDto } from '../../common/model/pagination.dto';
 import { LoggerService } from '../../common/provider/logger.service';
 import { getOrderBy, getPagination } from '../../common/util/pagination.util';
+import { PlanQuotaService } from '../../plan/service/plan-quota.service';
 import { EReminderType } from '../../reminder/util';
 import {
     BulkDeleteInput,
@@ -43,6 +44,7 @@ export class VocabService {
         private readonly vocabRepository: VocabRepository,
         private readonly prismaService: PrismaService,
         private readonly logger: LoggerService,
+        private readonly planQuotaService: PlanQuotaService,
         @InjectQueue(EReminderType.VOCAB_TRANSLATION)
         private readonly vocabTranslationQueue: Queue<VocabTranslationJobData>,
     ) {}
@@ -179,8 +181,15 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createVocabData: VocabInput, userId: string): Promise<VocabDto> {
+    public async create(
+        createVocabData: VocabInput,
+        userId: string,
+        role?: UserRole,
+    ): Promise<VocabDto> {
         try {
+            if (role !== undefined) {
+                await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
+            }
             const {
                 textSource,
                 sourceLanguageCode,

@@ -105,7 +105,7 @@ export class VocabController {
     @ApiOperation({ summary: 'Create vocab' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
     public async create(@Body() input: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
-        const vocab = await this.vocabService.create(input, user.id);
+        const vocab = await this.vocabService.create(input, user.id, user.role);
         this.logger.info(`Created new vocab with ID ${vocab.id}`);
         return vocab;
     }

@@ -1,6 +1,8 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { IResponse } from '../../common';
 import { PrismaErrorHandler } from '../../common/handler/error.handler';
+import { PlanQuotaService } from '../../plan/service/plan-quota.service';
 import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../model';
 import { CreateSubjectInput } from '../model/create-subject.input';
 import { SubjectRepository } from '../repository';
@@ -20,7 +22,10 @@ export class SubjectService {
         P2003: 'Invalid subject data provided',
     };
 
-    public constructor(private readonly subjectRepository: SubjectRepository) {}
+    public constructor(
+        private readonly subjectRepository: SubjectRepository,
+        private readonly planQuotaService: PlanQuotaService,
+    ) {}
 
     /**
      * Find all subjects in the database
@@ -76,8 +81,12 @@ export class SubjectService {
     public async create(
         createSubjectData: CreateSubjectInput,
         userId: string,
+        role?: UserRole,
     ): Promise<SubjectDto> {
         try {
+            if (role !== undefined) {
+                await this.planQuotaService.assertCreationQuota(userId, role, 'subject');
+            }
             const { name } = createSubjectData;
 
             const lastSubject = await this.subjectRepository.findLastOrder();

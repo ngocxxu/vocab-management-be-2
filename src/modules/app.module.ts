@@ -20,6 +20,7 @@ import { FcmModule } from './fcm/fcm.module';
 import { LanguageModule } from './language/language.module';
 import { LanguageFolderModule } from './language-folder/language-folder.module';
 import { NotificationModule } from './notification/notification.module';
+import { PlanModule } from './plan/plan.module';
 import { ReminderModule } from './reminder/reminder.module';
 import { EReminderType } from './reminder/util';
 import { SSEModule } from './sse/sse.module';
@@ -87,6 +88,7 @@ import { WordTypeModule } from './word-type/word-type.module';
         UserModule,
         LanguageModule,
         LanguageFolderModule,
+        PlanModule,
         SubjectModule,
         WordTypeModule,
         VocabModule,

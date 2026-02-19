@@ -3,6 +3,34 @@ import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 
+const DEFAULT_PLANS = [
+    {
+        role: 'GUEST' as const,
+        name: 'Free',
+        price: 0,
+        priceLabel: 'Free',
+        limits: { vocabPerDay: 20, languageFolders: 2, subjects: 5, requestsPerMinute: 20 },
+        features: ['20 vocabs per day', '2 language folders', '5 subjects', 'Export CSV'],
+        sortOrder: 0,
+    },
+    {
+        role: 'MEMBER' as const,
+        name: 'Member',
+        price: 9.99,
+        priceLabel: '9.99 USD/month',
+        limits: { vocabPerDay: -1, languageFolders: -1, subjects: -1, requestsPerMinute: 100 },
+        features: [
+            'Unlimited vocabs',
+            'Unlimited folders & subjects',
+            'Bulk import',
+            'AI generate',
+            'Audio exam',
+            'Export CSV',
+        ],
+        sortOrder: 1,
+    },
+];
+
 type TWordType = {
     name: string;
     description: string;
@@ -70,10 +98,41 @@ export class DatabaseSeeder {
         this.logger.log('Languages seeding completed!');
     }
 
+    public async seedPlans() {
+        this.logger.log('Seeding plans...');
+
+        for (const plan of DEFAULT_PLANS) {
+            await this.prisma.plan.upsert({
+                where: { role: plan.role },
+                update: {
+                    name: plan.name,
+                    price: plan.price,
+                    priceLabel: plan.priceLabel,
+                    limits: plan.limits as object,
+                    features: plan.features as object,
+                    sortOrder: plan.sortOrder,
+                },
+                create: {
+                    role: plan.role,
+                    name: plan.name,
+                    price: plan.price,
+                    priceLabel: plan.priceLabel,
+                    limits: plan.limits as object,
+                    features: plan.features as object,
+                    sortOrder: plan.sortOrder,
+                },
+            });
+            this.logger.log(`Created/Updated plan: ${plan.name} (${plan.role})`);
+        }
+
+        this.logger.log('Plans seeding completed!');
+    }
+
     public async run() {
         try {
             await this.seedWordTypes();
             await this.seedLanguages();
+            await this.seedPlans();
             this.logger.log('Seeding completed successfully!');
         } catch (error) {
             throw error;

@@ -191,7 +191,7 @@ module.exports = {
                 ],
             },
         ],
-        'max-classes-per-file': ['error', 1],
+        'max-classes-per-file': ['error', 5],
         'max-len': [
             'error',
             {

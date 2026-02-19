@@ -55,7 +55,7 @@ export class SubjectController {
         @Body() input: CreateSubjectInput,
         @CurrentUser() user: User,
     ): Promise<SubjectDto> {
-        const subject = await this.subjectService.create(input, user.id);
+        const subject = await this.subjectService.create(input, user.id, user.role);
         this.logger.info(`Created new subject with ID ${subject.id}`);
         return subject;
     }
