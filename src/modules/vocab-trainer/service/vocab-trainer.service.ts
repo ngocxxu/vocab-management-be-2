@@ -196,14 +196,14 @@ export class VocabTrainerService {
                     if (isAskingSource) {
                         fillInBlankQuestions.push({
                             correctAnswer: selectedTarget.textTarget,
-                            type: 'textTarget',
+                            type: 'textSource',
                             content: `What is the translation of "${vocab.textSource}" in ${vocab.targetLanguageCode}?`,
                             vocabId: vocab.id,
                         });
                     } else {
                         fillInBlankQuestions.push({
                             correctAnswer: vocab.textSource,
-                            type: 'textSource',
+                            type: 'textTarget',
                             content: `What is the translation of "${selectedTarget.textTarget}" in ${vocab.sourceLanguageCode}?`,
                             vocabId: vocab.id,
                         });
@@ -505,7 +505,7 @@ export class VocabTrainerService {
 
                     if (vocabItem.textSource === answerSubmission.systemAnswer) {
                         matchedVocabAssignment = vocabAssignment;
-                        answerType = 'textSource';
+                        answerType = 'textTarget';
                         break;
                     }
 
@@ -516,7 +516,7 @@ export class VocabTrainerService {
                         );
                         if (matchingTextTarget) {
                             matchedVocabAssignment = vocabAssignment;
-                            answerType = 'textTarget';
+                            answerType = 'textSource';
                             break;
                         }
                     }
