@@ -19,6 +19,7 @@ export enum ENotificationFcmType {
 
 export enum EEmailReminderType {
     SEND_REMINDER = 'send_reminder',
+    SEND_REMINDER_SCHEDULE = 'send_reminder_schedule',
     SEND_CREATE_NOTIFICATION = 'send_create_notification',
 }
 

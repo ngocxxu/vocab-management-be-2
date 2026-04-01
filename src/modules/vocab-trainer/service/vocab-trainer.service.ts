@@ -15,8 +15,8 @@ import { PaginationDto } from '../../common/model';
 import { PrismaService } from '../../common/provider';
 import { getOrderBy, getPagination } from '../../common/util';
 import { NotificationService } from '../../notification/service';
-import { ReminderService } from '../../reminder/service';
-import { EEmailTemplate, EReminderTitle, EXPIRES_AT_30_DAYS } from '../../reminder/util';
+import { VocabTrainerReminderAfterExamService } from '../../reminder/service';
+import { EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import { VocabMasteryService } from '../../vocab/service/vocab-mastery.service';
 import {
     MultipleChoiceQuestionDto,
@@ -64,7 +64,7 @@ export class VocabTrainerService {
     public constructor(
         private readonly vocabTrainerRepository: VocabTrainerRepository,
         private readonly prismaService: PrismaService,
-        private readonly reminderService: ReminderService,
+        private readonly vocabTrainerReminderAfterExam: VocabTrainerReminderAfterExamService,
         private readonly aiService: AiService,
         private readonly notificationService: NotificationService,
         private readonly vocabMasteryService: VocabMasteryService,
@@ -407,6 +407,7 @@ export class VocabTrainerService {
                     : trainer.reminderRepeat || 0;
 
             const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
+            const examUrl = `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.MULTIPLE_CHOICE}`;
 
             if (shouldDelete) {
                 await this.notificationService.create({
@@ -423,7 +424,15 @@ export class VocabTrainerService {
                     recipientUserIds: [user.id],
                 });
 
-                await this.delete(trainer.id, user.id);
+                await this.prismaService.$transaction(async (tx) => {
+                    await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(
+                        tx,
+                        trainer.id,
+                        user.id,
+                        'trainer_completed_max_passes',
+                    );
+                    await tx.vocabTrainer.delete({ where: { id: trainer.id } });
+                });
                 return new VocabTrainerDto(
                     trainer as unknown as VocabTrainer & {
                         questionAnswers?: MultipleChoiceQuestionDto[];
@@ -431,26 +440,44 @@ export class VocabTrainerService {
                 );
             }
 
-            await this.vocabTrainerRepository.update(trainer.id, {
-                reminderRepeat: passCount,
-                reminderLastRemind: new Date(),
-                reminderDisabled: false,
+            const result = await this.prismaService.$transaction(async (tx) => {
+                await this.vocabTrainerReminderAfterExam.syncRemindersAfterExamSubmission(tx, {
+                    trainerId: trainer.id,
+                    userId: user.id,
+                    userEmail: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    trainerName: trainer.name,
+                    scorePercentage,
+                    examUrl,
+                    reminderDisabled: trainer.reminderDisabled,
+                });
+
+                return tx.vocabTrainer.update({
+                    where: { id: trainer.id },
+                    data: {
+                        name: trainer.name,
+                        status: overallStatus,
+                        countTime,
+                        setCountTime: trainer.setCountTime,
+                        reminderRepeat: passCount,
+                        reminderLastRemind: new Date(),
+                        reminderDisabled: false,
+                        lastExamSubmittedAt: new Date(),
+                        updatedAt: new Date(),
+                    },
+                });
             });
 
-            await this.scheduleReminderForTrainer(
+            await this.vocabTrainerReminderAfterExam.scheduleNotification(
                 user,
-                trainer,
+                {
+                    ...trainer,
+                    reminderLastRemind: new Date(),
+                },
                 scorePercentage,
-                `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.MULTIPLE_CHOICE}`,
+                examUrl,
             );
-
-            const result = await this.vocabTrainerRepository.update(trainer.id, {
-                name: trainer.name,
-                status: overallStatus,
-                countTime,
-                setCountTime: trainer.setCountTime,
-                updatedAt: new Date(),
-            });
 
             return new VocabTrainerDto(
                 result as unknown as VocabTrainer & {
@@ -853,58 +880,5 @@ export class VocabTrainerService {
             PrismaErrorHandler.handle(error, 'deleteBulk', this.errorMapping);
             throw error;
         }
-    }
-
-    private async scheduleReminderForTrainer(
-        user: User,
-        trainer: Pick<VocabTrainer, 'id' | 'name' | 'questionType' | 'reminderLastRemind'>,
-        scorePercentage: number,
-        examUrl: string,
-    ): Promise<void> {
-        const sendDataReminder = {
-            data: {
-                firstName: user.firstName,
-                lastName: user.lastName,
-                testName: trainer.name,
-                repeatDays: '2',
-                examUrl,
-            },
-        };
-
-        const sendDataNotification = {
-            data: {
-                trainerName: trainer.name,
-                scorePercentage,
-                trainerId: trainer.id,
-                questionType: trainer.questionType,
-                examUrl,
-            },
-        };
-
-        const lastRemindDate =
-            trainer.reminderLastRemind instanceof Date
-                ? trainer.reminderLastRemind
-                : new Date(trainer.reminderLastRemind);
-
-        const reminderIntervalDays = 2;
-        const nextReminderTime = new Date(
-            lastRemindDate.getTime() + reminderIntervalDays * 24 * 60 * 60 * 1000,
-        );
-        const delayInMs = Math.max(0, nextReminderTime.getTime() - Date.now());
-
-        await this.reminderService.scheduleReminder(
-            user.email,
-            EReminderTitle.VOCAB_TRAINER,
-            EEmailTemplate.EXAM_REMINDER,
-            sendDataReminder.data,
-            delayInMs,
-        );
-
-        await this.reminderService.scheduleCreateNotification(
-            [user.id],
-            EReminderTitle.VOCAB_TRAINER,
-            sendDataNotification.data,
-            delayInMs,
-        );
     }
 }

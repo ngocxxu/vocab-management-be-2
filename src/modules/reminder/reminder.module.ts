@@ -4,8 +4,13 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { CommonModule } from '../common';
+import { ActedCheckRegistry } from './acted-check/acted-check.registry';
+import { VocabTrainerActedCheckStrategy } from './acted-check/vocab-trainer-acted-check.strategy';
 import { ReminderController } from './controller';
-import { ReminderService } from './service';
+import { ReminderReconciliationService } from './reconciliation/reminder-reconciliation.service';
+import { ReminderScheduleRepository } from './repository/reminder-schedule.repository';
+import { SchedulerPollerService } from './scheduler/scheduler-poller.service';
+import { ReminderService, VocabTrainerReminderAfterExamService } from './service';
 import { EReminderType } from './util';
 
 @Module({
@@ -28,8 +33,19 @@ import { EReminderType } from './util';
     ],
     controllers: [ReminderController],
     providers: [
-        ReminderService
+        ReminderService,
+        ReminderScheduleRepository,
+        VocabTrainerActedCheckStrategy,
+        ActedCheckRegistry,
+        VocabTrainerReminderAfterExamService,
+        SchedulerPollerService,
+        ReminderReconciliationService,
     ],
-    exports: [ReminderService]
+    exports: [
+        ReminderService,
+        ReminderScheduleRepository,
+        VocabTrainerReminderAfterExamService,
+        ActedCheckRegistry,
+    ],
 })
-export class ReminderModule { }
+export class ReminderModule {}

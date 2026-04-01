@@ -5,6 +5,10 @@ export interface EmailJobData {
   data: TemplateData;
 }
 
+export interface ReminderScheduleEmailJobData {
+  scheduleId: string;
+}
+
 export interface TemplateData {
   [key: string]: string | number;
 }

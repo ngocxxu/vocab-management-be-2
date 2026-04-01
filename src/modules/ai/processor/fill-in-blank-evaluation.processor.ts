@@ -6,8 +6,8 @@ import { LoggerService } from '../../common';
 import { PrismaService } from '../../common/provider';
 import { NotificationGateway } from '../../event/gateway/notification.gateway';
 import { NotificationService } from '../../notification/service';
-import { ReminderService } from '../../reminder/service';
-import { EEmailTemplate, EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/util';
+import { VocabTrainerReminderAfterExamService } from '../../reminder/service';
+import { EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/util';
 import { VocabMasteryService } from '../../vocab/service/vocab-mastery.service';
 import { EQuestionType, EReminderRepeat, VocabWithTextTargets } from '../../vocab-trainer/util';
 import { AiService } from '../service/ai.service';
@@ -38,7 +38,7 @@ export class FillInBlankEvaluationProcessor {
         private readonly prismaService: PrismaService,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly notificationService: NotificationService,
-        private readonly reminderService: ReminderService,
+        private readonly vocabTrainerReminderAfterExam: VocabTrainerReminderAfterExamService,
     ) {}
 
     @Process('evaluate-answers')
@@ -113,6 +113,7 @@ export class FillInBlankEvaluationProcessor {
                     : trainer.reminderRepeat || 0;
 
             const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
+            const examUrl = `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.FILL_IN_THE_BLANK}`;
 
             if (shouldDelete) {
                 await this.notificationService.create({
@@ -129,76 +130,60 @@ export class FillInBlankEvaluationProcessor {
                     recipientUserIds: [userId],
                 });
 
-                await this.prismaService.vocabTrainer.delete({
-                    where: { id: vocabTrainerId },
+                await this.prismaService.$transaction(async (tx) => {
+                    await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(
+                        tx,
+                        vocabTrainerId,
+                        userId,
+                        'trainer_completed_max_passes',
+                    );
+                    await tx.vocabTrainer.delete({
+                        where: { id: vocabTrainerId },
+                    });
                 });
             } else {
-                await this.prismaService.vocabTrainer.update({
-                    where: { id: vocabTrainerId },
-                    data: {
-                        status: overallStatus,
-                        reminderRepeat: passCount,
-                        reminderLastRemind: new Date(),
-                        reminderDisabled: false,
-                    },
-                });
-
                 const user = await this.prismaService.user.findUnique({
                     where: { id: userId },
                 });
 
-                if (user) {
-                    const lastRemindDate =
-                        trainer.reminderLastRemind instanceof Date
-                            ? trainer.reminderLastRemind
-                            : new Date(trainer.reminderLastRemind);
-
-                    const daysSinceLastRemind = Math.floor(
-                        (Date.now() - lastRemindDate.getTime()) / (1000 * 60 * 60 * 24),
-                    );
-
-                    const examUrl = `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.FILL_IN_THE_BLANK}`;
-
-                    if (daysSinceLastRemind >= 2 || !trainer.reminderLastRemind) {
-                        const sendDataReminder = {
-                            data: {
-                                firstName: user.firstName,
-                                lastName: user.lastName,
-                                testName: trainer.name,
-                                repeatDays: '2',
-                                examUrl,
-                            },
-                        };
-
-                        const sendDataNotification = {
-                            data: {
-                                trainerName: trainer.name,
-                                scorePercentage,
-                                trainerId: trainer.id,
-                                questionType: trainer.questionType,
-                                examUrl,
-                            },
-                        };
-
-                        await this.reminderService.scheduleReminder(
-                            user.email,
-                            EReminderType.NOTIFICATION,
-                            EEmailTemplate.REMINDER,
-                            sendDataReminder.data,
-                            2 * 24 * 60 * 60 * 1000,
-                        );
-
-                        await this.notificationService.create({
-                            type: NotificationType.VOCAB_TRAINER,
-                            action: NotificationAction.CREATE,
-                            priority: PriorityLevel.HIGH,
-                            data: sendDataNotification.data,
-                            expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
-                            isActive: true,
-                            recipientUserIds: [userId],
-                        });
-                    }
+                if (!user) {
+                    throw new Error(`User ${userId} not found`);
                 }
+
+                const updated = await this.prismaService.$transaction(async (tx) => {
+                    await this.vocabTrainerReminderAfterExam.syncRemindersAfterExamSubmission(tx, {
+                        trainerId: trainer.id,
+                        userId: user.id,
+                        userEmail: user.email,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        trainerName: trainer.name,
+                        scorePercentage,
+                        examUrl,
+                        reminderDisabled: trainer.reminderDisabled,
+                    });
+
+                    return tx.vocabTrainer.update({
+                        where: { id: vocabTrainerId },
+                        data: {
+                            status: overallStatus,
+                            reminderRepeat: passCount,
+                            reminderLastRemind: new Date(),
+                            reminderDisabled: false,
+                            lastExamSubmittedAt: new Date(),
+                        },
+                    });
+                });
+
+                await this.vocabTrainerReminderAfterExam.scheduleNotification(
+                    user,
+                    {
+                        ...updated,
+                        reminderLastRemind: new Date(),
+                    },
+                    scorePercentage,
+                    examUrl,
+                );
             }
 
             this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'completed', {
