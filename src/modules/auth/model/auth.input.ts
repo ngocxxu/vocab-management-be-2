@@ -48,6 +48,12 @@ export class OAuthInput {
         example: 'google',
     })
     public readonly provider: 'google' | 'github' | 'facebook' | 'apple';
+
+    @ApiPropertyOptional({
+        description: 'Custom redirect URL for OAuth callback (must be allowlisted)',
+        example: 'chrome-extension://xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/oauth-callback/index.html',
+    })
+    public readonly redirectTo?: string;
 }
 
 export class RefreshTokenInput {

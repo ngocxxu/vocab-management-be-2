@@ -81,6 +81,12 @@ export class OAuthPipe extends JoiValidationPipe {
                     'any.only': 'Provider must be one of: google, github, facebook, apple',
                     'any.required': 'Provider is required',
                 }),
+            redirectTo: Joi.string()
+                .uri({ scheme: ['http', 'https', 'chrome-extension'] })
+                .optional()
+                .messages({
+                    'string.uri': 'redirectTo must be a valid URL',
+                }),
         });
     }
 }

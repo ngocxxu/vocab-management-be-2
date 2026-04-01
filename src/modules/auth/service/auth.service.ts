@@ -152,12 +152,13 @@ export class AuthService {
      */
     public async signInWithOAuth(
         provider: 'google' | 'github' | 'facebook' | 'apple',
+        redirectTo?: string,
     ): Promise<OAuthResponseDto> {
         try {
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: `${process.env.APP_URL}/auth/callback`,
+                    redirectTo: redirectTo ?? `${process.env.APP_URL}/auth/callback`,
                 },
             });
 

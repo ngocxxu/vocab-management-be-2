@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Body,
     Controller,
     Get,
@@ -113,9 +114,20 @@ export class AuthController {
         description: 'OAuth authentication failed',
     })
     public async signInWithOAuth(@Body(OAuthPipe) input: OAuthInput): Promise<OAuthResponseDto> {
-        const { provider } = input;
+        const { provider, redirectTo } = input;
 
-        const result = await this.authService.signInWithOAuth(provider);
+        if (redirectTo) {
+            const allowlist = (process.env.API_CORS_ORIGINS ?? '')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+
+            if (!allowlist.includes(redirectTo)) {
+                throw new BadRequestException('Invalid redirectTo');
+            }
+        }
+
+        const result = await this.authService.signInWithOAuth(provider, redirectTo);
         this.logger.info(`OAuth sign in initiated successfully with provider: ${provider}`);
 
         return result;
