@@ -11,7 +11,18 @@ import { AudioEvaluationJobData } from '../processor/audio-evaluation.processor'
 import { MultipleChoiceGenerationJobData } from '../processor/multiple-choice-generation.processor';
 import { AiProviderFactory } from '../provider/ai-provider.factory';
 import { AI_CONFIG } from '../util/const.util';
+import { isObviousTypo, normalizeForCompare } from '../util/text-normalization.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../util/type.util';
+
+type WordTypeRecord = { id: string; name: string; description: string };
+type TextTargetRecord = { textTarget: string };
+type LanguageRecord = { name: string };
+type VocabForTextTargets = {
+    textSource: string;
+    sourceLanguageCode: string;
+    targetLanguageCode: string;
+    textTargets?: TextTargetRecord[];
+};
 @Injectable()
 export class AiService {
     private readonly logger = new Logger(AiService.name);
@@ -42,48 +53,47 @@ export class AiService {
         retryCount = 0,
     ): Promise<CreateTextTargetInput> {
         try {
-            const allowedWordTypes = await this.wordTypeRepository.findAll();
-            const simplifiedWordTypes = allowedWordTypes.map((wt) => ({
-                id: wt.id,
-                name: wt.name,
-                description: wt.description,
-            }));
+            const allowedWordTypes = (await this.wordTypeRepository.findAll()) as WordTypeRecord[];
+            const simplifiedWordTypes = allowedWordTypes.map((wt: WordTypeRecord) => {
+                const { id, name, description } = wt;
+                return { id, name, description };
+            });
 
             const wordTypeListString = JSON.stringify(simplifiedWordTypes, null, 2);
 
             const prompt = `
-You are an expert linguistic API. Translate a vocabulary word from ${sourceLanguageCode} to ${targetLanguageCode} and classify it strictly according to the provided schema.
+    You are an expert linguistic API. Translate a vocabulary word from ${sourceLanguageCode} to ${targetLanguageCode} and classify it strictly according to the provided schema.
 
-Input Data:
-- Source Text: "${textSource}"
-- Source Language: ${sourceLanguageCode}
-- Target Language: ${targetLanguageCode}
+    Input Data:
+    - Source Text: "${textSource}"
+    - Source Language: ${sourceLanguageCode}
+    - Target Language: ${targetLanguageCode}
 
-*** AUTHORIZED WORD TYPES ***
-You must classify the "wordType" field using EXACTLY one of the strings from this list:
-${wordTypeListString}
+    *** AUTHORIZED WORD TYPES ***
+    You must classify the "wordType" field using EXACTLY one of the strings from this list:
+    ${wordTypeListString}
 
-Task Requirements:
-1. textTarget: The translation in ${targetLanguageCode}.
-2. wordType: Select the most accurate 'name' from the Authorized Word Types list above.
-3. explanationSource: Brief meaning in ${sourceLanguageCode}.
-4. explanationTarget: Brief meaning in ${targetLanguageCode}.
-5. vocabExamples: One clear usage example.
+    Task Requirements:
+    1. textTarget: The translation in ${targetLanguageCode}.
+    2. wordType: Select the most accurate 'name' from the Authorized Word Types list above.
+    3. explanationSource: Brief meaning in ${sourceLanguageCode}.
+    4. explanationTarget: Brief meaning in ${targetLanguageCode}.
+    5. vocabExamples: One clear usage example.
 
-Format your response as a JSON object (NO Markdown, NO code blocks):
-{
-    "textTarget": "translated_word",
-    "wordTypeId": "MUST be the exact UUID/ID from the reference list matching the word type",
-    "explanationSource": "explanation in source language",
-    "explanationTarget": "explanation in target language",
-    "vocabExamples": [
-        {
-            "source": "example sentence with source word",
-            "target": "example sentence with translated word"
-        }
-    ]
-}
-`;
+    Format your response as a JSON object (NO Markdown, NO code blocks):
+    {
+        "textTarget": "translated_word",
+        "wordTypeId": "MUST be the exact UUID/ID from the reference list matching the word type",
+        "explanationSource": "explanation in source language",
+        "explanationTarget": "explanation in target language",
+        "vocabExamples": [
+            {
+                "source": "example sentence with source word",
+                "target": "example sentence with translated word"
+            }
+        ]
+    }
+    `;
 
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);
@@ -152,87 +162,169 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
             return [];
         }
 
-        const evaluationDetailsPromises = evaluations.map(async (evaluationItem, idx) => {
-            const vocab = evaluationItem.vocab;
-            const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
-            const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
-            const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
-            const questionContext =
-                evaluationItem.questionType === 'textSource'
-                    ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
-                    : `What is the translation of "${evaluationItem.systemAnswer}" in ${sourceLanguageName}?`;
+        const latinScriptLanguageCodes = new Set(['en', 'es', 'fr', 'de', 'it', 'pt', 'vi']);
+
+        const results: Array<{ isCorrect: boolean; explanation?: string } | undefined> = Array.from(
+            {
+                length: evaluations.length,
+            },
+        );
+
+        const llmEvaluations: Array<{
+            vocab: VocabWithTextTargets;
+            userAnswer: string;
+            systemAnswer: string;
+            questionType: 'textSource' | 'textTarget';
+        }> = [];
+        const llmIndexMap: number[] = [];
+
+        // Tier 1 + Tier 2 (deterministic) before calling LLM
+        for (let i = 0; i < evaluations.length; i++) {
+            const evaluationItem = evaluations[i];
+            const vocab = evaluationItem.vocab as unknown as VocabForTextTargets;
+            const textTargets = vocab.textTargets ?? [];
+            const targetTexts = textTargets.map((tt: TextTargetRecord) => tt.textTarget).join(', ');
             const correctAnswer =
                 evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
 
-            return (
-                `${idx + 1}. Source language: ${sourceLanguageName}, ` +
-                `Target language: ${targetLanguageName}, ` +
-                `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
-                `Question: ${questionContext}, ` +
-                `Correct answer (List): "${correctAnswer}", ` +
-                `Student's answer: "${evaluationItem.userAnswer}"`
-            );
-        });
+            const answerLanguageCode =
+                evaluationItem.questionType === 'textSource'
+                    ? vocab.targetLanguageCode
+                    : vocab.sourceLanguageCode;
+
+            const useLowercase = latinScriptLanguageCodes.has(answerLanguageCode);
+            const userNorm = normalizeForCompare(evaluationItem.userAnswer ?? '', {
+                lowercase: useLowercase,
+            });
+            const correctNorm = normalizeForCompare(correctAnswer ?? '', {
+                lowercase: useLowercase,
+            });
+
+            // Tier 1: Unicode-safe exact match (NFC + strip zero-width + whitespace normalization)
+            if (userNorm && correctNorm && userNorm === correctNorm) {
+                results[i] = {
+                    isCorrect: true,
+                    explanation: 'Correct.',
+                };
+                continue;
+            }
+
+            // Tier 2: Very strict typo detection (Latin-script only)
+            if (useLowercase && userNorm && correctNorm) {
+                const typo = isObviousTypo(userNorm, correctNorm);
+                if (typo.isTypo && typo.confidence >= 0.8) {
+                    results[i] = {
+                        isCorrect: true,
+                        explanation: `Near correct (typing error). Correct answer: "${correctAnswer}"`,
+                    };
+                    continue;
+                }
+            }
+
+            // Tier 3: send to LLM semantic evaluation
+            llmIndexMap.push(i);
+            llmEvaluations.push(evaluationItem);
+        }
+
+        if (llmEvaluations.length === 0) {
+            return results.map((r) => r ?? { isCorrect: false });
+        }
+
+        const evaluationDetailsPromises = llmEvaluations.map(
+            async (
+                evaluationItem: {
+                    vocab: VocabWithTextTargets;
+                    userAnswer: string;
+                    systemAnswer: string;
+                    questionType: 'textSource' | 'textTarget';
+                },
+                idx: number,
+            ) => {
+                const vocab = evaluationItem.vocab as unknown as VocabForTextTargets;
+                const textTargets = vocab.textTargets ?? [];
+                const targetTexts = textTargets
+                    .map((tt: TextTargetRecord) => tt.textTarget)
+                    .join(', ');
+                const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
+                const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
+                const questionContext =
+                    evaluationItem.questionType === 'textSource'
+                        ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
+                        : `What is the translation of "${evaluationItem.systemAnswer}" in ${sourceLanguageName}?`;
+                const correctAnswer =
+                    evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
+
+                return (
+                    `${idx + 1}. Source language: ${sourceLanguageName}, ` +
+                    `Target language: ${targetLanguageName}, ` +
+                    `Source word: "${vocab.textSource}", Target word(s): "${targetTexts}", ` +
+                    `Question: ${questionContext}, ` +
+                    `Correct answer (List): "${correctAnswer}", ` +
+                    `Student's answer: "${evaluationItem.userAnswer}"`
+                );
+            },
+        );
 
         const evaluationDetails = (await Promise.all(evaluationDetailsPromises)).join('\n\n');
 
         const prompt = `
-        You are an expert linguistic evaluator. Your task is to assess student translations with semantic flexibility, avoiding rigid string matching.
-        
-        Input Data:
-        ${evaluationDetails}
-        
-        CRITICAL EVALUATION RULES:
-        
-        1. **Normalization (Fix for formatting errors)**:
-           - Before comparing, ignore all case sensitivity (uppercase/lowercase).
-           - LEADING/TRAILING WHITESPACE or extra spaces between words must be IGNORED.
-           - Punctuation differences should be ignored unless they change the meaning.
-           - *Logic:* If the student's text is identical to the target text after trimming spaces and lowercase conversion, mark it TRUE.
-        
-        2. **Source-Based Validation (Fix for synonyms)**:
-           - Evaluate the relationship between the **Student's Answer** and the **Source Word** directly.
-           - If the student's answer is a valid, natural translation or a close synonym of the Source Word (even if not listed in the "Target word(s)"), mark it TRUE.
-        
-        3. **Multi-Value & Partial Match (Crucial for Vocabulary)**:
-           - When the "Target word(s)" or "Correct answer" contains multiple meanings separated by commas (e.g., "Meaning A, Meaning B"):
-             - **ONE OF MANY:** The student is CORRECT if they provide **ANY ONE** of the meanings (e.g., just "Meaning A").
-             - **ALL:** The student is CORRECT if they provide **ALL** meanings (e.g., "Meaning A, Meaning B").
-             - **SYNONYM:** The student is CORRECT if they provide a valid synonym for **ANY** of the meanings.
-        
-        OUTPUT FORMAT:
-        Return ONLY a valid JSON array. No markdown, no code blocks.
-        Explanation must be in Vietnamese.
-        
-        [
-            {
-                "answerIndex": 0,
-                "isCorrect": true/false,
-                "explanation": "Brief explanation in Vietnamese. Explicitly state if the answer is one of the valid meanings."
-            }
-        ]
-        `;
+            You are an expert linguistic evaluator. Your task is to assess student translations with semantic flexibility, avoiding rigid string matching.
+            If you mention a spelling/character mismatch, do NOT output cryptic tokens. Describe the mismatch clearly.
+            
+            Input Data:
+            ${evaluationDetails}
+            
+            CRITICAL EVALUATION RULES:
+            
+            1. **Normalization (Fix for formatting errors)**:
+            - Treat strings as Unicode text; normalize before comparing.
+            - Before comparing, ignore all case sensitivity (uppercase/lowercase).
+            - LEADING/TRAILING WHITESPACE or extra spaces between words must be IGNORED.
+            - Punctuation differences should be ignored unless they change the meaning.
+            - *Logic:* If the student's text is identical to the target text after trimming spaces and lowercase conversion, mark it TRUE.
+            
+            2. **Source-Based Validation (Fix for synonyms)**:
+            - Evaluate the relationship between the **Student's Answer** and the **Source Word** directly.
+            - If the student's answer is a valid, natural translation or a close synonym of the Source Word (even if not listed in the "Target word(s)"), mark it TRUE.
+            
+            3. **Multi-Value & Partial Match (Crucial for Vocabulary)**:
+            - When the "Target word(s)" or "Correct answer" contains multiple meanings separated by commas (e.g., "Meaning A, Meaning B"):
+                - **ONE OF MANY:** The student is CORRECT if they provide **ANY ONE** of the meanings (e.g., just "Meaning A").
+                - **ALL:** The student is CORRECT if they provide **ALL** meanings (e.g., "Meaning A, Meaning B").
+                - **SYNONYM:** The student is CORRECT if they provide a valid synonym for **ANY** of the meanings.
+            
+            OUTPUT FORMAT:
+            Return ONLY a valid JSON array. No markdown, no code blocks.
+            Explanation must be in Vietnamese.
+            
+            [
+                {
+                    "answerIndex": 0,
+                    "isCorrect": true/false,
+                    "explanation": "Brief explanation in Vietnamese. Explicitly state if the answer is one of the valid meanings."
+                }
+            ]
+            `;
 
         try {
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);
 
             const batchResponse = this.parseBatchEvaluationResponse(text);
-
-            const results: Array<{ isCorrect: boolean; explanation?: string }> = [];
-            evaluations.forEach((_, idx) => {
-                const responseItem = batchResponse.find((item) => item.answerIndex === idx);
+            llmEvaluations.forEach((_, llmIdx) => {
+                const originalIdx = llmIndexMap[llmIdx];
+                const responseItem = batchResponse.find((item) => item.answerIndex === llmIdx);
                 if (responseItem) {
-                    results.push({
+                    results[originalIdx] = {
                         isCorrect: responseItem.isCorrect,
                         explanation: responseItem.explanation,
-                    });
+                    };
                 } else {
-                    results.push({ isCorrect: false });
+                    results[originalIdx] = { isCorrect: false };
                 }
             });
 
-            return results;
+            return results.map((r) => r ?? { isCorrect: false });
         } catch (error) {
             this.logger.error('Error evaluating fill-in-blank answers in batch:', error);
             throw error;
@@ -286,7 +378,10 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
     }): Promise<{ jobId: string }> {
         const job = await this.fillInBlankEvaluationQueue.add('evaluate-answers', {
             ...params,
-        } as Omit<import('../processor/fill-in-blank-evaluation.processor').FillInBlankEvaluationJobData, 'jobId'>);
+        } as Omit<
+            import('../processor/fill-in-blank-evaluation.processor').FillInBlankEvaluationJobData,
+            'jobId'
+        >);
 
         return { jobId: job.id || '' };
     }
@@ -387,68 +482,68 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
             const context = [styleContext, audienceContext].filter(Boolean).join(', ');
 
             const prompt = `
-You are a strict evaluator for translation quality between ${targetLanguage} → ${sourceLanguage}. 
-You must follow STRICT SCORING RULES and NEVER give generous scores.
+    You are a strict evaluator for translation quality between ${targetLanguage} → ${sourceLanguage}. 
+    You must follow STRICT SCORING RULES and NEVER give generous scores.
 
-Your job:
-- Compare the user's ${sourceLanguage} translation (ASR transcript) against the original ${targetLanguage} dialogue.
-- Detect any missing meaning, added meaning, mistranslation, incorrect register, grammar issues, or incorrect tense.
-- CRITICALLY IMPORTANT: The user's translation MUST use the source words or their synonyms: ${sourceWordsList}
-- Penalize SEVERELY if the user does not use the required source words or their synonyms
-- Penalize SEVERELY for omissions, additions, or incorrect interpretation of meaning.
+    Your job:
+    - Compare the user's ${sourceLanguage} translation (ASR transcript) against the original ${targetLanguage} dialogue.
+    - Detect any missing meaning, added meaning, mistranslation, incorrect register, grammar issues, or incorrect tense.
+    - CRITICALLY IMPORTANT: The user's translation MUST use the source words or their synonyms: ${sourceWordsList}
+    - Penalize SEVERELY if the user does not use the required source words or their synonyms
+    - Penalize SEVERELY for omissions, additions, or incorrect interpretation of meaning.
 
-Scoring rules (VERY STRICT):
-- accuracy = 10 only if semantic meaning aligns ≥ 95% AND the required source words (or synonyms) are used.
-- Every missing key idea = -2 points.
-- Every mistranslation of critical meaning = -2 to -3 points.
-- Every invented meaning (addition) = -3 points.
-- If required source words are not used (or their synonyms), deduct -3 to -5 points from accuracy.
-- completeness = proportional to meaning coverage:
-    completeness = round( (covered_meaning_percent) / 10 )
-- fluency = evaluate grammar, naturalness, cohesion.
-- register = evaluate tone, formality, appropriateness.
+    Scoring rules (VERY STRICT):
+    - accuracy = 10 only if semantic meaning aligns ≥ 95% AND the required source words (or synonyms) are used.
+    - Every missing key idea = -2 points.
+    - Every mistranslation of critical meaning = -2 to -3 points.
+    - Every invented meaning (addition) = -3 points.
+    - If required source words are not used (or their synonyms), deduct -3 to -5 points from accuracy.
+    - completeness = proportional to meaning coverage:
+        completeness = round( (covered_meaning_percent) / 10 )
+    - fluency = evaluate grammar, naturalness, cohesion.
+    - register = evaluate tone, formality, appropriateness.
 
-overallScore:
-- Automatically computed as:
-  overallScore = accuracy*2.5 + fluency*2 + register*1.5 + completeness*4
-- Clamp 0–100.
+    overallScore:
+    - Automatically computed as:
+    overallScore = accuracy*2.5 + fluency*2 + register*1.5 + completeness*4
+    - Clamp 0–100.
 
-Return ONLY JSON with structure:
+    Return ONLY JSON with structure:
 
-{
-    "overallScore": number,
-    "scores": {
-        "accuracy": number,
-        "fluency": number,
-        "register": number,
-        "completeness": number
-    },
-    "errors": [
-        {
-            "index": number,
-            "span": "text fragment",
-            "type": "omission | addition | wrong_lex | tense | register",
-            "explanation": "what is wrong and why",
-            "suggestion": "corrected version"
-        }
-    ],
-    "missingIdeas": [
-        "list each missing idea from source dialogue"
-    ],
-    "correctedTranslation": "Full corrected translation in ${sourceLanguage}",
-    "advice": ["strict actionable improvements"]
-}
+    {
+        "overallScore": number,
+        "scores": {
+            "accuracy": number,
+            "fluency": number,
+            "register": number,
+            "completeness": number
+        },
+        "errors": [
+            {
+                "index": number,
+                "span": "text fragment",
+                "type": "omission | addition | wrong_lex | tense | register",
+                "explanation": "what is wrong and why",
+                "suggestion": "corrected version"
+            }
+        ],
+        "missingIdeas": [
+            "list each missing idea from source dialogue"
+        ],
+        "correctedTranslation": "Full corrected translation in ${sourceLanguage}",
+        "advice": ["strict actionable improvements"]
+    }
 
-Source dialogue (${targetLanguage}):
-${dialogueText}
+    Source dialogue (${targetLanguage}):
+    ${dialogueText}
 
-User ASR transcript (${sourceLanguage}):
-"${transcript}"
+    User ASR transcript (${sourceLanguage}):
+    "${transcript}"
 
-Required source words (or synonyms) that MUST be used: ${sourceWordsList}
+    Required source words (or synonyms) that MUST be used: ${sourceWordsList}
 
-${context ? `Context: ${context}` : ''}
-            `;
+    ${context ? `Context: ${context}` : ''}
+                `;
 
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);
@@ -564,35 +659,35 @@ ${context ? `Context: ${context}` : ''}
             const wordsList = targetLanguageWords.join(', ');
             const sourceWordsList = sourceLanguageWords.join(', ');
             const prompt = `
-You are a language learning assistant. Generate a natural dialogue between two speakers (A and B) 
-in ${targetLanguageName} that incorporates ALL of the following vocabulary words naturally:
+    You are a language learning assistant. Generate a natural dialogue between two speakers (A and B) 
+    in ${targetLanguageName} that incorporates ALL of the following vocabulary words naturally:
 
-Vocabulary words (${targetLanguageName}): ${wordsList}
+    Vocabulary words (${targetLanguageName}): ${wordsList}
 
-Important context:
-- This dialogue will be translated by the user from ${targetLanguageName} to ${sourceLanguageName}
-- When the user translates this dialogue, they MUST use the source words or their synonyms: ${sourceWordsList}
-- The dialogue should be structured so that when translated, it naturally requires the use of these source words
+    Important context:
+    - This dialogue will be translated by the user from ${targetLanguageName} to ${sourceLanguageName}
+    - When the user translates this dialogue, they MUST use the source words or their synonyms: ${sourceWordsList}
+    - The dialogue should be structured so that when translated, it naturally requires the use of these source words
 
-Requirements:
-1. Create a conversation between speakers A and B
-2. Use ALL the provided vocabulary words naturally in context
-3. The dialogue should be realistic and appropriate
-4. The dialogue must have EXACTLY 4 lines total: 2 lines from speaker A and 2 lines from speaker B
-5. Return the dialogue in JSON format
+    Requirements:
+    1. Create a conversation between speakers A and B
+    2. Use ALL the provided vocabulary words naturally in context
+    3. The dialogue should be realistic and appropriate
+    4. The dialogue must have EXACTLY 4 lines total: 2 lines from speaker A and 2 lines from speaker B
+    5. Return the dialogue in JSON format
 
-Format your response as JSON:
-{
-    "dialogue": [
-        {"speaker": "A", "text": "..."},
-        {"speaker": "B", "text": "..."},
-        {"speaker": "A", "text": "..."},
-        {"speaker": "B", "text": "..."}
-    ]
-}
+    Format your response as JSON:
+    {
+        "dialogue": [
+            {"speaker": "A", "text": "..."},
+            {"speaker": "B", "text": "..."},
+            {"speaker": "A", "text": "..."},
+            {"speaker": "B", "text": "..."}
+        ]
+    }
 
-Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
-            `;
+    Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
+                `;
 
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);
@@ -623,25 +718,26 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
     ): Promise<MultipleChoiceQuestion[]> {
         const vocabItems: Array<{
             index: number;
-            vocab: VocabWithTextTargets;
+            vocab: unknown;
             questionType: 'source' | 'target';
             selectedTarget?: string;
         }> = [];
 
-        vocabList.forEach((vocab, index) => {
+        vocabList.forEach((vocabAny, index) => {
+            const vocab = vocabAny as unknown as VocabForTextTargets;
             if (!vocab.textTargets || vocab.textTargets.length === 0) {
                 return;
             }
 
             const isAskingSource = Math.random() < AI_CONFIG.sourceQuestionProbability;
-            const selectedTarget =
-                vocab.textTargets[Math.floor(Math.random() * vocab.textTargets.length)];
+            const textTargets = vocab.textTargets ?? [];
+            const selectedTarget = textTargets[Math.floor(Math.random() * textTargets.length)];
 
             vocabItems.push({
                 index,
-                vocab,
+                vocab: vocabAny,
                 questionType: isAskingSource ? 'source' : 'target',
-                selectedTarget: selectedTarget.textTarget,
+                selectedTarget: selectedTarget?.textTarget ?? '',
             });
         });
 
@@ -650,8 +746,9 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         }
 
         const vocabDetailsPromises = vocabItems.map(async (item, idx) => {
-            const vocab = item.vocab;
-            const targetTexts = vocab.textTargets.map((tt) => tt.textTarget).join(', ');
+            const vocab = item.vocab as VocabForTextTargets;
+            const textTargets = vocab.textTargets ?? [];
+            const targetTexts = textTargets.map((tt: TextTargetRecord) => tt.textTarget).join(', ');
             const sourceLanguageName = await this.getLanguageName(vocab.sourceLanguageCode);
             const targetLanguageName = await this.getLanguageName(vocab.targetLanguageCode);
             const questionDirection =
@@ -671,48 +768,48 @@ Return ONLY the JSON object, no markdown formatting, no code blocks, no addition
         const vocabDetails = (await Promise.all(vocabDetailsPromises)).join('\n');
 
         const prompt = `
-You are a language learning assistant. Generate multiple choice questions for vocabulary practice.
+    You are a language learning assistant. Generate multiple choice questions for vocabulary practice.
 
-Vocabulary items:
-${vocabDetails}
+    Vocabulary items:
+    ${vocabDetails}
 
-Task: Create exactly ${
-            vocabItems.length
-        } multiple choice questions, one for each vocabulary item above.
+    Task: Create exactly ${
+        vocabItems.length
+    } multiple choice questions, one for each vocabulary item above.
 
-Requirements for each question:
-1. The question should ask for the translation as specified
-2. Provide exactly ${AI_CONFIG.questionCount} options (A, B, C, D)
-3. One option must be the correct answer as specified
-4. Generate ${AI_CONFIG.questionCount - 1} plausible but incorrect options that are:
-   - Similar length to the correct answer
-   - Related to the same topic/context
-   - Common words in the target language
-   - Not obviously wrong
+    Requirements for each question:
+    1. The question should ask for the translation as specified
+    2. Provide exactly ${AI_CONFIG.questionCount} options (A, B, C, D)
+    3. One option must be the correct answer as specified
+    4. Generate ${AI_CONFIG.questionCount - 1} plausible but incorrect options that are:
+    - Similar length to the correct answer
+    - Related to the same topic/context
+    - Common words in the target language
+    - Not obviously wrong
 
-For each question, determine the question type:
-- If question asks "What is the translation of [source] in [target language]?" → type should be "textTarget"
-- If question asks "What is the translation of [target] in [source language]?" → type should be "textSource"
+    For each question, determine the question type:
+    - If question asks "What is the translation of [source] in [target language]?" → type should be "textTarget"
+    - If question asks "What is the translation of [target] in [source language]?" → type should be "textSource"
 
-Format your response as JSON array:
-[
-    {
-        "vocabIndex": 0,
-        "type": "textTarget" or "textSource",
-        "content": "What is the translation of 'word1' in Vietnamese?",
-        "options": [
-            {"label": "correct_answer", "value": "correct_answer"},
-            {"label": "wrong_option_1", "value": "wrong_option_1"},
-            {"label": "wrong_option_2", "value": "wrong_option_2"},
-            {"label": "wrong_option_3", "value": "wrong_option_3"}
-        ],
-        "correctAnswer": "correct_answer"
-    },
-    ...
-]
+    Format your response as JSON array:
+    [
+        {
+            "vocabIndex": 0,
+            "type": "textTarget" or "textSource",
+            "content": "What is the translation of 'word1' in Vietnamese?",
+            "options": [
+                {"label": "correct_answer", "value": "correct_answer"},
+                {"label": "wrong_option_1", "value": "wrong_option_1"},
+                {"label": "wrong_option_2", "value": "wrong_option_2"},
+                {"label": "wrong_option_3", "value": "wrong_option_3"}
+            ],
+            "correctAnswer": "correct_answer"
+        },
+        ...
+    ]
 
-Return ONLY the JSON array, no markdown formatting, no code blocks, no additional text.
-        `;
+    Return ONLY the JSON array, no markdown formatting, no code blocks, no additional text.
+            `;
 
         const provider = await this.providerFactory.getProvider(userId);
         const text = await provider.generateContent(prompt, userId);
@@ -833,7 +930,7 @@ Return ONLY the JSON array, no markdown formatting, no code blocks, no additiona
             return cached;
         }
 
-        const language = await this.languageRepository.findByCode(code);
+        const language = (await this.languageRepository.findByCode(code)) as LanguageRecord | null;
         if (!language) {
             this.logger.warn(`Language not found for code: ${code}, using code as fallback`);
             return code;
