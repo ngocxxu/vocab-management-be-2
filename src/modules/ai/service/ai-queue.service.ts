@@ -2,10 +2,14 @@ import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { EReminderType } from '../../reminder/util';
-import { VocabWithTextTargets } from '../../vocab-trainer/util';
 import { AudioEvaluationJobData } from '../processor/audio-evaluation.processor';
 import { FillInBlankEvaluationJobData } from '../processor/fill-in-blank-evaluation.processor';
 import { MultipleChoiceGenerationJobData } from '../processor/multiple-choice-generation.processor';
+import {
+    QueueAudioEvaluationParams,
+    QueueFillInBlankEvaluationParams,
+    QueueMultipleChoiceGenerationParams,
+} from './ai.service-types';
 
 @Injectable()
 export class AiQueueService {
@@ -18,17 +22,9 @@ export class AiQueueService {
         private readonly fillInBlankEvaluationQueue: Queue,
     ) {}
 
-    public async queueAudioEvaluation(params: {
-        fileId: string;
-        targetDialogue: Array<{ speaker: string; text: string }>;
-        sourceLanguage: string;
-        targetLanguage: string;
-        sourceWords: string[];
-        targetStyle?: 'formal' | 'informal';
-        targetAudience?: string;
-        userId: string;
-        vocabTrainerId: string;
-    }): Promise<{ jobId: string }> {
+    public async queueAudioEvaluation(
+        params: QueueAudioEvaluationParams,
+    ): Promise<{ jobId: string }> {
         const job = await this.audioEvaluationQueue.add('evaluate-audio', {
             ...params,
         } as Omit<AudioEvaluationJobData, 'jobId'>);
@@ -36,11 +32,9 @@ export class AiQueueService {
         return { jobId: job.id || '' };
     }
 
-    public async queueMultipleChoiceGeneration(params: {
-        vocabTrainerId: string;
-        vocabList: VocabWithTextTargets[];
-        userId: string;
-    }): Promise<{ jobId: string }> {
+    public async queueMultipleChoiceGeneration(
+        params: QueueMultipleChoiceGenerationParams,
+    ): Promise<{ jobId: string }> {
         const job = await this.multipleChoiceQueue.add('generate-questions', {
             ...params,
         } as MultipleChoiceGenerationJobData);
@@ -48,21 +42,9 @@ export class AiQueueService {
         return { jobId: job.id || '' };
     }
 
-    public async queueFillInBlankEvaluation(params: {
-        vocabTrainerId: string;
-        evaluations: Array<{
-            vocab: VocabWithTextTargets;
-            userAnswer: string;
-            systemAnswer: string;
-            questionType: 'textSource' | 'textTarget';
-            vocabId: string;
-        }>;
-        answerSubmissions: Array<{
-            userAnswer: string;
-            systemAnswer: string;
-        }>;
-        userId: string;
-    }): Promise<{ jobId: string }> {
+    public async queueFillInBlankEvaluation(
+        params: QueueFillInBlankEvaluationParams,
+    ): Promise<{ jobId: string }> {
         const job = await this.fillInBlankEvaluationQueue.add('evaluate-answers', {
             ...params,
         } as Omit<FillInBlankEvaluationJobData, 'jobId'>);

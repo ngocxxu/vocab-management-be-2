@@ -11,8 +11,8 @@ import { AiService } from '../service/ai.service';
 export interface AudioEvaluationJobData {
     fileId: string;
     targetDialogue: Array<{ speaker: string; text: string }>;
-    sourceLanguage: string;
-    targetLanguage: string;
+    sourceLanguageCode: string;
+    targetLanguageCode: string;
     sourceWords: string[];
     targetStyle?: 'formal' | 'informal';
     targetAudience?: string;
@@ -35,8 +35,8 @@ export class AudioEvaluationProcessor {
         const {
             fileId,
             targetDialogue,
-            sourceLanguage,
-            targetLanguage,
+            sourceLanguageCode,
+            targetLanguageCode,
             sourceWords,
             targetStyle,
             targetAudience,
@@ -57,15 +57,15 @@ export class AudioEvaluationProcessor {
             const transcript = await this.aiService.transcribeAudio(
                 audioBuffer,
                 mimeType,
-                sourceLanguage,
+                sourceLanguageCode,
                 userId,
             );
 
             const evaluationResult = await this.aiService.evaluateTranslation({
                 targetDialogue,
                 transcript,
-                sourceLanguage,
-                targetLanguage,
+                sourceLanguageCode,
+                targetLanguageCode,
                 sourceWords,
                 targetStyle,
                 targetAudience,

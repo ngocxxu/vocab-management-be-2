@@ -251,8 +251,8 @@ export class VocabTrainerService {
                     trainer.questionAnswers = [];
                 } else {
                     const firstVocab = trainerWithVocabs.vocabAssignments[0].vocab;
-                    const targetLanguage = firstVocab.targetLanguageCode;
-                    const sourceLanguage = firstVocab.sourceLanguageCode;
+                    const targetLanguageCode = firstVocab.targetLanguageCode;
+                    const sourceLanguageCode = firstVocab.sourceLanguageCode;
 
                     const targetLanguageWords: string[] = [];
                     const sourceLanguageWords: string[] = [];
@@ -274,8 +274,8 @@ export class VocabTrainerService {
                         const dialogueResult = await this.aiService.generateDialogueForVocabs(
                             targetLanguageWords,
                             sourceLanguageWords,
-                            targetLanguage,
-                            sourceLanguage,
+                            targetLanguageCode,
+                            sourceLanguageCode,
                             trainer.userId,
                         );
 
@@ -657,8 +657,8 @@ export class VocabTrainerService {
                 throw new BadRequestException('No vocab assignments found');
             }
 
-            const sourceLanguage = firstVocab.sourceLanguageCode;
-            const targetLanguage = firstVocab.targetLanguageCode;
+            const sourceLanguageCode = firstVocab.sourceLanguageCode;
+            const targetLanguageCode = firstVocab.targetLanguageCode;
 
             const sourceWords: string[] = [];
             trainerWithVocabs.vocabAssignments.forEach((assignment) => {
@@ -671,8 +671,8 @@ export class VocabTrainerService {
             const { jobId } = await this.aiService.queueAudioEvaluation({
                 fileId,
                 targetDialogue,
-                sourceLanguage,
-                targetLanguage,
+                sourceLanguageCode,
+                targetLanguageCode,
                 sourceWords,
                 targetStyle,
                 targetAudience,

@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiProviderFactory } from '../provider/ai-provider.factory';
+import { parseJsonOrThrow } from '../util/ai-json.util';
 import { AI_CONFIG } from '../util/const.util';
 import { EvaluationResult } from '../util/type.util';
 import { AiLanguageNameService } from './ai-language-name.service';
-import { parseJsonOrThrow } from '../util/ai-json.util';
+import { EvaluateTranslationParams } from './ai.service-types';
 
 @Injectable()
 export class AiTranslationEvaluationService {
@@ -14,22 +15,12 @@ export class AiTranslationEvaluationService {
         private readonly languageNameService: AiLanguageNameService,
     ) {}
 
-    public async evaluateTranslation(params: {
-        targetDialogue: Array<{ speaker: string; text: string }>;
-        transcript: string;
-        sourceLanguage: string;
-        targetLanguage: string;
-        sourceWords: string[];
-        targetStyle?: 'formal' | 'informal';
-        targetAudience?: string;
-        userId?: string;
-        retryCount?: number;
-    }): Promise<EvaluationResult> {
+    public async evaluateTranslation(params: EvaluateTranslationParams): Promise<EvaluationResult> {
         const {
             targetDialogue,
             transcript,
-            sourceLanguage: sourceLanguageCode,
-            targetLanguage: targetLanguageCode,
+            sourceLanguageCode,
+            targetLanguageCode,
             sourceWords,
             targetStyle,
             targetAudience,
@@ -38,8 +29,10 @@ export class AiTranslationEvaluationService {
         } = params;
 
         try {
-            const sourceLanguage = await this.languageNameService.getLanguageName(sourceLanguageCode);
-            const targetLanguage = await this.languageNameService.getLanguageName(targetLanguageCode);
+            const sourceLanguage =
+                await this.languageNameService.getLanguageName(sourceLanguageCode);
+            const targetLanguage =
+                await this.languageNameService.getLanguageName(targetLanguageCode);
 
             const dialogueText = targetDialogue
                 .map((item) => `${item.speaker}: "${item.text}"`)
@@ -82,7 +75,13 @@ Return ONLY JSON with structure:
   "overallScore": number,
   "scores": { "accuracy": number, "fluency": number, "register": number, "completeness": number },
   "errors": [
-    { "index": number, "span": "text fragment", "type": "omission | addition | wrong_lex | tense | register", "explanation": "what is wrong and why", "suggestion": "corrected version" }
+    {
+      "index": number,
+      "span": "text fragment",
+      "type": "omission | addition | wrong_lex | tense | register",
+      "explanation": "what is wrong and why",
+      "suggestion": "corrected version"
+    }
   ],
   "missingIdeas": [ "list each missing idea from source dialogue" ],
   "correctedTranslation": "Full corrected translation in ${sourceLanguage}",
@@ -177,4 +176,3 @@ ${context ? `Context: ${context}` : ''}
         return report;
     }
 }
-

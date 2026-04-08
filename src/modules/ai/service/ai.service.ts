@@ -11,6 +11,12 @@ import { AiMultipleChoiceService } from './ai-multiple-choice.service';
 import { AiQueueService } from './ai-queue.service';
 import { AiTranslationEvaluationService } from './ai-translation-evaluation.service';
 import { AiTranslationService } from './ai-translation.service';
+import {
+    EvaluateTranslationParams,
+    QueueAudioEvaluationParams,
+    QueueFillInBlankEvaluationParams,
+    QueueMultipleChoiceGenerationParams,
+} from './ai.service-types';
 
 @Injectable()
 export class AiService {
@@ -73,43 +79,21 @@ export class AiService {
         return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId);
     }
 
-    public async queueAudioEvaluation(params: {
-        fileId: string;
-        targetDialogue: Array<{ speaker: string; text: string }>;
-        sourceLanguage: string;
-        targetLanguage: string;
-        sourceWords: string[];
-        targetStyle?: 'formal' | 'informal';
-        targetAudience?: string;
-        userId: string;
-        vocabTrainerId: string;
-    }): Promise<{ jobId: string }> {
+    public async queueAudioEvaluation(
+        params: QueueAudioEvaluationParams,
+    ): Promise<{ jobId: string }> {
         return this.queueService.queueAudioEvaluation(params);
     }
 
-    public async queueMultipleChoiceGeneration(params: {
-        vocabTrainerId: string;
-        vocabList: VocabWithTextTargets[];
-        userId: string;
-    }): Promise<{ jobId: string }> {
+    public async queueMultipleChoiceGeneration(
+        params: QueueMultipleChoiceGenerationParams,
+    ): Promise<{ jobId: string }> {
         return this.queueService.queueMultipleChoiceGeneration(params);
     }
 
-    public async queueFillInBlankEvaluation(params: {
-        vocabTrainerId: string;
-        evaluations: Array<{
-            vocab: VocabWithTextTargets;
-            userAnswer: string;
-            systemAnswer: string;
-            questionType: 'textSource' | 'textTarget';
-            vocabId: string;
-        }>;
-        answerSubmissions: Array<{
-            userAnswer: string;
-            systemAnswer: string;
-        }>;
-        userId: string;
-    }): Promise<{ jobId: string }> {
+    public async queueFillInBlankEvaluation(
+        params: QueueFillInBlankEvaluationParams,
+    ): Promise<{ jobId: string }> {
         return this.queueService.queueFillInBlankEvaluation(params);
     }
 
@@ -120,124 +104,40 @@ export class AiService {
     public async transcribeAudio(
         audioBuffer: Buffer,
         mimeType: string,
-        sourceLanguage: string,
+        sourceLanguageCode: string,
         userId?: string,
         retryCount = 0,
     ): Promise<string> {
         return this.audioService.transcribeAudio(
             audioBuffer,
             mimeType,
-            sourceLanguage,
+            sourceLanguageCode,
             userId,
             retryCount,
         );
     }
 
-    public async evaluateTranslation(params: {
-        targetDialogue: Array<{ speaker: string; text: string }>;
-        transcript: string;
-        sourceLanguage: string;
-        targetLanguage: string;
-        sourceWords: string[];
-        targetStyle?: 'formal' | 'informal';
-        targetAudience?: string;
-        userId?: string;
-        retryCount?: number;
-    }): Promise<EvaluationResult> {
+    public async evaluateTranslation(params: EvaluateTranslationParams): Promise<EvaluationResult> {
         return this.translationEvaluationService.evaluateTranslation(params);
     }
 
     public formatMarkdownReport(evaluation: EvaluationResult, transcript: string): string {
-        const safe = <T, U>(v: T | undefined, d: U) => v ?? (d as unknown as T);
-
-        let report = '# Translation Evaluation Report\n\n';
-
-        // Overall + score breakdown
-        report += `## Overall Score: ${safe(evaluation.overallScore, 0)} / 100\n\n`;
-        report += '### Detailed Scores (scale 0–10)\n';
-        report += `- **Accuracy**: ${safe(
-            evaluation.scores?.accuracy,
-            0,
-        )}/10 — Semantic correctness (penalize omissions/additions). \n`;
-        report += `- **Fluency**: ${safe(
-            evaluation.scores?.fluency,
-            0,
-        )}/10 — Naturalness, grammar, cohesion.\n`;
-        report += `- **Register**: ${safe(
-            evaluation.scores?.register,
-            0,
-        )}/10 — Tone / formality appropriateness.\n`;
-        report += `- **Completeness**: ${safe(
-            evaluation.scores?.completeness,
-            0,
-        )}/10 — Coverage of source ideas (computed from meaning coverage %).\n\n`;
-
-        // Optional: show scoring formula used by evaluator
-        report += '### Scoring Formula\n';
-        report +=
-            'OverallScore = accuracy * 2.5 + fluency * 2 + register * 1.5 + completeness * 4 (clamped 0–100)\n\n';
-
-        // Errors
-        const errors = safe(evaluation.errors, []);
-        if (Array.isArray(errors) && errors.length > 0) {
-            report += '## Errors Found (ordered)\n\n';
-            errors.forEach((error) => {
-                const idx = typeof error.index === 'number' ? error.index : undefined;
-                const indexPrefix = idx === undefined ? '' : `**${idx}.**`;
-                report += `${indexPrefix}**Location**: ${safe(error.span, '(unknown span)')}  \n`;
-                report += `- **Type**: ${safe(error.type, '(unknown)')}  \n`;
-                report += `- **Issue**: ${safe(error.explanation, '(no explanation)')}  \n`;
-                report += `- **Suggestion**: ${safe(error.suggestion, '(no suggestion)')}  \n\n`;
-            });
-        } else {
-            report += '## Errors Found\n\nNo specific errors detected.\n\n';
-        }
-
-        // Source / transcript
-        report += '## Your Transcript (ASR)\n\n';
-        report += `${transcript || '(no transcript)'}\n\n`;
-
-        // Corrected translation
-        report += '## Corrected Translation (full)\n\n';
-        report += `${safe(evaluation.correctedTranslation, '(no corrected translation)')}\n\n`;
-
-        // Missing ideas
-        const missing = safe(evaluation.missingIdeas, []);
-        if (Array.isArray(missing) && missing.length > 0) {
-            report +=
-                '## Missing Ideas (explicit list of source ideas not covered by the transcript)\n\n';
-            missing.forEach((mi, i) => {
-                report += `${i + 1}. ${mi}\n`;
-            });
-            report += '\n';
-        }
-
-        // Advice / improvement tips
-        const advice = safe(evaluation.advice, []);
-        if (Array.isArray(advice) && advice.length > 0) {
-            report += '## Improvement Tips (actionable)\n\n';
-            advice.forEach((tip) => {
-                report += `- ${tip}\n`;
-            });
-            report += '\n';
-        }
-
-        return report;
+        return this.translationEvaluationService.formatMarkdownReport(evaluation, transcript);
     }
 
     public async generateDialogueForVocabs(
         targetLanguageWords: string[],
         sourceLanguageWords: string[],
-        targetLanguage: string,
-        sourceLanguage: string,
+        targetLanguageCode: string,
+        sourceLanguageCode: string,
         userId?: string,
         retryCount = 0,
     ): Promise<{ dialogue: Array<{ speaker: string; text: string }>; vocabWordsUsed: string[] }> {
         try {
             const targetLanguageName =
-                await this.languageNameService.getLanguageName(targetLanguage);
+                await this.languageNameService.getLanguageName(targetLanguageCode);
             const sourceLanguageName =
-                await this.languageNameService.getLanguageName(sourceLanguage);
+                await this.languageNameService.getLanguageName(sourceLanguageCode);
 
             const wordsList = targetLanguageWords.join(', ');
             const sourceWordsList = sourceLanguageWords.join(', ');
