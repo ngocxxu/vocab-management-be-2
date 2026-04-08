@@ -18,7 +18,14 @@ import { AiProviderFactory } from './provider/ai-provider.factory';
 import { GeminiProvider } from './provider/gemini.provider';
 import { GroqProvider } from './provider/groq.provider';
 import { OpenRouterProvider } from './provider/openrouter.provider';
+import { AiAudioService } from './service/ai-audio.service';
+import { AiFillInBlankGradingService } from './service/ai-fill-in-blank-grading.service';
+import { AiLanguageNameService } from './service/ai-language-name.service';
+import { AiMultipleChoiceService } from './service/ai-multiple-choice.service';
+import { AiQueueService } from './service/ai-queue.service';
 import { AiService } from './service/ai.service';
+import { AiTranslationEvaluationService } from './service/ai-translation-evaluation.service';
+import { AiTranslationService } from './service/ai-translation.service';
 
 @Module({
     imports: [
@@ -53,6 +60,13 @@ import { AiService } from './service/ai.service';
         OpenRouterProvider,
         GroqProvider,
         AiProviderFactory,
+        AiLanguageNameService,
+        AiTranslationService,
+        AiFillInBlankGradingService,
+        AiMultipleChoiceService,
+        AiAudioService,
+        AiTranslationEvaluationService,
+        AiQueueService,
         AiService,
         AudioEvaluationProcessor,
         MultipleChoiceGenerationProcessor,
