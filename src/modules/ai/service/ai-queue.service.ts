@@ -9,7 +9,7 @@ import {
     QueueAudioEvaluationParams,
     QueueFillInBlankEvaluationParams,
     QueueMultipleChoiceGenerationParams,
-} from './ai.service-types';
+} from '../util/ai-service-types.util';
 
 @Injectable()
 export class AiQueueService {

@@ -1,5 +1,5 @@
 import { VocabWithTextTargets } from '../../vocab-trainer/util';
-import { EvaluationResult } from '../util/type.util';
+import { EvaluationResult } from './type.util';
 
 export type QueueAudioEvaluationParams = {
     fileId: string;

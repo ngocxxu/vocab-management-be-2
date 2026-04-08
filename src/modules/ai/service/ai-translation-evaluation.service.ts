@@ -4,7 +4,7 @@ import { parseJsonOrThrow } from '../util/ai-json.util';
 import { AI_CONFIG } from '../util/const.util';
 import { EvaluationResult } from '../util/type.util';
 import { AiLanguageNameService } from './ai-language-name.service';
-import { EvaluateTranslationParams } from './ai.service-types';
+import { EvaluateTranslationParams } from '../util/ai-service-types.util';
 
 @Injectable()
 export class AiTranslationEvaluationService {

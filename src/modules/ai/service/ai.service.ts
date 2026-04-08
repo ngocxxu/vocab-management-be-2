@@ -3,6 +3,12 @@ import { CreateTextTargetInput } from '../../vocab/model/vocab.input';
 import { VocabWithTextTargets } from '../../vocab-trainer/util';
 import { AiProviderFactory } from '../provider/ai-provider.factory';
 import { parseJsonOrThrow } from '../util/ai-json.util';
+import {
+    EvaluateTranslationParams,
+    QueueAudioEvaluationParams,
+    QueueFillInBlankEvaluationParams,
+    QueueMultipleChoiceGenerationParams,
+} from '../util/ai-service-types.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../util/type.util';
 import { AiAudioService } from './ai-audio.service';
 import { AiFillInBlankGradingService } from './ai-fill-in-blank-grading.service';
@@ -11,12 +17,6 @@ import { AiMultipleChoiceService } from './ai-multiple-choice.service';
 import { AiQueueService } from './ai-queue.service';
 import { AiTranslationEvaluationService } from './ai-translation-evaluation.service';
 import { AiTranslationService } from './ai-translation.service';
-import {
-    EvaluateTranslationParams,
-    QueueAudioEvaluationParams,
-    QueueFillInBlankEvaluationParams,
-    QueueMultipleChoiceGenerationParams,
-} from './ai.service-types';
 
 @Injectable()
 export class AiService {
