@@ -1,3 +1,16 @@
+export function coerceQueryStringArray(value: unknown): string[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  }
+  if (typeof value === 'string' && value.length > 0) {
+    return [value];
+  }
+  return [];
+}
+
 interface QueryBuilderOptions<TQuery, TWhere> {
   stringFields?: (keyof TQuery)[];
   enumFields?: (keyof TQuery)[];

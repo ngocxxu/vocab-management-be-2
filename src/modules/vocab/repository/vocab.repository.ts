@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, Vocab } from '@prisma/client';
 import { PrismaService } from '../../common';
 import { RedisService } from '../../common/provider/redis.provider';
-import { buildPrismaWhere } from '../../common/util/query-builder.util';
+import { buildPrismaWhere, coerceQueryStringArray } from '../../common/util/query-builder.util';
 import { RedisPrefix } from '../../common/util/redis-key.util';
 import { VocabQueryParamsInput } from '../model/vocab-query-params.input';
 
@@ -41,10 +41,11 @@ export class VocabRepository {
             ],
             customMap: (input, w) => {
                 if (userId) (w as Prisma.VocabWhereInput).userId = userId;
-                if (input.subjectIds?.length) {
+                const subjectIds = coerceQueryStringArray(input.subjectIds);
+                if (subjectIds.length) {
                     (w as Prisma.VocabWhereInput).textTargets = {
                         some: {
-                            textTargetSubjects: { some: { subjectId: { in: input.subjectIds } } },
+                            textTargetSubjects: { some: { subjectId: { in: subjectIds } } },
                         },
                     };
                 }

@@ -10,5 +10,21 @@
   {
     "code": "vi",
     "name": "Vietnamese"
+  },
+  {
+    "code": "ja",
+    "name": "Japanese"
+  },
+  {
+    "code": "th",
+    "name": "Thai"
+  },
+  {
+    "code": "zh-CN",
+    "name": "Chinese (Simplified)"
+  },
+  {
+    "code": "zh-TW",
+    "name": "Chinese (Traditional)"
   }
 ]

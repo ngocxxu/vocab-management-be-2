@@ -15,13 +15,12 @@ export class VocabQueryParamsInput extends QueryParamsInput {
     public readonly languageFolderId: string;
 
     @ApiProperty({
-        description: 'List of subject ids',
-        type: 'array',
-        items: { type: 'string' },
+        description: 'Subject ids (repeat subjectIds= for multiple, or a single value)',
+        oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }],
         required: false,
-        example: ['Game']
+        example: ['cmjpsfjj10005jhb5hdwsl2je'],
     })
-    public readonly subjectIds: string[];
+    public readonly subjectIds?: string | string[];
 
     @ApiProperty({ description: 'User ID', example: 'string', required: false })
     public readonly userId: string;
