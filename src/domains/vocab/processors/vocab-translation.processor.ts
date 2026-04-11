@@ -4,18 +4,11 @@ import { Prisma, TextTarget } from '@prisma/client';
 import { Job } from 'bullmq';
 import { AiService } from '../../ai/services/ai.service';
 import { LoggerService } from '@/shared';
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType } from '../../reminder/utils';
 import { CreateTextTargetInput } from '../dto/vocab.input';
 import { VocabRepository } from '../repositories/vocab.repository';
-
-export interface VocabTranslationJobData {
-    vocabId: string;
-    textSource: string;
-    sourceLanguageCode: string;
-    targetLanguageCode: string;
-    subjectIds?: string[];
-    userId: string;
-}
 
 type VocabWithTextTargets = Prisma.VocabGetPayload<{
     include: {
@@ -42,7 +35,10 @@ export class VocabTranslationProcessor {
         private readonly logger: LoggerService,
     ) {}
 
-    @Process('translate-vocab')
+    @Process({
+        name: 'translate-vocab',
+        concurrency: QUEUE_CONFIG[EReminderType.VOCAB_TRANSLATION].concurrency,
+    })
     public async processVocabTranslation(job: Job<VocabTranslationJobData>): Promise<void> {
         const { vocabId, textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId } =
             job.data;

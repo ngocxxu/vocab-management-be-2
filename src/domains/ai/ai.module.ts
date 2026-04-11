@@ -1,13 +1,9 @@
-import { BullAdapter } from '@bull-board/api/bullAdapter';
-import { BullBoardModule } from '@bull-board/nestjs';
-import { BullModule } from '@nestjs/bull';
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '../platform/config';
 import { EventsModule } from '../platform/events';
 import { LanguageModule } from '../catalog/language';
 import { NotificationModule } from '../notification';
 import { ReminderModule } from '../reminder';
-import { EReminderType } from '../reminder/utils';
 import { UserModule } from '../identity/user';
 import { VocabModule } from '../vocab';
 import { VocabTrainerModule } from '../vocab-trainer';
@@ -39,27 +35,6 @@ import { AiTranslationService } from './services/ai-translation.service';
         WordTypeModule,
         forwardRef(() => VocabModule),
         forwardRef(() => VocabTrainerModule),
-        BullModule.registerQueue({
-            name: EReminderType.AUDIO_EVALUATION,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.AUDIO_EVALUATION,
-            adapter: BullAdapter,
-        }),
-        BullModule.registerQueue({
-            name: EReminderType.MULTIPLE_CHOICE_GENERATION,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.MULTIPLE_CHOICE_GENERATION,
-            adapter: BullAdapter,
-        }),
-        BullModule.registerQueue({
-            name: EReminderType.FILL_IN_BLANK_EVALUATION,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.FILL_IN_BLANK_EVALUATION,
-            adapter: BullAdapter,
-        }),
     ],
     providers: [
         GeminiProvider,

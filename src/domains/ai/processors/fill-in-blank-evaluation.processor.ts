@@ -7,27 +7,13 @@ import { UserRepository } from '../../identity/user/repositories';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { NotificationService } from '../../notification/services';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { FillInBlankEvaluationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
-import { EQuestionType, EReminderRepeat, VocabWithTextTargets } from '../../vocab-trainer/utils';
+import { EQuestionType, EReminderRepeat } from '../../vocab-trainer/utils';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
-
-export interface FillInBlankEvaluationJobData {
-    vocabTrainerId: string;
-    evaluations: Array<{
-        vocab: VocabWithTextTargets;
-        userAnswer: string;
-        systemAnswer: string;
-        questionType: 'textSource' | 'textTarget';
-        vocabId: string;
-    }>;
-    answerSubmissions: Array<{
-        userAnswer: string;
-        systemAnswer: string;
-    }>;
-    userId: string;
-}
 
 @Injectable()
 @Processor(EReminderType.FILL_IN_BLANK_EVALUATION)
@@ -43,7 +29,10 @@ export class FillInBlankEvaluationProcessor {
         private readonly vocabTrainerReminderAfterExam: VocabTrainerReminderAfterExamService,
     ) {}
 
-    @Process('evaluate-answers')
+    @Process({
+        name: 'evaluate-answers',
+        concurrency: QUEUE_CONFIG[EReminderType.FILL_IN_BLANK_EVALUATION].concurrency,
+    })
     public async processFillInBlankEvaluation(
         job: Job<FillInBlankEvaluationJobData>,
     ): Promise<void> {

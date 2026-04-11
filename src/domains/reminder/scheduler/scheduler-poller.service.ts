@@ -1,12 +1,9 @@
-import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ReminderSchedule, ReminderScheduleStatus } from '@prisma/client';
-import { Queue } from 'bullmq';
 import { LoggerService } from '@/shared';
+import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
-import { EEmailReminderType, EReminderType } from '../utils';
-
 @Injectable()
 export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
     private timer?: NodeJS.Timeout;
@@ -15,7 +12,7 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
     private readonly instanceId = process.env.INSTANCE_ID ?? `pid-${process.pid}`;
 
     public constructor(
-        @InjectQueue(EReminderType.EMAIL_REMINDER) private readonly emailQueue: Queue,
+        private readonly emailReminderProducer: EmailReminderProducer,
         private readonly reminderScheduleRepository: ReminderScheduleRepository,
         private readonly logger: LoggerService,
     ) {}
@@ -64,8 +61,7 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
     private async enqueueOne(row: ReminderSchedule): Promise<void> {
         let job: { remove: () => Promise<void> } | undefined;
         try {
-            job = await this.emailQueue.add(
-                EEmailReminderType.SEND_REMINDER_SCHEDULE,
+            job = await this.emailReminderProducer.enqueueScheduleJobWithReturnJob(
                 { scheduleId: row.id },
                 {
                     jobId: `reminder-schedule-${row.id}`,

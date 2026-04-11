@@ -11,6 +11,7 @@ import { CommonModule } from '@/common/common.module';
 
 import { AuthModule as AppAuthModule, GlobalAuthGuard } from '@/auth';
 
+import { QueuesModule } from '@/queues/queues.module';
 import { envConfigLoaders, validationSchema } from '../config';
 import { AiModule } from '@/domains/ai';
 import { AuthModule as IdentityAuthModule } from '@/domains/identity/auth';
@@ -48,6 +49,7 @@ import { SharedModule, UserThrottlerGuard } from '@/shared';
                 redis: configService.getOrThrow<string>('redis.url'),
             }),
         }),
+        QueuesModule,
         AdminModule,
         ThrottlerModule.forRootAsync({
             inject: [ConfigService],

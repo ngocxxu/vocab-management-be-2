@@ -5,6 +5,7 @@ import { LoggerService } from '@/shared';
 import { ActedCheckRegistry } from '../../../reminder/strategies/acted-check.registry';
 import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { ReminderScheduleRepository } from '../../../reminder/repositories/reminder-schedule.repository';
+import { EMAIL_REMINDER_JOB_CONCURRENCY } from '@/queues/config/queue.config';
 import { EEmailReminderType, EReminderType } from '../../../reminder/utils';
 import { computeBackoffMs } from '../../../reminder/utils/reminder-date.util';
 import { EmailService } from '../services';
@@ -19,7 +20,10 @@ export class EmailProcessor {
         private readonly actedCheckRegistry: ActedCheckRegistry,
     ) {}
 
-    @Process(EEmailReminderType.SEND_REMINDER)
+    @Process({
+        name: EEmailReminderType.SEND_REMINDER,
+        concurrency: EMAIL_REMINDER_JOB_CONCURRENCY.templateEmail,
+    })
     public async handleReminderEmail(job: Job<EmailJobData>) {
         const { userEmail, reminderType, templateName, data } = job.data;
 
@@ -34,7 +38,10 @@ export class EmailProcessor {
         }
     }
 
-    @Process(EEmailReminderType.SEND_REMINDER_SCHEDULE)
+    @Process({
+        name: EEmailReminderType.SEND_REMINDER_SCHEDULE,
+        concurrency: EMAIL_REMINDER_JOB_CONCURRENCY.scheduleEmail,
+    })
     public async handleReminderScheduleEmail(job: Job<ReminderScheduleEmailJobData>) {
         const { scheduleId } = job.data;
         const row = await this.reminderScheduleRepository.findById(scheduleId);

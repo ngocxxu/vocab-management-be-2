@@ -2,6 +2,7 @@ import { Process, Processor } from '@nestjs/bull';
 import { NotificationAction, NotificationType, PriorityLevel } from '@prisma/client';
 import { Job } from 'bullmq';
 import { LoggerService } from '@/shared';
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
 import { EEmailReminderType, EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { NotificationService } from '../services';
 import { NotificationJobData } from '../utils';
@@ -13,7 +14,10 @@ export class NotificationProcessor {
         private readonly logger: LoggerService,
     ) {}
 
-    @Process(EEmailReminderType.SEND_CREATE_NOTIFICATION)
+    @Process({
+        name: EEmailReminderType.SEND_CREATE_NOTIFICATION,
+        concurrency: QUEUE_CONFIG[EReminderType.NOTIFICATION].concurrency,
+    })
     public async handleCreateNotification(job: Job<NotificationJobData>) {
         const { reminderType, data, recipientUserIds } = job.data;
 

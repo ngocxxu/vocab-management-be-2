@@ -5,20 +5,10 @@ import { Job } from 'bullmq';
 import { LoggerService } from '@/shared';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { AudioEvaluationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType } from '../../reminder/utils';
 import { AiService } from '../services/ai.service';
-
-export interface AudioEvaluationJobData {
-    fileId: string;
-    targetDialogue: Array<{ speaker: string; text: string }>;
-    sourceLanguageCode: string;
-    targetLanguageCode: string;
-    sourceWords: string[];
-    targetStyle?: 'formal' | 'informal';
-    targetAudience?: string;
-    userId: string;
-    vocabTrainerId: string;
-}
 
 @Injectable()
 @Processor(EReminderType.AUDIO_EVALUATION)
@@ -30,7 +20,10 @@ export class AudioEvaluationProcessor {
         private readonly vocabTrainerRepository: VocabTrainerRepository,
     ) {}
 
-    @Process('evaluate-audio')
+    @Process({
+        name: 'evaluate-audio',
+        concurrency: QUEUE_CONFIG[EReminderType.AUDIO_EVALUATION].concurrency,
+    })
     public async processAudioEvaluation(job: Job<AudioEvaluationJobData>): Promise<void> {
         const {
             fileId,

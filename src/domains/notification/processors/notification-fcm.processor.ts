@@ -4,16 +4,9 @@ import { Job } from 'bullmq';
 import { FirebaseProvider } from '../push/firebase';
 import { LoggerService } from '@/shared';
 import { FcmService } from '../push/fcm/services';
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { SendFcmNotificationJobData } from '@/queues/interfaces/job-payloads';
 import { ENotificationFcmType, EReminderType } from '../../reminder/utils';
-
-export interface NotificationFcmJob {
-    notificationId: string;
-    userIds: string[];
-    title: string;
-    body: string;
-    data?: Record<string, string>;
-    priority?: 'normal' | 'high';
-}
 
 @Injectable()
 @Processor(EReminderType.NOTIFICATION_FCM)
@@ -24,8 +17,11 @@ export class NotificationFcmProcessor {
         private readonly firebaseProvider: FirebaseProvider,
     ) {}
 
-    @Process(ENotificationFcmType.SEND_NOTIFICATION)
-    public async sendNotification(job: Job<NotificationFcmJob>): Promise<void> {
+    @Process({
+        name: ENotificationFcmType.SEND_NOTIFICATION,
+        concurrency: QUEUE_CONFIG[EReminderType.NOTIFICATION_FCM].concurrency,
+    })
+    public async sendNotification(job: Job<SendFcmNotificationJobData>): Promise<void> {
         const { notificationId, userIds, title, body, data, priority } = job.data;
 
         try {

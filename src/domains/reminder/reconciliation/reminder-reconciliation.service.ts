@@ -1,22 +1,20 @@
-import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ReminderScheduleStatus } from '@prisma/client';
-import { Job, Queue } from 'bullmq';
+import { Job } from 'bullmq';
 import { LoggerService } from '@/shared';
+import type { ReminderScheduleEmailJobData } from '@/queues/interfaces/job-payloads';
+import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
-import { ReminderScheduleEmailJobData } from '../../notification/email/utils/type';
 import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
-import { EReminderType } from '../utils';
-
 @Injectable()
 export class ReminderReconciliationService implements OnModuleInit, OnModuleDestroy {
     private timer?: NodeJS.Timeout;
     private stopped = false;
 
     public constructor(
-        @InjectQueue(EReminderType.EMAIL_REMINDER) private readonly emailQueue: Queue,
+        private readonly emailReminderProducer: EmailReminderProducer,
         private readonly reminderScheduleRepository: ReminderScheduleRepository,
         private readonly vocabTrainerRepository: VocabTrainerRepository,
         private readonly logger: LoggerService,
@@ -70,9 +68,9 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
         const rows = await this.reminderScheduleRepository.findQueuedScheduleIds(50);
         let count = 0;
         for (const row of rows) {
-            const job = (await this.emailQueue.getJob(
-                `reminder-schedule-${row.id}`,
-            )) as Job<ReminderScheduleEmailJobData>;
+            const job = (await this.emailReminderProducer.getReminderScheduleJob(
+                row.id,
+            )) as Job<ReminderScheduleEmailJobData> | undefined;
 
             if (!job) {
                 const ok = await this.reminderScheduleRepository.transitionStatus(

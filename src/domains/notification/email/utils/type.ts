@@ -1,14 +1,2 @@
-export interface EmailJobData {
-  userEmail: string;
-  reminderType: string;
-  templateName: string;
-  data: TemplateData;
-}
-
-export interface ReminderScheduleEmailJobData {
-  scheduleId: string;
-}
-
-export interface TemplateData {
-  [key: string]: string | number;
-}
+export type { EmailJobData, ReminderScheduleEmailJobData } from '@/queues/interfaces/job-payloads';
+export type { TemplateData } from '@/shared/utils/type.util';

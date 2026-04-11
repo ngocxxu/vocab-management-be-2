@@ -1,13 +1,12 @@
-import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
-import { Queue } from 'bullmq';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { LoggerService } from '@/shared/services/logger.service';
 import { getOrderBy, getPagination } from '@/shared/utils/pagination.util';
 import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
-import { EReminderType } from '../../reminder/utils';
+import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
+import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
 import {
     BulkDeleteInput,
     CsvImportErrorDto,
@@ -19,7 +18,6 @@ import {
 } from '../dto';
 import { VocabMapper } from '../mappers';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
-import { VocabTranslationJobData } from '../processors/vocab-translation.processor';
 import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
 import { CsvImportExistingVocab, VocabRepository } from '../repositories';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
@@ -32,8 +30,7 @@ export class VocabService {
         private readonly vocabRepository: VocabRepository,
         private readonly logger: LoggerService,
         private readonly planQuotaService: PlanQuotaService,
-        @InjectQueue(EReminderType.VOCAB_TRANSLATION)
-        private readonly vocabTranslationQueue: Queue<VocabTranslationJobData>,
+        private readonly vocabTranslationProducer: VocabTranslationProducer,
     ) {}
 
     /**
@@ -150,10 +147,10 @@ export class VocabService {
         const vocab = await this.vocabRepository.create(prismaCreate);
 
         if (shouldQueueTranslation && queuePayload) {
-            await this.vocabTranslationQueue.add('translate-vocab', {
+            await this.vocabTranslationProducer.translateVocab({
                 vocabId: vocab.id,
                 ...queuePayload,
-            });
+            } as VocabTranslationJobData);
         }
 
         await this.vocabRepository.clearListCaches();

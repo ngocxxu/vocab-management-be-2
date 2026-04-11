@@ -1,20 +1,15 @@
-import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { JobsOptions, Queue } from 'bullmq';
 import { LoggerService } from '@/shared';
-import { EReminderType } from '../../reminder/utils';
-import { NotificationFcmJob } from '../processors/notification-fcm.processor';
+import type { SendFcmNotificationJobData } from '@/queues/interfaces/job-payloads';
+import { NotificationFcmProducer } from '@/queues/producers/notification-fcm.producer';
 
 @Injectable()
 export class NotificationFcmService {
     public constructor(
-        @InjectQueue(EReminderType.NOTIFICATION_FCM) private readonly notificationFcmQueue: Queue,
+        private readonly notificationFcmProducer: NotificationFcmProducer,
         private readonly logger: LoggerService,
     ) {}
 
-    /**
-     * Queue a push notification to be sent to multiple users
-     */
     public async queuePushNotification(
         notificationId: string,
         userIds: string[],
@@ -25,7 +20,7 @@ export class NotificationFcmService {
         delay?: number,
     ): Promise<void> {
         try {
-            const jobData: NotificationFcmJob = {
+            const jobData: SendFcmNotificationJobData = {
                 notificationId,
                 userIds,
                 title,
@@ -34,19 +29,10 @@ export class NotificationFcmService {
                 priority,
             };
 
-            const jobOptions: JobsOptions = {
-                attempts: 3,
-                backoff: {
-                    type: 'exponential',
-                    delay: 2000,
-                },
-            };
-
-            if (delay) {
-                jobOptions.delay = delay;
-            }
-
-            await this.notificationFcmQueue.add('send-notification', jobData, jobOptions);
+            await this.notificationFcmProducer.sendNotification(
+                jobData,
+                delay !== undefined ? { delay } : undefined,
+            );
 
             this.logger.info(
                 `Queued FCM notification for notification ${notificationId} to ${userIds.length} users`,
@@ -61,9 +47,6 @@ export class NotificationFcmService {
         }
     }
 
-    /**
-     * Queue an immediate push notification
-     */
     public async sendImmediatePushNotification(
         notificationId: string,
         userIds: string[],
@@ -75,9 +58,6 @@ export class NotificationFcmService {
         return this.queuePushNotification(notificationId, userIds, title, body, data, priority);
     }
 
-    /**
-     * Queue a delayed push notification
-     */
     public async sendDelayedPushNotification(
         notificationId: string,
         userIds: string[],
@@ -98,9 +78,6 @@ export class NotificationFcmService {
         );
     }
 
-    /**
-     * Get queue statistics
-     */
     public async getQueueStats(): Promise<{
         waiting: number;
         active: number;
@@ -108,19 +85,7 @@ export class NotificationFcmService {
         failed: number;
     }> {
         try {
-            const [waiting, active, completed, failed] = await Promise.all([
-                this.notificationFcmQueue.getWaiting(),
-                this.notificationFcmQueue.getActive(),
-                this.notificationFcmQueue.getCompleted(),
-                this.notificationFcmQueue.getFailed(),
-            ]);
-
-            return {
-                waiting: waiting.length,
-                active: active.length,
-                completed: completed.length,
-                failed: failed.length,
-            };
+            return await this.notificationFcmProducer.getQueueStats();
         } catch (error) {
             this.logger.error(
                 `Failed to get queue stats: ${
@@ -131,12 +96,9 @@ export class NotificationFcmService {
         }
     }
 
-    /**
-     * Clear all jobs from the queue
-     */
     public async clearQueue(): Promise<void> {
         try {
-            await this.notificationFcmQueue.drain();
+            await this.notificationFcmProducer.drain();
             this.logger.info('FCM notification queue cleared');
         } catch (error) {
             this.logger.error(

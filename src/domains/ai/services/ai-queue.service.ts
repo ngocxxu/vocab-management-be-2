@@ -1,10 +1,12 @@
-import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import { EReminderType } from '../../reminder/utils';
-import { AudioEvaluationJobData } from '../processors/audio-evaluation.processor';
-import { FillInBlankEvaluationJobData } from '../processors/fill-in-blank-evaluation.processor';
-import { MultipleChoiceGenerationJobData } from '../processors/multiple-choice-generation.processor';
+import type {
+    AudioEvaluationJobData,
+    FillInBlankEvaluationJobData,
+    MultipleChoiceGenerationJobData,
+} from '@/queues/interfaces/job-payloads';
+import { AudioEvaluationProducer } from '@/queues/producers/audio-evaluation.producer';
+import { FillInBlankEvaluationProducer } from '@/queues/producers/fill-in-blank-evaluation.producer';
+import { MultipleChoiceGenerationProducer } from '@/queues/producers/multiple-choice-generation.producer';
 import {
     QueueAudioEvaluationParams,
     QueueFillInBlankEvaluationParams,
@@ -14,42 +16,32 @@ import {
 @Injectable()
 export class AiQueueService {
     public constructor(
-        @InjectQueue(EReminderType.AUDIO_EVALUATION)
-        private readonly audioEvaluationQueue: Queue,
-        @InjectQueue(EReminderType.MULTIPLE_CHOICE_GENERATION)
-        private readonly multipleChoiceQueue: Queue,
-        @InjectQueue(EReminderType.FILL_IN_BLANK_EVALUATION)
-        private readonly fillInBlankEvaluationQueue: Queue,
+        private readonly audioEvaluationProducer: AudioEvaluationProducer,
+        private readonly multipleChoiceProducer: MultipleChoiceGenerationProducer,
+        private readonly fillInBlankProducer: FillInBlankEvaluationProducer,
     ) {}
 
     public async queueAudioEvaluation(
         params: QueueAudioEvaluationParams,
     ): Promise<{ jobId: string }> {
-        const job = await this.audioEvaluationQueue.add('evaluate-audio', {
+        return this.audioEvaluationProducer.queueAudioEvaluation({
             ...params,
-        } as Omit<AudioEvaluationJobData, 'jobId'>);
-
-        return { jobId: job.id || '' };
+        } as AudioEvaluationJobData);
     }
 
     public async queueMultipleChoiceGeneration(
         params: QueueMultipleChoiceGenerationParams,
     ): Promise<{ jobId: string }> {
-        const job = await this.multipleChoiceQueue.add('generate-questions', {
-            ...params,
-        } as MultipleChoiceGenerationJobData);
-
-        return { jobId: job.id || '' };
+        return this.multipleChoiceProducer.generateQuestions(
+            params as MultipleChoiceGenerationJobData,
+        );
     }
 
     public async queueFillInBlankEvaluation(
         params: QueueFillInBlankEvaluationParams,
     ): Promise<{ jobId: string }> {
-        const job = await this.fillInBlankEvaluationQueue.add('evaluate-answers', {
+        return this.fillInBlankProducer.evaluateAnswers({
             ...params,
-        } as Omit<FillInBlankEvaluationJobData, 'jobId'>);
-
-        return { jobId: job.id || '' };
+        } as FillInBlankEvaluationJobData);
     }
 }
-

@@ -4,15 +4,10 @@ import { Job } from 'bullmq';
 import { LoggerService } from '@/shared';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType } from '../../reminder/utils';
-import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiService } from '../services/ai.service';
-
-export interface MultipleChoiceGenerationJobData {
-    vocabTrainerId: string;
-    vocabList: VocabWithTextTargets[];
-    userId: string;
-}
 
 @Injectable()
 @Processor(EReminderType.MULTIPLE_CHOICE_GENERATION)
@@ -24,7 +19,10 @@ export class MultipleChoiceGenerationProcessor {
         private readonly vocabTrainerRepository: VocabTrainerRepository,
     ) {}
 
-    @Process('generate-questions')
+    @Process({
+        name: 'generate-questions',
+        concurrency: QUEUE_CONFIG[EReminderType.MULTIPLE_CHOICE_GENERATION].concurrency,
+    })
     public async processMultipleChoiceGeneration(
         job: Job<MultipleChoiceGenerationJobData>,
     ): Promise<void> {
