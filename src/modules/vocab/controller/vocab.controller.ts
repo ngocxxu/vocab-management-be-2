@@ -5,6 +5,7 @@ import {
     Get,
     HttpStatus,
     Param,
+    ParseIntPipe,
     Post,
     Put,
     UseGuards,
@@ -14,7 +15,14 @@ import {
     Res,
     StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiConsumes } from '@nestjs/swagger';
+import {
+    ApiBearerAuth,
+    ApiOperation,
+    ApiResponse,
+    ApiTags,
+    ApiConsumes,
+    ApiQuery,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
@@ -77,16 +85,19 @@ export class VocabController {
         return this.vocabService.find(query, user.id);
     }
 
-    @Get('random/:count')
+    @Get('random')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find random vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    @ApiQuery({ name: 'count', required: true, type: Number, example: 10 })
+    @ApiQuery({ name: 'languageFolderId', required: false, type: String })
     public async findRandom(
-        @Param('count') count: number,
+        @Query('count', ParseIntPipe) count: number,
+        @Query('languageFolderId') languageFolderId: string | undefined,
         @CurrentUser() user: User,
     ): Promise<VocabDto[]> {
-        return this.vocabService.findRandom(count, user.id);
+        return this.vocabService.findRandom(count, user.id, languageFolderId);
     }
 
     @Get(':id')

@@ -135,14 +135,34 @@ export class VocabService {
      * Find random vocabularies
      * @param count - The number of vocabularies to find
      * @param userId - Optional user ID to filter by
+     * @param languageFolderId - Optional language folder ID to filter by
      * @returns Promise<VocabDto[]> The random vocabularies DTOs
      */
-    public async findRandom(count: number, userId?: string): Promise<VocabDto[]> {
+    public async findRandom(
+        count: number,
+        userId: string,
+        languageFolderId?: string,
+    ): Promise<VocabDto[]> {
         try {
-            const vocabs = await this.vocabRepository.findRandom(count, userId);
+            if (languageFolderId) {
+                const folder = await this.vocabRepository.findLanguageFolderById(
+                    languageFolderId,
+                    userId,
+                );
+                if (!folder) {
+                    throw new NotFoundException(
+                        `Language folder with ID '${languageFolderId}' not found`,
+                    );
+                }
+            }
+
+            const vocabs = await this.vocabRepository.findRandom(count, userId, languageFolderId);
 
             return vocabs.map((vocab) => new VocabDto({ ...vocab }));
         } catch (error: unknown) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
             PrismaErrorHandler.handle(error, 'findRandom', this.vocabErrorMapping);
             throw error;
         }
