@@ -3,7 +3,7 @@ import { CurrentUser, Roles } from '@/shared/decorators';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
-import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../dto';
+import { NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
 import { NotificationService } from '../services';
 
 @Controller('notifications')
@@ -114,7 +114,7 @@ export class NotificationController {
     @ApiOperation({ summary: 'Update notification' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
-    public async update(@Param('id') id: string, @Body() updateNotificationData: Partial<NotificationInput>): Promise<NotificationDto> {
+    public async update(@Param('id') id: string, @Body() updateNotificationData: UpdateNotificationInput): Promise<NotificationDto> {
         const notification = await this.notificationService.update(id, updateNotificationData);
         this.logger.info(`Updated notification with ID ${id}`);
         return notification;

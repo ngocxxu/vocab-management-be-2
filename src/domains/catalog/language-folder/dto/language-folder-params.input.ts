@@ -1,5 +1,6 @@
 import { QueryParamsInput } from '@/shared/dto/query-params.input';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 export class LanguageFolderParamsInput extends QueryParamsInput {
     @ApiProperty({
@@ -7,11 +8,17 @@ export class LanguageFolderParamsInput extends QueryParamsInput {
         example: 'My English Folder',
         required: false,
     })
+    @IsOptional()
+    @IsString()
     public readonly name: string;
 
     @ApiProperty({ description: 'Code of the source language', example: 'en', required: false })
+    @IsOptional()
+    @IsString()
     public readonly sourceLanguageCode: string;
 
     @ApiProperty({ description: 'Code of the target language', example: 'en', required: false })
+    @IsOptional()
+    @IsString()
     public readonly targetLanguageCode: string;
 }

@@ -1,7 +1,20 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import { VocabExampleDto } from './vocab-example.dto';
+import { Type } from 'class-transformer';
+import { IsArray, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { VocabDto } from './vocab.dto';
+
+export class CreateVocabExampleInput {
+    @ApiProperty({ description: 'Source example text', example: 'Hello, how are you?' })
+    @IsString()
+    @IsNotEmpty()
+    public source: string;
+
+    @ApiProperty({ description: 'Target example text', example: 'Xin chào, bạn khỏe không?' })
+    @IsString()
+    @IsNotEmpty()
+    public target: string;
+}
 
 export class VocabInput extends PickType(VocabDto, ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'languageFolderId'] as const) {
     @ApiProperty({
@@ -25,6 +38,9 @@ export class VocabInput extends PickType(VocabDto, ['textSource', 'sourceLanguag
             },
         ],
     })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateTextTargetInput)
     public readonly textTargets: CreateTextTargetInput[];
 
     @ApiProperty({
@@ -33,23 +49,36 @@ export class VocabInput extends PickType(VocabDto, ['textSource', 'sourceLanguag
         items: { type: 'string' },
         required: false,
     })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
     public readonly subjectIds?: string[];
 }
 
 export class CreateTextTargetInput {
     @ApiProperty({ description: 'ID of the word type' })
+    @IsOptional()
+    @IsString()
     public wordTypeId?: string;
 
     @ApiProperty({ description: 'Target text (translation/definition)', example: 'Hello' })
+    @IsString()
+    @IsNotEmpty()
     public textTarget: string;
 
     @ApiProperty({ description: 'Grammar information', example: 'interjection' })
+    @IsString()
+    @IsNotEmpty()
     public grammar: string;
 
     @ApiProperty({ description: 'Explanation in source language' })
+    @IsString()
+    @IsNotEmpty()
     public explanationSource: string;
 
     @ApiProperty({ description: 'Explanation in target language' })
+    @IsString()
+    @IsNotEmpty()
     public explanationTarget: string;
 
     @ApiProperty({
@@ -58,6 +87,8 @@ export class CreateTextTargetInput {
         items: { type: 'string' },
         required: false,
     })
+    @IsArray()
+    @IsString({ each: true })
     public readonly subjectIds: string[];
 
     @ApiProperty({
@@ -66,5 +97,9 @@ export class CreateTextTargetInput {
         items: { type: 'object' },
         required: false,
     })
-    public readonly vocabExamples?: VocabExampleDto[];
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateVocabExampleInput)
+    public readonly vocabExamples?: CreateVocabExampleInput[];
 }

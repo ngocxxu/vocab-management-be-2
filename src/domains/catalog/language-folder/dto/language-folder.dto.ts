@@ -1,14 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { LanguageFolder } from '@prisma/client';
+import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 
 export class LanguageFolderDto {
     @ApiProperty({ description: 'Unique identifier for the language folder' })
     public readonly id: string;
 
     @ApiProperty({ description: 'Name of the language folder', example: 'My English Folder' })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(100)
     public readonly name: string;
 
     @ApiProperty({ description: 'Color of the folder', example: '#FF5733' })
+    @IsString()
+    @IsNotEmpty()
+    @Matches(/^#[0-9A-Fa-f]{6}$/)
     public readonly folderColor: string;
 
     @ApiProperty({ description: 'Date when the folder was created' })
@@ -21,9 +28,15 @@ export class LanguageFolderDto {
     public readonly userId: string;
 
     @ApiProperty({ description: 'Source language code', example: 'en-US' })
+    @IsString()
+    @IsNotEmpty()
+    @Matches(/^[a-z]{2,3}(-[A-Z]{2})?$/)
     public readonly sourceLanguageCode: string;
 
     @ApiProperty({ description: 'Target language code', example: 'es-ES' })
+    @IsString()
+    @IsNotEmpty()
+    @Matches(/^[a-z]{2,3}(-[A-Z]{2})?$/)
     public readonly targetLanguageCode: string;
 
     public constructor(entity: LanguageFolder) {

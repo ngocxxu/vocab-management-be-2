@@ -1,17 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { WordType } from '@prisma/client';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class WordTypeDto {
     @ApiProperty({ description: 'Unique identifier for the word type' })
     public readonly id: string;
 
     @ApiProperty({ description: 'Name of the word type', example: 'Noun' })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(100)
     public readonly name: string;
 
     @ApiProperty({
         description: 'Description of the word type',
         example: 'A word used to identify any of a class of people, places, or things',
     })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(500)
     public readonly description: string;
 
     @ApiProperty({ description: 'Date when the word type was created' })

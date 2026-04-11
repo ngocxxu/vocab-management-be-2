@@ -38,6 +38,9 @@ export class UserService {
 
     public async create(createUserData: UserInput): Promise<UserDto> {
         const { email, firstName, lastName, phone, avatar, role, password } = createUserData;
+        if (!password) {
+            throw new UserBadRequestException('Password is required');
+        }
 
         const { data, error } = await this.supabase.auth.signUp({
             email,

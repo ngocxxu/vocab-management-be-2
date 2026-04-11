@@ -241,6 +241,9 @@ export class VocabTrainerService {
         }
 
         const { countTime, wordTestSelects } = input;
+        if (!wordTestSelects?.length) {
+            throw new VocabTrainerBadRequestException('wordTestSelects is required for multiple choice');
+        }
 
         // Map vocabId from questionAnswers or vocabAssignments
         const questionAnswers = trainer.questionAnswers as Array<{
@@ -378,13 +381,16 @@ export class VocabTrainerService {
         }
 
         const { countTime, wordTestInputs } = input;
+        if (!wordTestInputs?.length) {
+            throw new VocabTrainerBadRequestException('wordTestInputs is required for fill in the blank');
+        }
 
         const trainerWithVocabs = trainer as VocabTrainer & {
             vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
         };
 
         const evaluationsToProcess: Array<{
-            answerSubmission: (typeof wordTestInputs)[0];
+            answerSubmission: (typeof wordTestInputs)[number];
             vocab: VocabWithTextTargets;
             answerType: 'textSource' | 'textTarget';
         }> = [];
@@ -462,6 +468,9 @@ export class VocabTrainerService {
         }
 
         const { fileId, targetStyle, targetAudience, countTime } = input;
+        if (!fileId) {
+            throw new VocabTrainerBadRequestException('fileId is required for translation audio');
+        }
 
         if (fileId) {
             try {

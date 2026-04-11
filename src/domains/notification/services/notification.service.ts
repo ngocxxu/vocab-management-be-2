@@ -1,6 +1,7 @@
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../dto';
+import { Prisma } from '@prisma/client';
+import { NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
 import { NotificationForbiddenException, NotificationNotFoundException } from '../exceptions';
 import { NotificationRepository } from '../repositories';
 
@@ -46,8 +47,8 @@ export class NotificationService {
         return new NotificationDto(notification);
     }
 
-    public async update(id: string, updateNotificationData: Partial<NotificationInput>): Promise<NotificationDto> {
-        const { type, action, priority, data, isActive, expiresAt }: Partial<NotificationInput> = updateNotificationData;
+    public async update(id: string, updateNotificationData: UpdateNotificationInput): Promise<NotificationDto> {
+        const { type, action, priority, data, isActive, expiresAt } = updateNotificationData;
 
         const existingNotification = await this.notificationRepository.findById(id);
 
@@ -55,11 +56,11 @@ export class NotificationService {
             throw new NotificationNotFoundException(id);
         }
 
-        const updateData = {
+        const updateData: Prisma.NotificationUpdateInput = {
             ...(type !== undefined && { type }),
             ...(action !== undefined && { action }),
             ...(priority !== undefined && { priority }),
-            ...(data !== undefined && { data }),
+            ...(data !== undefined && { data: data as Prisma.InputJsonValue }),
             ...(isActive !== undefined && { isActive }),
             ...(expiresAt !== undefined && { expiresAt }),
         };

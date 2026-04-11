@@ -1,14 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { UserFcmToken } from '@prisma/client';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class FcmTokenDto {
     @ApiProperty({ description: 'User ID', example: 'user-uuid' })
     public readonly userId: string;
 
     @ApiProperty({ description: 'FCM token', example: 'fcm_token_string_here' })
+    @IsString()
+    @IsNotEmpty()
     public readonly fcmToken: string;
 
     @ApiProperty({ description: 'Device type', example: 'web', required: false })
+    @IsOptional()
+    @IsString()
     public readonly deviceType?: string;
 
     @ApiProperty({ description: 'Token active status', example: true })

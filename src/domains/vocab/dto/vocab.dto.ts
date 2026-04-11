@@ -1,6 +1,7 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty } from '@nestjs/swagger';
 import { Language, TextTarget, Vocab, VocabMastery } from '@prisma/client';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { LanguageDto, TextTargetDto } from '.';
 
 export class VocabDto {
@@ -8,9 +9,13 @@ export class VocabDto {
     public id: string;
 
     @ApiProperty({ description: 'Source text of the vocabulary', example: 'Xin chào' })
+    @IsString()
+    @IsNotEmpty()
     public readonly textSource: string;
 
     @ApiProperty({ description: 'Code of the source language', example: 'vi' })
+    @IsString()
+    @IsNotEmpty()
     public readonly sourceLanguageCode: string;
 
     @ApiProperty({
@@ -21,6 +26,8 @@ export class VocabDto {
     public readonly sourceLanguage?: LanguageDto;
 
     @ApiProperty({ description: 'Code of the target language', example: 'en' })
+    @IsString()
+    @IsNotEmpty()
     public readonly targetLanguageCode: string;
 
     @ApiProperty({
@@ -34,6 +41,8 @@ export class VocabDto {
     public readonly userId: string;
 
     @ApiProperty({ description: 'Language folder id', example: 'string' })
+    @IsString()
+    @IsNotEmpty()
     public readonly languageFolderId: string;
 
     @ApiProperty({ description: 'Date when the vocabulary was created' })

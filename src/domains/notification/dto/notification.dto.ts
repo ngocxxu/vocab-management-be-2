@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Notification, NotificationAction, NotificationRecipient, NotificationType, PriorityLevel, User } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
+import { Type } from 'class-transformer';
+import { Allow, IsBoolean, IsDate, IsEnum } from 'class-validator';
 import { NotificationRecipientDto } from '.';
 
 export class NotificationDto {
@@ -12,6 +14,7 @@ export class NotificationDto {
         enum: ['SYSTEM', 'USER', 'ADMIN', 'MARKETING', 'SECURITY'],
         example: 'SYSTEM',
     })
+    @IsEnum(NotificationType)
     public readonly type: NotificationType;
 
     @ApiProperty({
@@ -19,6 +22,7 @@ export class NotificationDto {
         enum: ['CREATE', 'UPDATE', 'DELETE', 'REMINDER', 'ALERT', 'INFO'],
         example: 'CREATE',
     })
+    @IsEnum(NotificationAction)
     public readonly action: NotificationAction;
 
     @ApiProperty({
@@ -26,15 +30,21 @@ export class NotificationDto {
         enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
         example: 'MEDIUM',
     })
+    @IsEnum(PriorityLevel)
     public readonly priority: PriorityLevel;
 
     @ApiProperty({ description: 'Notification data as JSON object' })
+    @Allow()
     public readonly data: JsonValue;
 
     @ApiProperty({ description: 'Whether the notification is active' })
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly isActive: boolean;
 
     @ApiProperty({ description: 'Date when the notification expires' })
+    @Type(() => Date)
+    @IsDate()
     public readonly expiresAt: Date;
 
     @ApiProperty({ description: 'Date when the notification was created' })

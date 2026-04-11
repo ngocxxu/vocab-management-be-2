@@ -1,16 +1,22 @@
 // eslint-disable-next-line max-classes-per-file
-import { ApiProperty, PickType } from '@nestjs/swagger';
+import { ApiProperty, PartialType, PickType } from '@nestjs/swagger';
+import { NotificationAction, NotificationType, PriorityLevel, UserRole } from '@prisma/client';
 import { InputJsonValue, JsonValue } from '@prisma/client/runtime/library';
+import { Type } from 'class-transformer';
+import { Allow, IsArray, IsBoolean, IsDate, IsEnum, IsOptional, IsString } from 'class-validator';
 import { NotificationDto } from './notification.dto';
 
 export class NotificationInput extends PickType(NotificationDto, ['type', 'action', 'priority', 'isActive', 'expiresAt'] as const) {
     @ApiProperty({ description: 'Notification data as JSON object' })
+    @Allow()
     public readonly data: InputJsonValue;
 
     @ApiProperty({
         description: 'Date when the notification expires',
         example: '2024-12-31T23:59:59Z',
     })
+    @Type(() => Date)
+    @IsDate()
     public readonly expiresAt: Date;
 
     @ApiProperty({
@@ -18,33 +24,30 @@ export class NotificationInput extends PickType(NotificationDto, ['type', 'actio
         type: [String],
         example: ['clxxx1', 'clxxx2', 'clxxx3'],
     })
+    @IsArray()
+    @IsString({ each: true })
     public readonly recipientUserIds: string[];
 }
 
-export class UpdateNotificationInput extends PickType(NotificationDto, ['type', 'action', 'priority', 'data', 'isActive', 'expiresAt'] as const) {
-    @ApiProperty({
-        description: 'Notification data as JSON object',
-        example: {
-            title: 'Updated Title',
-            message: 'Updated message',
-            url: '/new-dashboard',
-        },
-        required: false,
-    })
-    public readonly data: JsonValue;
-}
+export class UpdateNotificationInput extends PartialType(PickType(NotificationDto, ['type', 'action', 'priority', 'data', 'isActive', 'expiresAt'] as const)) {}
 
 export class UpdateNotificationStatusInput {
     @ApiProperty({
         description: 'Whether the notification has been read',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly isRead?: boolean;
 
     @ApiProperty({
         description: 'Whether the notification has been deleted by user',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly isDeleted?: boolean;
 }
 
@@ -54,6 +57,8 @@ export class BulkNotificationInput {
         type: [String],
         example: ['clxxx1', 'clxxx2', 'clxxx3'],
     })
+    @IsArray()
+    @IsString({ each: true })
     public readonly userIds: string[];
 
     @ApiProperty({
@@ -61,21 +66,24 @@ export class BulkNotificationInput {
         enum: ['SYSTEM', 'USER', 'ADMIN', 'MARKETING', 'SECURITY'],
         example: 'SYSTEM',
     })
-    public readonly type: string;
+    @IsEnum(NotificationType)
+    public readonly type: NotificationType;
 
     @ApiProperty({
         description: 'Action that triggered the notification',
         enum: ['CREATE', 'UPDATE', 'DELETE', 'REMINDER', 'ALERT', 'INFO'],
         example: 'INFO',
     })
-    public readonly action: string;
+    @IsEnum(NotificationAction)
+    public readonly action: NotificationAction;
 
     @ApiProperty({
         description: 'Priority level of the notification',
         enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
         example: 'MEDIUM',
     })
-    public readonly priority: string;
+    @IsEnum(PriorityLevel)
+    public readonly priority: PriorityLevel;
 
     @ApiProperty({
         description: 'Notification data as JSON object',
@@ -85,12 +93,15 @@ export class BulkNotificationInput {
             url: '/maintenance',
         },
     })
+    @Allow()
     public readonly data: JsonValue;
 
     @ApiProperty({
         description: 'Date when the notification expires',
         example: '2024-12-31T23:59:59Z',
     })
+    @Type(() => Date)
+    @IsDate()
     public readonly expiresAt: Date;
 }
 
@@ -100,62 +111,89 @@ export class NotificationFilterInput {
         enum: ['SYSTEM', 'USER', 'ADMIN', 'MARKETING', 'SECURITY'],
         required: false,
     })
-    public readonly type?: string;
+    @IsOptional()
+    @IsEnum(NotificationType)
+    public readonly type?: NotificationType;
 
     @ApiProperty({
         description: 'Filter by notification action',
         enum: ['CREATE', 'UPDATE', 'DELETE', 'REMINDER', 'ALERT', 'INFO'],
         required: false,
     })
-    public readonly action?: string;
+    @IsOptional()
+    @IsEnum(NotificationAction)
+    public readonly action?: NotificationAction;
 
     @ApiProperty({
         description: 'Filter by priority level',
         enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
         required: false,
     })
-    public readonly priority?: string;
+    @IsOptional()
+    @IsEnum(PriorityLevel)
+    public readonly priority?: PriorityLevel;
 
     @ApiProperty({
         description: 'Filter by active status',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly isActive?: boolean;
 
     @ApiProperty({
         description: 'Filter by read status',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly isRead?: boolean;
 
     @ApiProperty({
         description: 'Filter by deleted status',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly isDeleted?: boolean;
 
     @ApiProperty({
         description: 'Filter notifications created after this date',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Date)
+    @IsDate()
     public readonly createdAfter?: Date;
 
     @ApiProperty({
         description: 'Filter notifications created before this date',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Date)
+    @IsDate()
     public readonly createdBefore?: Date;
 
     @ApiProperty({
         description: 'Filter notifications expiring after this date',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Date)
+    @IsDate()
     public readonly expiresAfter?: Date;
 
     @ApiProperty({
         description: 'Filter notifications expiring before this date',
         required: false,
     })
+    @IsOptional()
+    @Type(() => Date)
+    @IsDate()
     public readonly expiresBefore?: Date;
 }
 
@@ -165,28 +203,32 @@ export class SendNotificationToRoleInput {
         enum: ['ADMIN', 'MEMBER', 'GUEST'],
         example: 'MEMBER',
     })
-    public readonly role: string;
+    @IsEnum(UserRole)
+    public readonly role: UserRole;
 
     @ApiProperty({
         description: 'Type of notification',
         enum: ['SYSTEM', 'USER', 'ADMIN', 'MARKETING', 'SECURITY'],
         example: 'MARKETING',
     })
-    public readonly type: string;
+    @IsEnum(NotificationType)
+    public readonly type: NotificationType;
 
     @ApiProperty({
         description: 'Action that triggered the notification',
         enum: ['CREATE', 'UPDATE', 'DELETE', 'REMINDER', 'ALERT', 'INFO'],
         example: 'INFO',
     })
-    public readonly action: string;
+    @IsEnum(NotificationAction)
+    public readonly action: NotificationAction;
 
     @ApiProperty({
         description: 'Priority level of the notification',
         enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
         example: 'LOW',
     })
-    public readonly priority: string;
+    @IsEnum(PriorityLevel)
+    public readonly priority: PriorityLevel;
 
     @ApiProperty({
         description: 'Notification data as JSON object',
@@ -196,12 +238,15 @@ export class SendNotificationToRoleInput {
             url: '/features/new',
         },
     })
+    @Allow()
     public readonly data: JsonValue;
 
     @ApiProperty({
         description: 'Date when the notification expires',
         example: '2024-12-31T23:59:59Z',
     })
+    @Type(() => Date)
+    @IsDate()
     public readonly expiresAt: Date;
 
     @ApiProperty({
@@ -209,5 +254,8 @@ export class SendNotificationToRoleInput {
         default: true,
         required: false,
     })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
     public readonly activeUsersOnly?: boolean;
 }

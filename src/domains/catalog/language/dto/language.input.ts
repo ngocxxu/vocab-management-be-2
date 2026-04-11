@@ -1,4 +1,5 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 import { LanguageDto } from './language.dto';
 
 export class LanguageInput extends PickType(LanguageDto, ['code', 'name'] as const) {
@@ -7,6 +8,9 @@ export class LanguageInput extends PickType(LanguageDto, ['code', 'name'] as con
         example: 'en',
         pattern: '^[a-z]{2,3}(-[A-Z]{2})?$',
     })
+    @IsString()
+    @IsNotEmpty()
+    @Matches(/^[a-z]{2,3}(-[A-Z]{2})?$/)
     public readonly code: string;
 
     @ApiProperty({
@@ -14,5 +18,8 @@ export class LanguageInput extends PickType(LanguageDto, ['code', 'name'] as con
         example: 'English (United States)',
         maxLength: 100,
     })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(100)
     public readonly name: string;
 }

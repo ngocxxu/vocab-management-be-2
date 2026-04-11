@@ -6,7 +6,8 @@ import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards,
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { QuestionType, User, UserRole } from '@prisma/client';
-import { VocabTrainerDto, VocabTrainerInput, SubmitTranslationAudioResponseDto } from '../dto';
+import { VocabTrainerDeleteBulkInput, VocabTrainerDto, VocabTrainerInput, SubmitTranslationAudioResponseDto } from '../dto';
+import { SubmitExamBodyInput } from '../dto/submit-exam.dto';
 import { SubmitFillInBlankInput } from '../dto/submit-fill-in-blank.dto';
 import { SubmitMultipleChoiceInput } from '../dto/submit-multiple-choice.dto';
 import { SubmitTranslationAudioInput } from '../dto/submit-translation-audio.dto';
@@ -66,12 +67,7 @@ export class VocabTrainerController {
         type: SubmitTranslationAudioResponseDto,
     })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
-    public async submitExam(
-        @Param('id') id: string,
-        @Body()
-        input: SubmitMultipleChoiceInput | SubmitFillInBlankInput | SubmitTranslationAudioInput,
-        @CurrentUser() user: User,
-    ): Promise<VocabTrainerDto | SubmitTranslationAudioResponseDto> {
+    public async submitExam(@Param('id') id: string, @Body() input: SubmitExamBodyInput, @CurrentUser() user: User): Promise<VocabTrainerDto | SubmitTranslationAudioResponseDto> {
         if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
             return this.vocabTrainerService.submitMultipleChoice(id, input as SubmitMultipleChoiceInput, user);
         } else if (input.questionType === QuestionType.FILL_IN_THE_BLANK) {
@@ -123,7 +119,7 @@ export class VocabTrainerController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete multiple vocab trainers' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
-    public async deleteBulk(@Body() body: { ids: string[] }, @CurrentUser() user: User): Promise<VocabTrainerDto[]> {
+    public async deleteBulk(@Body() body: VocabTrainerDeleteBulkInput, @CurrentUser() user: User): Promise<VocabTrainerDto[]> {
         return this.vocabTrainerService.deleteBulk(body.ids, user.id);
     }
 }

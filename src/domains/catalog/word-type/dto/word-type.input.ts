@@ -1,4 +1,5 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { WordTypeDto } from './word-type.dto';
 
 export class WordTypeInput extends PickType(WordTypeDto, ['name', 'description'] as const) {
@@ -7,6 +8,9 @@ export class WordTypeInput extends PickType(WordTypeDto, ['name', 'description']
         example: 'Noun',
         maxLength: 100,
     })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(100)
     public readonly name: string;
 
     @ApiProperty({
@@ -14,5 +18,8 @@ export class WordTypeInput extends PickType(WordTypeDto, ['name', 'description']
         example: 'A word used to identify any of a class of people, places, or things',
         maxLength: 500,
     })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(500)
     public readonly description: string;
 }
