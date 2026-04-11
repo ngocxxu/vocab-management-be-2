@@ -23,7 +23,7 @@ COPY --chown=node:node . .
 # Build application
 RUN pnpm prisma generate \
     && pnpm build \
-    && pnpm prune --prod
+    && pnpm prune --prod --ignore-scripts
 
 # Stage 2: Production stage
 FROM node:20-alpine
