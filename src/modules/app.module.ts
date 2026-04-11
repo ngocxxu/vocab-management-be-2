@@ -1,4 +1,3 @@
-import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
@@ -10,27 +9,26 @@ import { envConfigLoaders, validationSchema } from '../config';
 import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
-import { AiModule } from './ai/ai.module';
-import { AuthModule } from './auth/auth.module';
-import { CloudinaryModule } from './cloudinary/cloudinary.module';
-import { AuthGuard, CommonModule } from './common';
-import { UserThrottlerGuard } from './common/security/user-throttler.guard';
-import { ConfigModule } from './config/config.module';
-import { EmailModule } from './email/email.module';
-import { EventsModule } from './event/module';
-import { FcmModule } from './fcm/fcm.module';
-import { LanguageModule } from './language/language.module';
-import { LanguageFolderModule } from './language-folder/language-folder.module';
-import { NotificationModule } from './notification/notification.module';
-import { PlanModule } from './plan/plan.module';
-import { ReminderModule } from './reminder/reminder.module';
-import { EReminderType } from './reminder/util';
-import { SSEModule } from './sse/sse.module';
-import { SubjectModule } from './subject/subject.module';
-import { UserModule } from './user/user.module';
-import { VocabModule } from './vocab/vocab.module';
-import { VocabTrainerModule } from './vocab-trainer/vocab-trainer.module';
-import { WordTypeModule } from './word-type/word-type.module';
+import { AiModule } from './ai';
+import { AuthModule } from './auth';
+import { CloudinaryModule } from './cloudinary';
+import { ConfigModule } from './config';
+import { EmailModule } from './email';
+import { EventsModule } from './event';
+import { FcmModule } from './fcm';
+import { LanguageModule } from './language';
+import { LanguageFolderModule } from './language-folder';
+import { NotificationModule } from './notification';
+import { PlanModule } from './plan';
+import { ReminderModule } from './reminder';
+import { AuthGuard, SharedModule, UserThrottlerGuard } from './shared';
+import { SSEModule } from './sse';
+import { SubjectModule } from './subject';
+import { UserModule } from './user';
+import { VocabModule } from './vocab';
+import { VocabTrainerModule } from './vocab-trainer';
+import { WebhookModule } from './webhook';
+import { WordTypeModule } from './word-type';
 
 @Module({
     imports: [
@@ -50,34 +48,6 @@ import { WordTypeModule } from './word-type/word-type.module';
             route: '/admin/queues',
             adapter: ExpressAdapter,
         }),
-        BullModule.registerQueue({
-            name: EReminderType.EMAIL_REMINDER,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.EMAIL_REMINDER,
-            adapter: BullAdapter,
-        }),
-        BullModule.registerQueue({
-            name: EReminderType.NOTIFICATION,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.NOTIFICATION,
-            adapter: BullAdapter,
-        }),
-        BullModule.registerQueue({
-            name: EReminderType.AUDIO_EVALUATION,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.AUDIO_EVALUATION,
-            adapter: BullAdapter,
-        }),
-        BullModule.registerQueue({
-            name: EReminderType.VOCAB_TRANSLATION,
-        }),
-        BullBoardModule.forFeature({
-            name: EReminderType.VOCAB_TRANSLATION,
-            adapter: BullAdapter,
-        }),
         ThrottlerModule.forRootAsync({
             inject: [ConfigService],
             useFactory: (configService: ConfigService): ThrottlerModuleOptions => ({
@@ -92,7 +62,7 @@ import { WordTypeModule } from './word-type/word-type.module';
                 ) as unknown as ThrottlerStorage,
             }),
         }),
-        CommonModule,
+        SharedModule,
         AuthModule,
         ConfigModule,
         CloudinaryModule,
@@ -105,12 +75,13 @@ import { WordTypeModule } from './word-type/word-type.module';
         WordTypeModule,
         VocabModule,
         VocabTrainerModule,
+        EmailModule,
         NotificationModule,
         ReminderModule,
-        EmailModule,
         SSEModule,
         FcmModule,
         EventsModule,
+        WebhookModule,
     ],
     providers: [
         {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
-import { LoggerService } from '../modules/common';
+import { LoggerService } from '../modules/shared';
 import { FirebaseConfig } from './firebase.config';
 
 export interface NotificationPayload {

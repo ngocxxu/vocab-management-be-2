@@ -1,5 +1,5 @@
-import { EEmailTemplate } from '../../reminder/util';
-import { TemplateData } from '../util/type';
+import { EEmailTemplate } from '../../reminder/utils';
+import { TemplateData } from '../utils/type';
 
 export class EmailTemplates {
     private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map(

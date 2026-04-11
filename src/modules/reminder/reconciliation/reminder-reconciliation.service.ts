@@ -2,13 +2,13 @@ import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
 import { Job, Queue } from 'bullmq';
-import { LoggerService } from '../../common';
-import { PrismaService } from '../../common/provider';
-import { ReminderScheduleEmailJobData } from '../../email/util/type';
-import { VOCAB_TRAINER_ENTITY } from '../acted-check/vocab-trainer-acted-check.strategy';
+import { LoggerService } from '../../shared';
+import { PrismaService } from '../../shared/services';
+import { ReminderScheduleEmailJobData } from '../../email/utils/type';
+import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { REMINDER_CONFIG } from '../config/reminder.config';
-import { ReminderScheduleRepository } from '../repository/reminder-schedule.repository';
-import { EReminderType } from '../util';
+import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
+import { EReminderType } from '../utils';
 
 @Injectable()
 export class ReminderReconciliationService implements OnModuleInit, OnModuleDestroy {

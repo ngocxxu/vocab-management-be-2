@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { FirebaseConfig, FirebaseService } from '../../firebase';
-import { CommonModule } from '../common';
-import { FcmController } from './controller';
-import { FcmService } from './service';
+import { FcmController } from './controllers';
+import { FcmService } from './services';
 
 @Module({
-    imports: [CommonModule],
+    imports: [],
     controllers: [FcmController],
     providers: [FcmService, FirebaseConfig, FirebaseService],
     exports: [FcmService, FirebaseService],

@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
-import { LoggerService } from '../modules/common';
+import { LoggerService } from '../modules/shared';
 
 @Injectable()
 export class FirebaseConfig implements OnModuleInit {

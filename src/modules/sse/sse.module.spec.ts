@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { SSEController } from './controller';
-import { SSEService, SSEPublisherService } from './service';
+import { AuthGuard } from '../shared';
+import { SSEController } from './controllers';
+import { SSEService, SSEPublisherService } from './services';
 import { SSEModule } from './sse.module';
 
 describe('SSEModule', () => {
@@ -9,7 +10,10 @@ describe('SSEModule', () => {
   beforeEach(async () => {
     module = await Test.createTestingModule({
       imports: [SSEModule],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
   });
 
   it('should be defined', () => {

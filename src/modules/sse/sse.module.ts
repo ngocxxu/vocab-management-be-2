@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
-import { CommonModule } from '../common';
-import { SSEController } from './controller';
-import { SSEPublisherService, SSEService } from './service';
+import { SSEController } from './controllers';
+import { SSEPublisherService, SSEService } from './services';
 
 @Module({
-    imports: [CommonModule],
+    imports: [],
     controllers: [SSEController],
     providers: [SSEService, SSEPublisherService],
     exports: [SSEPublisherService],

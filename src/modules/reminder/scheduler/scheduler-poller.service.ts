@@ -2,10 +2,10 @@ import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ReminderSchedule, ReminderScheduleStatus } from '@prisma/client';
 import { Queue } from 'bullmq';
-import { LoggerService } from '../../common';
+import { LoggerService } from '../../shared';
 import { REMINDER_CONFIG } from '../config/reminder.config';
-import { ReminderScheduleRepository } from '../repository/reminder-schedule.repository';
-import { EEmailReminderType, EReminderType } from '../util';
+import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
+import { EEmailReminderType, EReminderType } from '../utils';
 
 @Injectable()
 export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {

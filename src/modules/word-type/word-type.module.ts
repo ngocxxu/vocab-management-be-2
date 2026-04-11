@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { CommonModule } from '../common';
-import { WordTypeController } from './controller';
-import { WordTypeRepository } from './repository';
-import { WordTypeService } from './service';
+import { WordTypeController } from './controllers';
+import { WordTypeRepository } from './repositories';
+import { WordTypeService } from './services';
 
 @Module({
-    imports: [CommonModule],
+    imports: [],
     controllers: [WordTypeController],
     providers: [WordTypeRepository, WordTypeService],
     exports: [WordTypeService, WordTypeRepository],

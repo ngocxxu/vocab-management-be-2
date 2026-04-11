@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { CommonModule } from '../common';
-import { ConfigController } from './controller/config.controller';
-import { ConfigRepository } from './repository';
-import { ConfigService } from './service/config.service';
+import { ConfigController } from './controllers/config.controller';
+import { ConfigRepository } from './repositories';
+import { ConfigService } from './services/config.service';
 
 @Module({
-    imports: [CommonModule],
+    imports: [],
     controllers: [ConfigController],
     providers: [ConfigRepository, ConfigService],
     exports: [ConfigService],

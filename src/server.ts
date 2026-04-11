@@ -4,7 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { ApplicationModule } from './modules/app.module';
-import { CommonModule, LogInterceptor } from './modules/common';
+import { SharedModule, LogInterceptor } from './modules/shared';
 
 /**
  * These are API defaults that can be changed using environment variables,
@@ -207,7 +207,7 @@ async function bootstrap(): Promise<void> {
         createSwagger(app);
     }
 
-    const logInterceptor = app.select(CommonModule).get(LogInterceptor);
+    const logInterceptor = app.select(SharedModule).get(LogInterceptor);
     app.useGlobalInterceptors(logInterceptor);
 
     const port = process.env.API_PORT || API_DEFAULT_PORT;

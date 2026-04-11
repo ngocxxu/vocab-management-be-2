@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { CommonModule } from '../common/common.module';
-import { PlanController } from './controller/plan.controller';
-import { PlanQuotaService } from './service/plan-quota.service';
-import { PlanService } from './service/plan.service';
+import { PlanController } from './controllers/plan.controller';
+import { PlanQuotaService } from './services/plan-quota.service';
+import { PlanService } from './services/plan.service';
 
 @Module({
-    imports: [CommonModule],
+    imports: [],
     controllers: [PlanController],
     providers: [PlanQuotaService, PlanService],
     exports: [PlanQuotaService],

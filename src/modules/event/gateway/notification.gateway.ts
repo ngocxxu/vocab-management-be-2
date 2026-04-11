@@ -10,7 +10,7 @@ import {
     ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { MultipleChoiceQuestion } from '../../ai/util/type.util';
+import { MultipleChoiceQuestion } from '../../ai/utils/type.util';
 
 @WebSocketGateway({
     cors: { origin: '*', credentials: true },

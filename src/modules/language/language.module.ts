@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { CommonModule } from '../common';
-import { LanguageController } from './controller';
-import { LanguageRepository } from './repository';
-import { LanguageService } from './service';
+import { LanguageController } from './controllers';
+import { LanguageRepository } from './repositories';
+import { LanguageService } from './services';
 
 @Module({
-    imports: [CommonModule],
+    imports: [],
     controllers: [LanguageController],
     providers: [LanguageRepository, LanguageService],
     exports: [LanguageService, LanguageRepository],

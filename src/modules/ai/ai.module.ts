@@ -2,34 +2,32 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Module, forwardRef } from '@nestjs/common';
-import { CommonModule } from '../common';
 import { ConfigModule } from '../config';
 import { EventsModule } from '../event/module';
 import { LanguageModule } from '../language/language.module';
 import { NotificationModule } from '../notification/notification.module';
 import { ReminderModule } from '../reminder/reminder.module';
-import { EReminderType } from '../reminder/util';
+import { EReminderType } from '../reminder/utils';
 import { VocabModule } from '../vocab/vocab.module';
 import { WordTypeModule } from '../word-type/word-type.module';
-import { AudioEvaluationProcessor } from './processor/audio-evaluation.processor';
-import { FillInBlankEvaluationProcessor } from './processor/fill-in-blank-evaluation.processor';
-import { MultipleChoiceGenerationProcessor } from './processor/multiple-choice-generation.processor';
-import { AiProviderFactory } from './provider/ai-provider.factory';
-import { GeminiProvider } from './provider/gemini.provider';
-import { GroqProvider } from './provider/groq.provider';
-import { OpenRouterProvider } from './provider/openrouter.provider';
-import { AiAudioService } from './service/ai-audio.service';
-import { AiFillInBlankGradingService } from './service/ai-fill-in-blank-grading.service';
-import { AiLanguageNameService } from './service/ai-language-name.service';
-import { AiMultipleChoiceService } from './service/ai-multiple-choice.service';
-import { AiQueueService } from './service/ai-queue.service';
-import { AiService } from './service/ai.service';
-import { AiTranslationEvaluationService } from './service/ai-translation-evaluation.service';
-import { AiTranslationService } from './service/ai-translation.service';
+import { AudioEvaluationProcessor } from './processors/audio-evaluation.processor';
+import { FillInBlankEvaluationProcessor } from './processors/fill-in-blank-evaluation.processor';
+import { MultipleChoiceGenerationProcessor } from './processors/multiple-choice-generation.processor';
+import { AiProviderFactory } from './providers/ai-provider.factory';
+import { GeminiProvider } from './providers/gemini.provider';
+import { GroqProvider } from './providers/groq.provider';
+import { OpenRouterProvider } from './providers/openrouter.provider';
+import { AiAudioService } from './services/ai-audio.service';
+import { AiFillInBlankGradingService } from './services/ai-fill-in-blank-grading.service';
+import { AiLanguageNameService } from './services/ai-language-name.service';
+import { AiMultipleChoiceService } from './services/ai-multiple-choice.service';
+import { AiQueueService } from './services/ai-queue.service';
+import { AiService } from './services/ai.service';
+import { AiTranslationEvaluationService } from './services/ai-translation-evaluation.service';
+import { AiTranslationService } from './services/ai-translation.service';
 
 @Module({
     imports: [
-        CommonModule,
         ConfigModule,
         EventsModule,
         LanguageModule,
@@ -39,6 +37,10 @@ import { AiTranslationService } from './service/ai-translation.service';
         forwardRef(() => VocabModule),
         BullModule.registerQueue({
             name: EReminderType.AUDIO_EVALUATION,
+        }),
+        BullBoardModule.forFeature({
+            name: EReminderType.AUDIO_EVALUATION,
+            adapter: BullAdapter,
         }),
         BullModule.registerQueue({
             name: EReminderType.MULTIPLE_CHOICE_GENERATION,
