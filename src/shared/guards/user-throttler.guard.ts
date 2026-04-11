@@ -10,12 +10,7 @@ interface RequestWithUser extends Record<string, unknown> {
 }
 
 function isSupabaseUser(user: unknown): user is SupabaseUser {
-    return (
-        typeof user === 'object' &&
-        user !== null &&
-        'id' in user &&
-        typeof (user as { id: unknown }).id === 'string'
-    );
+    return typeof user === 'object' && user !== null && 'id' in user && typeof (user as { id: unknown }).id === 'string';
 }
 
 function isString(value: unknown): value is string {
@@ -48,10 +43,7 @@ export class UserThrottlerGuard extends ThrottlerGuard {
         return 'unknown';
     }
 
-    protected async throwThrottlingException(
-        context: ExecutionContext,
-        throttlerLimitDetail: ThrottlerLimitDetail,
-    ): Promise<void> {
+    protected async throwThrottlingException(context: ExecutionContext, throttlerLimitDetail: ThrottlerLimitDetail): Promise<void> {
         await super.throwThrottlingException(context, throttlerLimitDetail);
     }
 }

@@ -1,12 +1,12 @@
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { SendFcmNotificationJobData } from '@/queues/interfaces/job-payloads';
+import { LoggerService } from '@/shared';
 import { OnQueueActive, OnQueueCompleted, OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { FirebaseProvider } from '../push/firebase';
-import { LoggerService } from '@/shared';
-import { FcmService } from '../push/fcm/services';
-import { QUEUE_CONFIG } from '@/queues/config/queue.config';
-import type { SendFcmNotificationJobData } from '@/queues/interfaces/job-payloads';
 import { ENotificationFcmType, EReminderType } from '../../reminder/utils';
+import { FcmService } from '../push/fcm/services';
+import { FirebaseProvider } from '../push/firebase';
 
 @Injectable()
 @Processor(EReminderType.NOTIFICATION_FCM)
@@ -25,9 +25,7 @@ export class NotificationFcmProcessor {
         const { notificationId, userIds, title, body, data, priority } = job.data;
 
         try {
-            this.logger.info(
-                `Processing FCM notification job ${job.id} for notification ${notificationId}`,
-            );
+            this.logger.info(`Processing FCM notification job ${job.id} for notification ${notificationId}`);
 
             // Get FCM tokens for all users
             const tokens = await this.fcmService.getTokensForUsers(userIds);
@@ -55,27 +53,18 @@ export class NotificationFcmProcessor {
                 },
             );
 
-            this.logger.info(
-                `FCM notification sent for notification ${notificationId}: ` +
-                    `${response.successCount} success, ${response.failureCount} failed`,
-            );
+            this.logger.info(`FCM notification sent for notification ${notificationId}: ` + `${response.successCount} success, ${response.failureCount} failed`);
 
             // Log failed tokens for cleanup
             if (response.failureCount > 0) {
                 response.responses.forEach((resp, idx) => {
                     if (!resp.success) {
-                        this.logger.error(
-                            `Failed to send FCM notification to token ${fcmTokens[idx]}: ${resp.error?.message}`,
-                        );
+                        this.logger.error(`Failed to send FCM notification to token ${fcmTokens[idx]}: ${resp.error?.message}`);
                     }
                 });
             }
         } catch (error) {
-            this.logger.error(
-                `Failed to process FCM notification job ${job.id}: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to process FCM notification job ${job.id}: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }

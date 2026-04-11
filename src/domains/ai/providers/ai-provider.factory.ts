@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@/domains/platform/config/services';
+import { Injectable, Logger } from '@nestjs/common';
 import { IAiProvider } from './ai-provider.interface';
 import { GeminiProvider } from './gemini.provider';
 import { GroqProvider } from './groq.provider';
@@ -57,19 +57,14 @@ export class AiProviderFactory {
     }
 
     private async getAudioProviderType(userId?: string): Promise<AiProviderType> {
-        const audioProviderConfig = await this.configService.getConfig(
-            userId || null,
-            'ai.audio.provider',
-        );
+        const audioProviderConfig = await this.configService.getConfig(userId || null, 'ai.audio.provider');
 
         if (audioProviderConfig && typeof audioProviderConfig === 'string') {
             const provider = audioProviderConfig.toLowerCase() as AiProviderType;
             if (['gemini', 'openrouter', 'groq'].includes(provider)) {
                 return provider;
             }
-            this.logger.warn(
-                `Invalid ai.audio.provider value: ${audioProviderConfig}, falling back to ai.provider`,
-            );
+            this.logger.warn(`Invalid ai.audio.provider value: ${audioProviderConfig}, falling back to ai.provider`);
         }
 
         return this.getProviderType(userId);
@@ -90,9 +85,7 @@ export class AiProviderFactory {
                 return new GroqProvider(this.configService);
 
             default:
-                this.logger.warn(
-                    `Unknown provider type: ${String(providerType)}, defaulting to gemini`,
-                );
+                this.logger.warn(`Unknown provider type: ${String(providerType)}, defaulting to gemini`);
                 this.validateApiKey('GEMINI_API_KEY');
                 return new GeminiProvider(this.configService);
         }

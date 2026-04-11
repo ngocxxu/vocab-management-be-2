@@ -1,18 +1,18 @@
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { FillInBlankEvaluationJobData } from '@/queues/interfaces/job-payloads';
+import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { PriorityLevel, NotificationAction, NotificationType, TrainerStatus } from '@prisma/client';
 import { Job } from 'bullmq';
-import { LoggerService } from '@/shared';
 import { UserRepository } from '../../identity/user/repositories';
-import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { NotificationService } from '../../notification/services';
+import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
-import { QUEUE_CONFIG } from '@/queues/config/queue.config';
-import type { FillInBlankEvaluationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
-import { EQuestionType, EReminderRepeat } from '../../vocab-trainer/utils';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
+import { EQuestionType, EReminderRepeat } from '../../vocab-trainer/utils';
 import { AiService } from '../services/ai.service';
 
 @Injectable()
@@ -33,16 +33,12 @@ export class FillInBlankEvaluationProcessor {
         name: 'evaluate-answers',
         concurrency: QUEUE_CONFIG[EReminderType.FILL_IN_BLANK_EVALUATION].concurrency,
     })
-    public async processFillInBlankEvaluation(
-        job: Job<FillInBlankEvaluationJobData>,
-    ): Promise<void> {
+    public async processFillInBlankEvaluation(job: Job<FillInBlankEvaluationJobData>): Promise<void> {
         const { vocabTrainerId, evaluations, answerSubmissions, userId } = job.data;
         const jobId = job.id || '';
 
         try {
-            this.logger.info(
-                `Processing fill-in-blank evaluation job ${job.id} for user ${userId}`,
-            );
+            this.logger.info(`Processing fill-in-blank evaluation job ${job.id} for user ${userId}`);
 
             this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'evaluating');
 
@@ -83,21 +79,15 @@ export class FillInBlankEvaluationProcessor {
             const totalQuestions = answerSubmissions.length;
             const correctAnswers = evaluationResults.filter((r) => r.isCorrect).length;
             const scorePercentage = (correctAnswers / totalQuestions) * 100;
-            const overallStatus =
-                scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
+            const overallStatus = scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
 
-            const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdMinimal(
-                vocabTrainerId,
-            );
+            const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdMinimal(vocabTrainerId);
 
             if (!trainer) {
                 throw new Error(`Trainer ${vocabTrainerId} not found`);
             }
 
-            const passCount =
-                overallStatus === TrainerStatus.PASSED
-                    ? (trainer.reminderRepeat || 0) + 1
-                    : trainer.reminderRepeat || 0;
+            const passCount = overallStatus === TrainerStatus.PASSED ? (trainer.reminderRepeat || 0) + 1 : trainer.reminderRepeat || 0;
 
             const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
             const examUrl = `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.FILL_IN_THE_BLANK}`;
@@ -118,12 +108,7 @@ export class FillInBlankEvaluationProcessor {
                 });
 
                 await this.vocabTrainerRepository.inTransaction(async (tx) => {
-                    await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(
-                        tx,
-                        vocabTrainerId,
-                        userId,
-                        'trainer_completed_max_passes',
-                    );
+                    await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(tx, vocabTrainerId, userId, 'trainer_completed_max_passes');
                     await this.vocabTrainerRepository.deleteVocabTrainerRow(vocabTrainerId, tx);
                 });
             } else {

@@ -7,13 +7,7 @@ import { FcmService } from './services';
 @Module({
     imports: [],
     controllers: [FcmController],
-    providers: [
-        UserFcmTokenRepository,
-        FcmService,
-        FirebaseConfig,
-        FirebaseService,
-        FirebaseProvider,
-    ],
+    providers: [UserFcmTokenRepository, FcmService, FirebaseConfig, FirebaseService, FirebaseProvider],
     exports: [FcmService, FirebaseService, FirebaseProvider, FirebaseConfig],
 })
 export class FcmModule {}

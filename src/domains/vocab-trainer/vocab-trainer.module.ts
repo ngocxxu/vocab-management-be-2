@@ -9,13 +9,7 @@ import { VocabTrainerRepository } from './repositories';
 import { VocabTrainerService } from './services';
 
 @Module({
-    imports: [
-        forwardRef(() => ReminderModule),
-        forwardRef(() => AiModule),
-        LanguageModule,
-        NotificationModule,
-        VocabModule,
-    ],
+    imports: [forwardRef(() => ReminderModule), forwardRef(() => AiModule), LanguageModule, NotificationModule, VocabModule],
     controllers: [VocabTrainerController],
     providers: [VocabTrainerRepository, VocabTrainerService],
     exports: [VocabTrainerService, VocabTrainerRepository],

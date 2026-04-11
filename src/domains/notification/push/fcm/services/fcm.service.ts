@@ -1,8 +1,8 @@
+import { IResponse, LoggerService } from '@/shared';
 import { Injectable } from '@nestjs/common';
 import { User, UserFcmToken } from '@prisma/client';
-import { IResponse, LoggerService } from '@/shared';
-import { FcmTokenInactiveException, FcmTokenNotFoundException } from '../exceptions';
 import { FcmTokenDto, RegisterFcmTokenInput, UnregisterFcmTokenInput } from '../dto';
+import { FcmTokenInactiveException, FcmTokenNotFoundException } from '../exceptions';
 import { UserFcmTokenRepository } from '../repositories';
 
 @Injectable()
@@ -13,36 +13,25 @@ export class FcmService {
     ) {}
 
     public async registerToken(user: User, input: RegisterFcmTokenInput): Promise<FcmTokenDto> {
-        const existingToken = await this.userFcmTokenRepository.findByUserAndToken(
-            user.id,
-            input.fcmToken,
-        );
+        const existingToken = await this.userFcmTokenRepository.findByUserAndToken(user.id, input.fcmToken);
 
         if (existingToken) {
             if (!existingToken.isActive) {
-                const updatedToken = await this.userFcmTokenRepository.updateByUserAndToken(
-                    user.id,
-                    input.fcmToken,
-                    {
-                        isActive: true,
-                        deviceType: input.deviceType,
-                        deletedAt: null,
-                        updatedAt: new Date(),
-                    },
-                );
+                const updatedToken = await this.userFcmTokenRepository.updateByUserAndToken(user.id, input.fcmToken, {
+                    isActive: true,
+                    deviceType: input.deviceType,
+                    deletedAt: null,
+                    updatedAt: new Date(),
+                });
 
                 this.logger.info(`Reactivated FCM token for user ${user.id}`);
                 return new FcmTokenDto(updatedToken);
             }
             if (input.deviceType && input.deviceType !== existingToken.deviceType) {
-                const updatedToken = await this.userFcmTokenRepository.updateByUserAndToken(
-                    user.id,
-                    input.fcmToken,
-                    {
-                        deviceType: input.deviceType,
-                        updatedAt: new Date(),
-                    },
-                );
+                const updatedToken = await this.userFcmTokenRepository.updateByUserAndToken(user.id, input.fcmToken, {
+                    deviceType: input.deviceType,
+                    updatedAt: new Date(),
+                });
 
                 this.logger.info(`Updated FCM token device type for user ${user.id}`);
                 return new FcmTokenDto(updatedToken);
@@ -65,10 +54,7 @@ export class FcmService {
     }
 
     public async unregisterToken(user: User, input: UnregisterFcmTokenInput): Promise<FcmTokenDto> {
-        const token = await this.userFcmTokenRepository.findByUserAndToken(
-            user.id,
-            input.fcmToken,
-        );
+        const token = await this.userFcmTokenRepository.findByUserAndToken(user.id, input.fcmToken);
 
         if (!token) {
             throw new FcmTokenNotFoundException();
@@ -78,16 +64,12 @@ export class FcmService {
             throw new FcmTokenInactiveException();
         }
 
-        const deletedToken = await this.userFcmTokenRepository.updateByUserAndToken(
-            user.id,
-            input.fcmToken,
-            {
-                isActive: false,
-                deletedAt: new Date(),
-                deletedBy: user.id,
-                updatedAt: new Date(),
-            },
-        );
+        const deletedToken = await this.userFcmTokenRepository.updateByUserAndToken(user.id, input.fcmToken, {
+            isActive: false,
+            deletedAt: new Date(),
+            deletedBy: user.id,
+            updatedAt: new Date(),
+        });
 
         this.logger.info(`Unregistered FCM token for user ${user.id}`);
         return new FcmTokenDto(deletedToken);

@@ -125,15 +125,7 @@ export class CsvParserUtil {
         const headers = firstLine.split(',').map((h) => h.trim().toLowerCase());
 
         const requiredHeaders = ['textsource', 'texttarget'];
-        const optionalHeaders = [
-            'wordtype',
-            'grammar',
-            'explanationsource',
-            'explanationtarget',
-            'subjects',
-            'examplesource',
-            'exampletarget',
-        ];
+        const optionalHeaders = ['wordtype', 'grammar', 'explanationsource', 'explanationtarget', 'subjects', 'examplesource', 'exampletarget'];
 
         // Check if required headers exist
         const hasRequiredHeaders = requiredHeaders.every((header) => headers.includes(header));
@@ -171,17 +163,7 @@ export class CsvParserUtil {
      * @returns Buffer CSV file buffer
      */
     public static generateCsvBuffer(vocabs: VocabDto[]): Buffer {
-        const headers = [
-            'textSource',
-            'textTarget',
-            'wordType',
-            'grammar',
-            'explanationSource',
-            'explanationTarget',
-            'subjects',
-            'exampleSource',
-            'exampleTarget',
-        ];
+        const headers = ['textSource', 'textTarget', 'wordType', 'grammar', 'explanationSource', 'explanationTarget', 'subjects', 'exampleSource', 'exampleTarget'];
 
         const rows: string[] = [];
         rows.push(headers.join(','));
@@ -213,34 +195,14 @@ export class CsvParserUtil {
                 const examples = textTarget.vocabExamples || [];
 
                 if (examples.length === 0) {
-                    const row = [
-                        textSource,
-                        textTargetValue,
-                        wordType,
-                        grammar,
-                        explanationSource,
-                        explanationTarget,
-                        subjectsEscaped,
-                        '',
-                        '',
-                    ];
+                    const row = [textSource, textTargetValue, wordType, grammar, explanationSource, explanationTarget, subjectsEscaped, '', ''];
                     rows.push(row.join(','));
                 } else {
                     for (const example of examples) {
                         const exampleSource = this.escapeCsvField(example?.source || '');
                         const exampleTarget = this.escapeCsvField(example?.target || '');
 
-                        const row = [
-                            textSource,
-                            textTargetValue,
-                            wordType,
-                            grammar,
-                            explanationSource,
-                            explanationTarget,
-                            subjectsEscaped,
-                            exampleSource,
-                            exampleTarget,
-                        ];
+                        const row = [textSource, textTargetValue, wordType, grammar, explanationSource, explanationTarget, subjectsEscaped, exampleSource, exampleTarget];
 
                         rows.push(row.join(','));
                     }

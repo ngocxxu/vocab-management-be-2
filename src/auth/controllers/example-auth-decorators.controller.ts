@@ -1,14 +1,8 @@
+import type { AuthUser } from '../interfaces/auth-user.interface';
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
-import {
-    AuthStrategy,
-    CurrentUser,
-    Public,
-    Roles,
-    UseThrottle,
-} from '../decorators';
-import type { AuthUser } from '../interfaces/auth-user.interface';
+import { AuthStrategy, CurrentUser, Public, Roles, UseThrottle } from '../decorators';
 import { CombinedAuthGuard, JwtAuthGuard, RolesGuard } from '../guards';
 
 @ApiTags('auth-examples')

@@ -1,6 +1,6 @@
+import { LoggerService } from '@/shared';
 import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
-import { LoggerService } from '@/shared';
 import { FirebaseConfig } from './firebase.config';
 
 export interface NotificationPayload {
@@ -28,11 +28,7 @@ export class FirebaseService {
     /**
      * Send notification to a single device
      */
-    public async sendToDevice(
-        token: string,
-        payload: NotificationPayload,
-        options: NotificationOptions = {},
-    ): Promise<admin.messaging.SendResponse> {
+    public async sendToDevice(token: string, payload: NotificationPayload, options: NotificationOptions = {}): Promise<admin.messaging.SendResponse> {
         try {
             const messaging = this.firebaseConfig.getMessaging();
 
@@ -73,11 +69,7 @@ export class FirebaseService {
 
             return response as unknown as admin.messaging.SendResponse;
         } catch (error) {
-            this.logger.error(
-                `Failed to send notification to device ${token}: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to send notification to device ${token}: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }
@@ -85,11 +77,7 @@ export class FirebaseService {
     /**
      * Send notification to multiple devices
      */
-    public async sendToMultipleDevices(
-        tokens: string[],
-        payload: NotificationPayload,
-        options: NotificationOptions = {},
-    ): Promise<admin.messaging.BatchResponse> {
+    public async sendToMultipleDevices(tokens: string[], payload: NotificationPayload, options: NotificationOptions = {}): Promise<admin.messaging.BatchResponse> {
         try {
             const messaging = this.firebaseConfig.getMessaging();
 
@@ -126,28 +114,20 @@ export class FirebaseService {
             };
 
             const response = await messaging.sendEachForMulticast(message);
-            this.logger.info(
-                `Notification sent to ${response.successCount}/${tokens.length} devices`,
-            );
+            this.logger.info(`Notification sent to ${response.successCount}/${tokens.length} devices`);
 
             if (response.failureCount > 0) {
                 this.logger.warn(`Failed to send to ${response.failureCount} devices`);
                 response.responses.forEach((resp, idx) => {
                     if (!resp.success) {
-                        this.logger.error(
-                            `Failed to send to token ${tokens[idx]}: ${resp.error?.message}`,
-                        );
+                        this.logger.error(`Failed to send to token ${tokens[idx]}: ${resp.error?.message}`);
                     }
                 });
             }
 
             return response;
         } catch (error) {
-            this.logger.error(
-                `Failed to send multicast notification: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to send multicast notification: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }
@@ -155,11 +135,7 @@ export class FirebaseService {
     /**
      * Send notification to a topic
      */
-    public async sendToTopic(
-        topic: string,
-        payload: NotificationPayload,
-        options: NotificationOptions = {},
-    ): Promise<admin.messaging.SendResponse> {
+    public async sendToTopic(topic: string, payload: NotificationPayload, options: NotificationOptions = {}): Promise<admin.messaging.SendResponse> {
         try {
             const messaging = this.firebaseConfig.getMessaging();
 
@@ -200,11 +176,7 @@ export class FirebaseService {
 
             return response as unknown as admin.messaging.SendResponse;
         } catch (error) {
-            this.logger.error(
-                `Failed to send notification to topic ${topic}: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to send notification to topic ${topic}: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }
@@ -212,31 +184,20 @@ export class FirebaseService {
     /**
      * Subscribe devices to a topic
      */
-    public async subscribeToTopic(
-        tokens: string[],
-        topic: string,
-    ): Promise<admin.messaging.MessagingTopicManagementResponse> {
+    public async subscribeToTopic(tokens: string[], topic: string): Promise<admin.messaging.MessagingTopicManagementResponse> {
         try {
             const messaging = this.firebaseConfig.getMessaging();
             const response = await messaging.subscribeToTopic(tokens, topic);
 
-            this.logger.info(
-                `Subscribed ${response.successCount}/${tokens.length} devices to topic ${topic}`,
-            );
+            this.logger.info(`Subscribed ${response.successCount}/${tokens.length} devices to topic ${topic}`);
 
             if (response.failureCount > 0) {
-                this.logger.warn(
-                    `Failed to subscribe ${response.failureCount} devices to topic ${topic}`,
-                );
+                this.logger.warn(`Failed to subscribe ${response.failureCount} devices to topic ${topic}`);
             }
 
             return response;
         } catch (error) {
-            this.logger.error(
-                `Failed to subscribe to topic ${topic}: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to subscribe to topic ${topic}: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }
@@ -244,31 +205,20 @@ export class FirebaseService {
     /**
      * Unsubscribe devices from a topic
      */
-    public async unsubscribeFromTopic(
-        tokens: string[],
-        topic: string,
-    ): Promise<admin.messaging.MessagingTopicManagementResponse> {
+    public async unsubscribeFromTopic(tokens: string[], topic: string): Promise<admin.messaging.MessagingTopicManagementResponse> {
         try {
             const messaging = this.firebaseConfig.getMessaging();
             const response = await messaging.unsubscribeFromTopic(tokens, topic);
 
-            this.logger.info(
-                `Unsubscribed ${response.successCount}/${tokens.length} devices from topic ${topic}`,
-            );
+            this.logger.info(`Unsubscribed ${response.successCount}/${tokens.length} devices from topic ${topic}`);
 
             if (response.failureCount > 0) {
-                this.logger.warn(
-                    `Failed to unsubscribe ${response.failureCount} devices from topic ${topic}`,
-                );
+                this.logger.warn(`Failed to unsubscribe ${response.failureCount} devices from topic ${topic}`);
             }
 
             return response;
         } catch (error) {
-            this.logger.error(
-                `Failed to unsubscribe from topic ${topic}: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to unsubscribe from topic ${topic}: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }

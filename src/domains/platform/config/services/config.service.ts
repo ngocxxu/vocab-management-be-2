@@ -1,11 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import {
-    ConfigBadRequestException,
-    SystemConfigNotFoundException,
-    UserConfigNotFoundException,
-} from '../exceptions';
 import { ConfigDto } from '../dto';
+import { ConfigBadRequestException, SystemConfigNotFoundException, UserConfigNotFoundException } from '../exceptions';
 import { ConfigRepository } from '../repositories';
 
 @Injectable()
@@ -71,11 +67,7 @@ export class ConfigService {
         return new ConfigDto(saved);
     }
 
-    public async setUserConfig(
-        userId: string,
-        key: string,
-        value: Prisma.InputJsonValue,
-    ): Promise<ConfigDto> {
+    public async setUserConfig(userId: string, key: string, value: Prisma.InputJsonValue): Promise<ConfigDto> {
         if (!userId) {
             throw new ConfigBadRequestException('User ID is required');
         }

@@ -14,9 +14,7 @@ describe('extractHttpExceptionMessage', () => {
     });
 
     it('filters non-strings from message array', () => {
-        expect(
-            extractHttpExceptionMessage({ message: ['ok', 1 as unknown as string, 'x'] }),
-        ).toEqual(['ok', 'x']);
+        expect(extractHttpExceptionMessage({ message: ['ok', 1 as unknown as string, 'x'] })).toEqual(['ok', 'x']);
     });
 
     it('returns Error when message missing', () => {

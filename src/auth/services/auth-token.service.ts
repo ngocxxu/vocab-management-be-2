@@ -1,18 +1,11 @@
+import type { AuthStrategyValue } from '../decorators/auth-strategy.decorator';
+import type { AuthUser } from '../interfaces/auth-user.interface';
+import { FirebaseConfig } from '@/domains/notification/push/firebase/firebase.config';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import {
-    JsonWebTokenError,
-    JwtPayload,
-    NotBeforeError,
-    TokenExpiredError,
-} from 'jsonwebtoken';
+import { JsonWebTokenError, JwtPayload, NotBeforeError, TokenExpiredError } from 'jsonwebtoken';
 import * as jwt from 'jsonwebtoken';
-
-import { FirebaseConfig } from '@/domains/notification/push/firebase/firebase.config';
-
-import type { AuthStrategyValue } from '../decorators/auth-strategy.decorator';
-import type { AuthUser } from '../interfaces/auth-user.interface';
 
 function normalizeRoles(value: unknown): string[] {
     if (Array.isArray(value)) {

@@ -75,12 +75,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         return this.redisClient.del(fullKey);
     }
 
-    public async jsonSet(
-        prefix: RedisPrefix,
-        key: string,
-        data: unknown,
-        ttl?: number,
-    ): Promise<void> {
+    public async jsonSet(prefix: RedisPrefix, key: string, data: unknown, ttl?: number): Promise<void> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
         const finalTtl = ttl ?? this.configService.get<number>('redis.ttl') ?? 3600;
 

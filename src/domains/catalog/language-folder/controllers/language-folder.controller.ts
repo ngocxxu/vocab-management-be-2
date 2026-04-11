@@ -1,22 +1,11 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Post,
-    Put,
-    Query,
-    UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { User, UserRole } from '@prisma/client';
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { Roles, CurrentUser } from '@/shared/decorators';
-import { LanguageFolderPipe } from '../pipes';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { User, UserRole } from '@prisma/client';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
 import { LanguageFolderParamsInput } from '../dto/language-folder-params.input';
+import { LanguageFolderPipe } from '../pipes';
 import { LanguageFolderService } from '../services';
 
 @Controller('language-folders')
@@ -33,10 +22,7 @@ export class LanguageFolderController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Find all language folders (admin only)' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageFolderDto })
-    public async find(
-        @Query() query: LanguageFolderParamsInput,
-        @CurrentUser() user: User,
-    ): Promise<IResponse<LanguageFolderDto[]>> {
+    public async find(@Query() query: LanguageFolderParamsInput, @CurrentUser() user: User): Promise<IResponse<LanguageFolderDto[]>> {
         return this.languageFolderService.find(query, user.id);
     }
 
@@ -62,10 +48,7 @@ export class LanguageFolderController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create language folder' })
     @ApiResponse({ status: HttpStatus.CREATED, type: LanguageFolderDto })
-    public async create(
-        @Body(LanguageFolderPipe) input: LanguageFolderInput,
-        @CurrentUser() user: User,
-    ): Promise<LanguageFolderDto> {
+    public async create(@Body(LanguageFolderPipe) input: LanguageFolderInput, @CurrentUser() user: User): Promise<LanguageFolderDto> {
         const folder = await this.languageFolderService.create(input, user.id, user.role);
         this.logger.info(`Created new language folder with ID ${folder.id} for user ${user.id}`);
         return folder;
@@ -81,11 +64,7 @@ export class LanguageFolderController {
         status: HttpStatus.FORBIDDEN,
         description: 'You can only update your own language folders',
     })
-    public async update(
-        @Param('id') id: string,
-        @Body(LanguageFolderPipe) updateFolderData: Partial<LanguageFolderInput>,
-        @CurrentUser() user: User,
-    ): Promise<LanguageFolderDto> {
+    public async update(@Param('id') id: string, @Body(LanguageFolderPipe) updateFolderData: Partial<LanguageFolderInput>, @CurrentUser() user: User): Promise<LanguageFolderDto> {
         const folder = await this.languageFolderService.update(id, updateFolderData, user.id);
         this.logger.info(`Updated language folder with ID ${id} for user ${user.id}`);
         return folder;
@@ -101,10 +80,7 @@ export class LanguageFolderController {
         status: HttpStatus.FORBIDDEN,
         description: 'You can only delete your own language folders',
     })
-    public async delete(
-        @Param('id') id: string,
-        @CurrentUser() user: User,
-    ): Promise<LanguageFolderDto> {
+    public async delete(@Param('id') id: string, @CurrentUser() user: User): Promise<LanguageFolderDto> {
         const folder = await this.languageFolderService.delete(id, user.id);
         this.logger.info(`Deleted language folder with ID ${id} for user ${user.id}`);
         return folder;

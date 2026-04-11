@@ -1,16 +1,7 @@
 /* eslint-disable max-classes-per-file */
-import * as Joi from 'joi';
 import { JoiValidationPipe } from '@/shared';
-import {
-    SignInInput,
-    OAuthInput,
-    RefreshTokenInput,
-    ResetPasswordInput,
-    VerifyOtpInput,
-    ResendConfirmationInput,
-    SignUpInput,
-    OAuthSyncInput,
-} from '../dto';
+import * as Joi from 'joi';
+import { SignInInput, OAuthInput, RefreshTokenInput, ResetPasswordInput, VerifyOtpInput, ResendConfirmationInput, SignUpInput, OAuthSyncInput } from '../dto';
 
 export class SignUpPipe extends JoiValidationPipe {
     public buildSchema(): Joi.Schema {
@@ -74,13 +65,10 @@ export class SignInPipe extends JoiValidationPipe {
 export class OAuthPipe extends JoiValidationPipe {
     public buildSchema(): Joi.Schema {
         return Joi.object<OAuthInput>({
-            provider: Joi.string()
-                .valid('google', 'github', 'facebook', 'apple')
-                .required()
-                .messages({
-                    'any.only': 'Provider must be one of: google, github, facebook, apple',
-                    'any.required': 'Provider is required',
-                }),
+            provider: Joi.string().valid('google', 'github', 'facebook', 'apple').required().messages({
+                'any.only': 'Provider must be one of: google, github, facebook, apple',
+                'any.required': 'Provider is required',
+            }),
             redirectTo: Joi.string()
                 .uri({ scheme: ['http', 'https', 'chrome-extension'] })
                 .optional()

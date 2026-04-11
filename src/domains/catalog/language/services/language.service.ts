@@ -1,8 +1,8 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
 import { IResponse } from '@/shared';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { LanguageDto, LanguageInput } from '../dto';
 import { LanguageNotFoundException } from '../exceptions';
 import { LanguageMapper } from '../mappers';
-import { LanguageDto, LanguageInput } from '../dto';
 import { LanguageRepository } from '../repositories';
 
 @Injectable()
@@ -31,23 +31,15 @@ export class LanguageService {
     }
 
     public async create(createLanguageData: LanguageInput): Promise<LanguageDto> {
-        const language = await this.languageRepository.create(
-            this.languageMapper.toCreateInput(createLanguageData),
-        );
+        const language = await this.languageRepository.create(this.languageMapper.toCreateInput(createLanguageData));
 
         return this.languageMapper.toResponse(language);
     }
 
-    public async update(
-        id: string,
-        updateLanguageData: Partial<LanguageInput>,
-    ): Promise<LanguageDto> {
+    public async update(id: string, updateLanguageData: Partial<LanguageInput>): Promise<LanguageDto> {
         await this.findOne(id);
 
-        const language = await this.languageRepository.update(
-            id,
-            this.languageMapper.buildUpdateInput(updateLanguageData),
-        );
+        const language = await this.languageRepository.update(id, this.languageMapper.buildUpdateInput(updateLanguageData));
 
         return this.languageMapper.toResponse(language);
     }

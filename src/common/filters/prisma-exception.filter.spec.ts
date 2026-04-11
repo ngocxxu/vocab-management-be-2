@@ -1,7 +1,7 @@
 import { ArgumentsHost, HttpStatus } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaExceptionFilter } from './prisma-exception.filter';
 import { WinstonLogger } from '../logger/winston.logger';
+import { PrismaExceptionFilter } from './prisma-exception.filter';
 
 describe('PrismaExceptionFilter', () => {
     const createFilter = () => {

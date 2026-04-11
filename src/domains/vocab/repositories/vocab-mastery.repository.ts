@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { Injectable } from '@nestjs/common';
+import { Prisma, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
 
 export type VocabMasteryWithVocab = VocabMastery & {
     vocab: Vocab & {
@@ -17,10 +17,7 @@ export class VocabMasteryRepository extends BaseRepository {
         super(prismaService);
     }
 
-    public async findByVocabIdAndUserId(
-        vocabId: string,
-        userId: string,
-    ): Promise<VocabMastery | null> {
+    public async findByVocabIdAndUserId(vocabId: string, userId: string): Promise<VocabMastery | null> {
         return this.prisma.vocabMastery.findUnique({
             where: {
                 vocabId_userId: {
@@ -100,11 +97,7 @@ export class VocabMasteryRepository extends BaseRepository {
         `;
     }
 
-    public async getProgressOverTimeRaw(
-        userId: string,
-        startDate?: Date,
-        endDate?: Date,
-    ): Promise<Array<{ date: string; averageMastery: number }>> {
+    public async getProgressOverTimeRaw(userId: string, startDate?: Date, endDate?: Date): Promise<Array<{ date: string; averageMastery: number }>> {
         const whereConditions: string[] = ['vm.user_id = $1'];
         const params: unknown[] = [userId];
         let paramIndex = 2;
@@ -134,17 +127,10 @@ export class VocabMasteryRepository extends BaseRepository {
             ORDER BY DATE(vmh.created_at) ASC
         `;
 
-        return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number }>>(
-            sql,
-            ...params,
-        );
+        return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number }>>(sql, ...params);
     }
 
-    public async findTopProblematic(
-        userId: string,
-        minIncorrect: number,
-        limit: number,
-    ): Promise<VocabMasteryWithVocab[]> {
+    public async findTopProblematic(userId: string, minIncorrect: number, limit: number): Promise<VocabMasteryWithVocab[]> {
         return this.prisma.vocabMastery.findMany({
             where: {
                 userId,
@@ -207,4 +193,3 @@ export class VocabMasteryRepository extends BaseRepository {
         `;
     }
 }
-

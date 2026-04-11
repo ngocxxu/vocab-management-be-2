@@ -17,12 +17,7 @@ export class CsvImportResponseDto {
     @ApiProperty({ description: 'Total rows processed', example: 8 })
     public readonly totalProcessed: number;
 
-    public constructor(
-        created: number,
-        updated: number,
-        errors: CsvImportErrorDto[],
-        totalProcessed: number,
-    ) {
+    public constructor(created: number, updated: number, errors: CsvImportErrorDto[], totalProcessed: number) {
         this.created = created;
         this.updated = updated;
         this.failed = errors.length;

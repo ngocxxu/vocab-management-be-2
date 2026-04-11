@@ -1,18 +1,12 @@
-import {
-    CanActivate,
-    ExecutionContext,
-    Injectable,
-    UnauthorizedException,
-} from '@nestjs/common';
+import type { AuthUser } from '../interfaces/auth-user.interface';
+import { PrismaService } from '@/shared/services/prisma.service';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 
-import { PrismaService } from '@/shared/services/prisma.service';
-
 import { AUTH_STRATEGY_KEY, AuthStrategyValue } from '../decorators/auth-strategy.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import type { AuthUser } from '../interfaces/auth-user.interface';
 import { AuthTokenService } from '../services/auth-token.service';
 import { bindAuthUserToRequest } from '../utils/bind-request-user.util';
 
@@ -25,27 +19,18 @@ export class GlobalAuthGuard implements CanActivate {
     ) {}
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
-        const request = context.switchToHttp().getRequest<
-            Request & { authUser?: AuthUser; currentUser?: User }
-        >();
+        const request = context.switchToHttp().getRequest<Request & { authUser?: AuthUser; currentUser?: User }>();
 
         if (request.method === 'OPTIONS') {
             return true;
         }
 
-        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-            context.getHandler(),
-            context.getClass(),
-        ]);
+        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
         if (isPublic) {
             return true;
         }
 
-        const strategy =
-            this.reflector.getAllAndOverride<AuthStrategyValue>(AUTH_STRATEGY_KEY, [
-                context.getHandler(),
-                context.getClass(),
-            ]) ?? 'combined';
+        const strategy = this.reflector.getAllAndOverride<AuthStrategyValue>(AUTH_STRATEGY_KEY, [context.getHandler(), context.getClass()]) ?? 'combined';
 
         const token = this.authTokenService.extractBearerToken(request);
         if (!token) {

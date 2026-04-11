@@ -20,6 +20,9 @@ npm-debug.log
 # dist
 /dist
 
+# TypeScript incremental
+*.tsbuildinfo
+
 # environment
 .env
 

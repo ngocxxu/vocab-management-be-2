@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { PlanNotFoundException } from '../exceptions';
-import { PlanMapper } from '../mappers';
 import { CreatePlanInput } from '../dto/create-plan.input';
 import { PlanDto } from '../dto/plan.dto';
 import { UpdatePlanInput } from '../dto/update-plan.input';
+import { PlanNotFoundException } from '../exceptions';
+import { PlanMapper } from '../mappers';
 import { PlanRepository } from '../repositories';
 
 @Injectable()
@@ -23,10 +23,7 @@ export class PlanService {
         if (!existing) {
             throw new PlanNotFoundException(role);
         }
-        const plan = await this.planRepository.updateByRole(
-            role,
-            this.planMapper.toUpdateInput(input),
-        );
+        const plan = await this.planRepository.updateByRole(role, this.planMapper.toUpdateInput(input));
         return this.planMapper.toDto(plan);
     }
 

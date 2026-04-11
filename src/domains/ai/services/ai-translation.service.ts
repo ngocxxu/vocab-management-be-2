@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateTextTargetInput } from '../../vocab/dto/vocab.input';
 import { WordTypeRepository } from '../../catalog/word-type/repositories';
+import { CreateTextTargetInput } from '../../vocab/dto/vocab.input';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
 import { WordTypeRecord } from '../utils/ai-text-types.util';
@@ -40,33 +40,19 @@ export class AiTranslationService {
                 subjectIds: subjectIds || [],
             };
         } catch (error) {
-            this.logger.error(
-                `Error translating vocab "${textSource}" (attempt ${retryCount + 1}):`,
-                error,
-            );
+            this.logger.error(`Error translating vocab "${textSource}" (attempt ${retryCount + 1}):`, error);
 
             if (retryCount < AI_CONFIG.maxRetries) {
                 this.logger.warn(`Retrying translation for "${textSource}"...`);
                 await this.delay(AI_CONFIG.retryDelayMs * (retryCount + 1));
-                return this.translateVocab(
-                    textSource,
-                    sourceLanguageCode,
-                    targetLanguageCode,
-                    subjectIds,
-                    userId,
-                    retryCount + 1,
-                );
+                return this.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, retryCount + 1);
             }
 
             throw error;
         }
     }
 
-    private async buildTranslationPrompt(params: {
-        textSource: string;
-        sourceLanguageCode: string;
-        targetLanguageCode: string;
-    }): Promise<string> {
+    private async buildTranslationPrompt(params: { textSource: string; sourceLanguageCode: string; targetLanguageCode: string }): Promise<string> {
         const { textSource, sourceLanguageCode, targetLanguageCode } = params;
 
         const allowedWordTypes = (await this.wordTypeRepository.findAll()) as WordTypeRecord[];
@@ -116,4 +102,3 @@ Format your response as a JSON object (NO Markdown, NO code blocks):
         await new Promise<void>((resolve) => setTimeout(resolve, ms));
     }
 }
-

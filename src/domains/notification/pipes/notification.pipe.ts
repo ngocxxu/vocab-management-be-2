@@ -1,27 +1,20 @@
+import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 import { Injectable } from '@nestjs/common';
 import * as Joi from 'joi';
-import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 
 @Injectable()
 export class NotificationPipe extends JoiValidationPipe {
     public buildSchema(): Joi.ObjectSchema {
         return Joi.object({
-            type: Joi.string()
-                .required()
-                .valid('SYSTEM', 'USER', 'ADMIN', 'MARKETING', 'SECURITY')
-                .messages({
-                    'any.only': 'Type must be one of: SYSTEM, USER, ADMIN, MARKETING, SECURITY',
-                    'any.required': 'Notification type is required',
-                }),
+            type: Joi.string().required().valid('SYSTEM', 'USER', 'ADMIN', 'MARKETING', 'SECURITY').messages({
+                'any.only': 'Type must be one of: SYSTEM, USER, ADMIN, MARKETING, SECURITY',
+                'any.required': 'Notification type is required',
+            }),
 
-            action: Joi.string()
-                .required()
-                .valid('CREATE', 'UPDATE', 'DELETE', 'REMINDER', 'ALERT', 'INFO')
-                .messages({
-                    'any.only':
-                        'Action must be one of: CREATE, UPDATE, DELETE, REMINDER, ALERT, INFO',
-                    'any.required': 'Notification action is required',
-                }),
+            action: Joi.string().required().valid('CREATE', 'UPDATE', 'DELETE', 'REMINDER', 'ALERT', 'INFO').messages({
+                'any.only': 'Action must be one of: CREATE, UPDATE, DELETE, REMINDER, ALERT, INFO',
+                'any.required': 'Notification action is required',
+            }),
 
             priority: Joi.string().required().valid('LOW', 'MEDIUM', 'HIGH', 'URGENT').messages({
                 'any.only': 'Priority must be one of: LOW, MEDIUM, HIGH, URGENT',

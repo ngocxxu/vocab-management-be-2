@@ -1,8 +1,8 @@
+import { JoiValidationPipe } from '@/shared';
 import { Inject, Injectable, PipeTransform } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import * as Joi from 'joi';
-import { JoiValidationPipe } from '@/shared';
 import { ConfigInput } from '../dto';
 
 @Injectable()

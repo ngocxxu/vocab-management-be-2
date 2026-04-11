@@ -48,4 +48,3 @@ export type EvaluateTranslationParams = {
 };
 
 export type FormatMarkdownReportFn = (evaluation: EvaluationResult, transcript: string) => string;
-

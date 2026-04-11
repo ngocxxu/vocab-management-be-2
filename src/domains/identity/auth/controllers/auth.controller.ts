@@ -1,30 +1,10 @@
-import {
-    BadRequestException,
-    Body,
-    Controller,
-    Get,
-    HttpStatus,
-    Post,
-    Req,
-    Res,
-    UnauthorizedException,
-} from '@nestjs/common';
+import { CookieUtil, LoggerService } from '@/shared';
+import { ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
+import { BadRequestException, Body, Controller, Get, HttpStatus, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 
-import { CookieUtil, LoggerService } from '@/shared';
-import { ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
 import { UserDto } from '../../user/dto';
-import {
-    OAuthPipe,
-    OAuthSyncPipe,
-    RefreshTokenPipe,
-    ResendConfirmationPipe,
-    ResetPasswordPipe,
-    SignInPipe,
-    SignUpPipe,
-    VerifyOtpPipe,
-} from '../pipes';
 import {
     OAuthInput,
     OAuthResponseDto,
@@ -37,6 +17,7 @@ import {
     SignUpInput,
     VerifyOtpInput,
 } from '../dto';
+import { OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
 import { AuthService } from '../services';
 
 const isProduction = (process.env.NODE_ENV ?? '') === 'production';
@@ -62,10 +43,7 @@ export class AuthController {
         status: HttpStatus.BAD_REQUEST,
         description: 'Registration failed',
     })
-    public async signUp(
-        @Body(SignUpPipe) input: SignUpInput,
-        @Res({ passthrough: true }) response: Response,
-    ): Promise<SessionDto> {
+    public async signUp(@Body(SignUpPipe) input: SignUpInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
         const result = await this.authService.signUp(input);
         this.logger.info(`User signed up successfully with email: ${input.email}`);
 
@@ -85,10 +63,7 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Authentication failed',
     })
-    public async signIn(
-        @Body(SignInPipe) input: SignInInput,
-        @Res({ passthrough: true }) response: Response,
-    ): Promise<SessionDto> {
+    public async signIn(@Body(SignInPipe) input: SignInInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
         const { email, password } = input;
 
         const result = await this.authService.signIn(email, password);
@@ -148,10 +123,7 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Invalid access token',
     })
-    public async syncOAuthUser(
-        @Body(OAuthSyncPipe) input: OAuthSyncInput,
-        @Res({ passthrough: true }) response: Response,
-    ): Promise<SessionDto> {
+    public async syncOAuthUser(@Body(OAuthSyncPipe) input: OAuthSyncInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
         const { accessToken, refreshToken } = input;
 
         const result = await this.authService.syncOAuthUser(accessToken, refreshToken);
@@ -200,10 +172,7 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Session refresh failed',
     })
-    public async refreshSession(
-        @Body(RefreshTokenPipe) input: RefreshTokenInput,
-        @Res({ passthrough: true }) response: Response,
-    ): Promise<SessionDto> {
+    public async refreshSession(@Body(RefreshTokenPipe) input: RefreshTokenInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
         // Try to get refresh token from request body first, then from cookies
         const refreshToken = input.refreshToken;
 

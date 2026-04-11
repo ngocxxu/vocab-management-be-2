@@ -11,4 +11,3 @@ import { LanguageFolderService } from './services';
     exports: [LanguageFolderService, LanguageFolderRepository],
 })
 export class LanguageFolderModule {}
-

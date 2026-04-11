@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Plan, Prisma, UserRole } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { Injectable } from '@nestjs/common';
+import { Plan, Prisma, UserRole } from '@prisma/client';
 
 @Injectable()
 export class PlanRepository extends BaseRepository {
@@ -19,10 +19,7 @@ export class PlanRepository extends BaseRepository {
         });
     }
 
-    public async updateByRole(
-        role: UserRole,
-        data: Prisma.PlanUpdateInput,
-    ): Promise<Plan> {
+    public async updateByRole(role: UserRole, data: Prisma.PlanUpdateInput): Promise<Plan> {
         return this.prisma.plan.update({
             where: { role },
             data,

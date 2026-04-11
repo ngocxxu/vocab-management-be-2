@@ -1,10 +1,10 @@
+import { RedisService } from '@/shared/services/redis.service';
+import { RedisKeyManager } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { LanguageFolderRepository } from '../../language-folder/repositories';
-import { PlanQuotaExceededException } from '../exceptions';
-import { RedisService } from '@/shared/services/redis.service';
 import { SubjectRepository } from '../../subject/repositories';
-import { RedisKeyManager } from '@/shared/utils/redis-key.util';
+import { PlanQuotaExceededException } from '../exceptions';
 
 const QUOTA_VOCAB_PER_DAY = 20;
 const QUOTA_LANGUAGE_FOLDERS = 2;
@@ -26,11 +26,7 @@ export class PlanQuotaService {
      * ADMIN bypass: no limit. MEMBER: unlimited. GUEST: enforced (vocab 20/day, 2 folders, 3 subjects).
      * @throws PlanQuotaExceededException when quota exceeded
      */
-    public async assertCreationQuota(
-        userId: string,
-        role: UserRole,
-        resource: CreationResource,
-    ): Promise<void> {
+    public async assertCreationQuota(userId: string, role: UserRole, resource: CreationResource): Promise<void> {
         if (role === UserRole.ADMIN) {
             return;
         }
@@ -61,27 +57,21 @@ export class PlanQuotaService {
         }
         if (count > QUOTA_VOCAB_PER_DAY) {
             await redis.decr(key);
-            throw new PlanQuotaExceededException(
-                `Daily vocab limit reached (${QUOTA_VOCAB_PER_DAY} per day). Upgrade to Member for unlimited.`,
-            );
+            throw new PlanQuotaExceededException(`Daily vocab limit reached (${QUOTA_VOCAB_PER_DAY} per day). Upgrade to Member for unlimited.`);
         }
     }
 
     private async assertLanguageFolderQuota(userId: string): Promise<void> {
         const count = await this.languageFolderRepository.countByUserId(userId);
         if (count >= QUOTA_LANGUAGE_FOLDERS) {
-            throw new PlanQuotaExceededException(
-                `Language folder limit reached (${QUOTA_LANGUAGE_FOLDERS}). Upgrade to Member for unlimited.`,
-            );
+            throw new PlanQuotaExceededException(`Language folder limit reached (${QUOTA_LANGUAGE_FOLDERS}). Upgrade to Member for unlimited.`);
         }
     }
 
     private async assertSubjectQuota(userId: string): Promise<void> {
         const count = await this.subjectRepository.countByUserId(userId);
         if (count >= QUOTA_SUBJECTS) {
-            throw new PlanQuotaExceededException(
-                `Subject limit reached (${QUOTA_SUBJECTS}). Upgrade to Member for unlimited.`,
-            );
+            throw new PlanQuotaExceededException(`Subject limit reached (${QUOTA_SUBJECTS}). Upgrade to Member for unlimited.`);
         }
     }
 

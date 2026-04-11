@@ -1,7 +1,7 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
 import { IResponse } from '@/shared';
-import { NotificationForbiddenException, NotificationNotFoundException } from '../exceptions';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../dto';
+import { NotificationForbiddenException, NotificationNotFoundException } from '../exceptions';
 import { NotificationRepository } from '../repositories';
 
 @Injectable()
@@ -17,16 +17,8 @@ export class NotificationService {
         };
     }
 
-    public async findByUser(
-        userId: string,
-        includeDeleted: boolean = false,
-        isRead?: boolean,
-    ): Promise<IResponse<NotificationDto[]>> {
-        const notifications = await this.notificationRepository.findManyForUser(
-            userId,
-            includeDeleted,
-            isRead,
-        );
+    public async findByUser(userId: string, includeDeleted: boolean = false, isRead?: boolean): Promise<IResponse<NotificationDto[]>> {
+        const notifications = await this.notificationRepository.findManyForUser(userId, includeDeleted, isRead);
 
         return {
             items: notifications.map((notification) => new NotificationDto(notification)),
@@ -49,24 +41,13 @@ export class NotificationService {
     }
 
     public async create(createNotificationData: NotificationInput): Promise<NotificationDto> {
-        const notification =
-            await this.notificationRepository.createWithRecipients(createNotificationData);
+        const notification = await this.notificationRepository.createWithRecipients(createNotificationData);
 
         return new NotificationDto(notification);
     }
 
-    public async update(
-        id: string,
-        updateNotificationData: Partial<NotificationInput>,
-    ): Promise<NotificationDto> {
-        const {
-            type,
-            action,
-            priority,
-            data,
-            isActive,
-            expiresAt,
-        }: Partial<NotificationInput> = updateNotificationData;
+    public async update(id: string, updateNotificationData: Partial<NotificationInput>): Promise<NotificationDto> {
+        const { type, action, priority, data, isActive, expiresAt }: Partial<NotificationInput> = updateNotificationData;
 
         const existingNotification = await this.notificationRepository.findById(id);
 
@@ -88,11 +69,7 @@ export class NotificationService {
         return new NotificationDto(notification);
     }
 
-    public async updateUserStatus(
-        notificationId: string,
-        userId: string,
-        updateData: UpdateNotificationStatusInput,
-    ): Promise<NotificationDto> {
+    public async updateUserStatus(notificationId: string, userId: string, updateData: UpdateNotificationStatusInput): Promise<NotificationDto> {
         const recipient = await this.notificationRepository.findRecipient(notificationId, userId);
 
         if (!recipient) {

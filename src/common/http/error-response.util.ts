@@ -1,6 +1,5 @@
-import * as http from 'node:http';
-
 import { Request } from 'express';
+import * as http from 'node:http';
 
 export interface StandardErrorBody {
     statusCode: number;
@@ -13,11 +12,7 @@ export interface StandardErrorBody {
 
 export type RequestLike = Pick<Request, 'originalUrl' | 'method'> & { requestId?: string };
 
-export function buildHttpErrorBody(
-    statusCode: number,
-    message: string | string[],
-    req: RequestLike,
-): StandardErrorBody {
+export function buildHttpErrorBody(statusCode: number, message: string | string[], req: RequestLike): StandardErrorBody {
     const errorName = http.STATUS_CODES[statusCode] ?? 'Error';
     const body: StandardErrorBody = {
         statusCode,

@@ -1,11 +1,11 @@
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
+import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Prisma, TextTarget } from '@prisma/client';
 import { Job } from 'bullmq';
 import { AiService } from '../../ai/services/ai.service';
-import { LoggerService } from '@/shared';
-import { QUEUE_CONFIG } from '@/queues/config/queue.config';
-import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType } from '../../reminder/utils';
 import { CreateTextTargetInput } from '../dto/vocab.input';
 import { VocabRepository } from '../repositories/vocab.repository';
@@ -40,43 +40,29 @@ export class VocabTranslationProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.VOCAB_TRANSLATION].concurrency,
     })
     public async processVocabTranslation(job: Job<VocabTranslationJobData>): Promise<void> {
-        const { vocabId, textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId } =
-            job.data;
+        const { vocabId, textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId } = job.data;
 
         const jobId = job.id?.toString() || 'unknown';
 
         try {
-            this.logger.info(
-                `Processing vocab translation job ${jobId} for vocab ${vocabId} (user ${userId})`,
-            );
+            this.logger.info(`Processing vocab translation job ${jobId} for vocab ${vocabId} (user ${userId})`);
 
             const vocab = await this.findVocabWithValidation(vocabId, userId);
             await this.removeEmptyTextTarget(vocab);
 
-            const translatedData = await this.translateVocab(
-                textSource,
-                sourceLanguageCode,
-                targetLanguageCode,
-                subjectIds,
-                userId,
-            );
+            const translatedData = await this.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId);
 
             await this.updateVocabWithTranslation(vocabId, translatedData);
             await this.vocabRepository.clearListCaches();
 
-            this.logger.info(
-                `Vocab translation job ${jobId} completed successfully for vocab ${vocabId}`,
-            );
+            this.logger.info(`Vocab translation job ${jobId} completed successfully for vocab ${vocabId}`);
         } catch (error) {
             this.handleJobError(error, jobId, vocabId);
             throw error;
         }
     }
 
-    private async findVocabWithValidation(
-        vocabId: string,
-        userId: string,
-    ): Promise<VocabWithTextTargets> {
+    private async findVocabWithValidation(vocabId: string, userId: string): Promise<VocabWithTextTargets> {
         const vocab = await this.vocabRepository.findById(vocabId, userId);
 
         if (!vocab) {
@@ -107,19 +93,10 @@ export class VocabTranslationProcessor {
         subjectIds: string[] | undefined,
         userId: string,
     ): Promise<CreateTextTargetInput> {
-        return this.aiService.translateVocab(
-            textSource,
-            sourceLanguageCode,
-            targetLanguageCode,
-            subjectIds,
-            userId,
-        );
+        return this.aiService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId);
     }
 
-    private async updateVocabWithTranslation(
-        vocabId: string,
-        translatedData: CreateTextTargetInput,
-    ): Promise<void> {
+    private async updateVocabWithTranslation(vocabId: string, translatedData: CreateTextTargetInput): Promise<void> {
         const textTargetCreateData: Prisma.TextTargetCreateWithoutVocabInput = {
             textTarget: translatedData.textTarget,
             grammar: translatedData.grammar,
@@ -147,9 +124,7 @@ export class VocabTranslationProcessor {
         await this.vocabRepository.update(vocabId, updateData);
     }
 
-    private buildSubjectIdsRelation(
-        subjectIds: string[] | undefined,
-    ): Prisma.TextTargetCreateInput['textTargetSubjects'] | undefined {
+    private buildSubjectIdsRelation(subjectIds: string[] | undefined): Prisma.TextTargetCreateInput['textTargetSubjects'] | undefined {
         if (!subjectIds || subjectIds.length === 0) {
             return undefined;
         }
@@ -159,9 +134,7 @@ export class VocabTranslationProcessor {
         };
     }
 
-    private buildVocabExamplesRelation(
-        vocabExamples: CreateTextTargetInput['vocabExamples'],
-    ): Prisma.TextTargetCreateInput['vocabExamples'] | undefined {
+    private buildVocabExamplesRelation(vocabExamples: CreateTextTargetInput['vocabExamples']): Prisma.TextTargetCreateInput['vocabExamples'] | undefined {
         if (!vocabExamples || vocabExamples.length === 0) {
             return undefined;
         }
@@ -176,8 +149,6 @@ export class VocabTranslationProcessor {
 
     private handleJobError(error: unknown, jobId: string, vocabId: string): void {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        this.logger.error(
-            `Vocab translation job ${jobId} failed for vocab ${vocabId}: ${errorMessage}`,
-        );
+        this.logger.error(`Vocab translation job ${jobId} failed for vocab ${vocabId}: ${errorMessage}`);
     }
 }

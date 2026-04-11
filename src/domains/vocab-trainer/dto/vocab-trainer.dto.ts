@@ -1,11 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-    TrainerStatus,
-    VocabTrainer,
-    VocabTrainerWord,
-    VocabTrainerResult,
-    QuestionType,
-} from '@prisma/client';
+import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { shuffleArray } from '../utils';
 import { FillInBlankQuestionDto } from './fill-in-blank-question.dto';
@@ -73,12 +67,7 @@ export class VocabTrainerDto {
         type: [MultipleChoiceQuestionDto, FlipCardQuestionDto, FillInBlankQuestionDto],
         required: false,
     })
-    public questionAnswers?: (
-        | MultipleChoiceQuestionDto
-        | FlipCardQuestionDto
-        | FillInBlankQuestionDto
-        | { speaker: string; text: string }
-    )[];
+    public questionAnswers?: (MultipleChoiceQuestionDto | FlipCardQuestionDto | FillInBlankQuestionDto | { speaker: string; text: string })[];
 
     @ApiProperty({
         description: 'Job ID for async question generation (only present when questions are being generated)',
@@ -125,13 +114,9 @@ export class VocabTrainerDto {
                 entity.questionAnswers?.length
                     ? entity.questionAnswers.map((q) => {
                           if (isMultipleChoice) {
-                              return new MultipleChoiceQuestionDto(
-                                  q as unknown as MultipleChoiceQuestionDto,
-                              );
+                              return new MultipleChoiceQuestionDto(q as unknown as MultipleChoiceQuestionDto);
                           } else if (isFillInBlank) {
-                              return new FillInBlankQuestionDto(
-                                  q as unknown as FillInBlankQuestionDto,
-                              );
+                              return new FillInBlankQuestionDto(q as unknown as FillInBlankQuestionDto);
                           } else {
                               return new FlipCardQuestionDto(q as unknown as FlipCardQuestionDto);
                           }

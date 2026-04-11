@@ -1,18 +1,8 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Post,
-    Put,
-    UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { WordTypeDto, WordTypeInput } from '../dto';
 import { WordTypeService } from '../services';
 
@@ -61,10 +51,7 @@ export class WordTypeController {
     @ApiOperation({ summary: 'Update word type' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })
-    public async update(
-        @Param('id') id: string,
-        @Body() updateWordTypeData: WordTypeInput,
-    ): Promise<WordTypeDto> {
+    public async update(@Param('id') id: string, @Body() updateWordTypeData: WordTypeInput): Promise<WordTypeDto> {
         const wordType = await this.wordTypeService.update(id, updateWordTypeData);
         this.logger.info(`Updated word type with ID ${id}`);
         return wordType;

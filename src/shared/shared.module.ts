@@ -8,16 +8,8 @@ import { CacheManagerService, RedisService } from './services';
 @Global()
 @Module({
     imports: [PrismaModule, LoggerModule, TerminusModule],
-    providers: [
-        RedisService,
-        CacheManagerService,
-    ],
-    exports: [
-        PrismaModule,
-        LoggerModule,
-        RedisService,
-        CacheManagerService,
-    ],
+    providers: [RedisService, CacheManagerService],
+    exports: [PrismaModule, LoggerModule, RedisService, CacheManagerService],
     controllers: [HealthController, CacheController],
 })
 export class SharedModule {}

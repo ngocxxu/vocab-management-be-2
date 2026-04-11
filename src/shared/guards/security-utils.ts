@@ -4,7 +4,6 @@ import * as jwt from 'jsonwebtoken';
 import { Role } from '../tokens';
 
 export function extractTokenPayload(request: Request): { role: Role } | null {
-
     const header = request.headers.authorization;
     if (!header || !header.startsWith('Bearer ')) {
         return null;
@@ -16,11 +15,10 @@ export function extractTokenPayload(request: Request): { role: Role } | null {
     }
 
     try {
-
         const env = process.env;
         const payload = jwt.verify(tokenChunk, `${env.JWT_SECRET}`, {
             algorithms: ['HS256'],
-            issuer: env.JWT_ISSUER
+            issuer: env.JWT_ISSUER,
         });
 
         if (typeof payload === 'string') {
@@ -28,9 +26,7 @@ export function extractTokenPayload(request: Request): { role: Role } | null {
         }
 
         return payload as { role: Role };
-
-    }
-    catch (err) {
+    } catch (err) {
         return null;
     }
 }

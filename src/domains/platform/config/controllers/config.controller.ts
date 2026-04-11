@@ -1,10 +1,10 @@
+import { LoggerService, RolesGuard } from '@/shared';
+import { CurrentUser, Roles } from '@/shared/decorators';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Prisma, User, UserRole } from '@prisma/client';
-import { LoggerService, RolesGuard } from '@/shared';
-import { CurrentUser, Roles } from '@/shared/decorators';
-import { ConfigPipe } from '../pipes';
 import { ConfigDto, ConfigInput } from '../dto';
+import { ConfigPipe } from '../pipes';
 import { ConfigService } from '../services';
 
 @Controller('config')
@@ -31,10 +31,7 @@ export class ConfigController {
     @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Update system config by key' })
     @ApiResponse({ status: HttpStatus.OK, type: ConfigDto })
-    public async setSystemConfig(
-        @Param('key') key: string,
-        @Body(ConfigPipe) input: ConfigInput,
-    ): Promise<ConfigDto> {
+    public async setSystemConfig(@Param('key') key: string, @Body(ConfigPipe) input: ConfigInput): Promise<ConfigDto> {
         const value: Prisma.InputJsonValue = input.value as Prisma.InputJsonValue;
         const config = await this.configService.setSystemConfig(key, value);
         this.logger.info(`Updated system config with key "${key}"`);
@@ -58,10 +55,7 @@ export class ConfigController {
     @ApiOperation({ summary: 'Get user config by key' })
     @ApiResponse({ status: HttpStatus.OK, type: ConfigDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User config not found' })
-    public async getUserConfig(
-        @CurrentUser() userParam: User,
-        @Param('key') keyParam: string,
-    ): Promise<ConfigDto> {
+    public async getUserConfig(@CurrentUser() userParam: User, @Param('key') keyParam: string): Promise<ConfigDto> {
         const user: User = userParam;
         const userId: string = user.id;
         const key: string = keyParam;
@@ -72,11 +66,7 @@ export class ConfigController {
     @UseGuards(RolesGuard)
     @ApiOperation({ summary: 'Update user config by key' })
     @ApiResponse({ status: HttpStatus.OK, type: ConfigDto })
-    public async setUserConfig(
-        @CurrentUser() userParam: User,
-        @Param('key') key: string,
-        @Body(ConfigPipe) input: ConfigInput,
-    ): Promise<ConfigDto> {
+    public async setUserConfig(@CurrentUser() userParam: User, @Param('key') key: string, @Body(ConfigPipe) input: ConfigInput): Promise<ConfigDto> {
         const user: User = userParam;
         const userId: string = user.id;
         const value: Prisma.InputJsonValue = input.value as Prisma.InputJsonValue;
@@ -90,10 +80,7 @@ export class ConfigController {
     @ApiOperation({ summary: 'Delete user config by key' })
     @ApiResponse({ status: HttpStatus.OK, type: ConfigDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User config not found' })
-    public async deleteUserConfig(
-        @CurrentUser() userParam: User,
-        @Param('key') keyParam: string,
-    ): Promise<ConfigDto> {
+    public async deleteUserConfig(@CurrentUser() userParam: User, @Param('key') keyParam: string): Promise<ConfigDto> {
         const user: User = userParam;
         const userId: string = user.id;
         const key: string = keyParam;

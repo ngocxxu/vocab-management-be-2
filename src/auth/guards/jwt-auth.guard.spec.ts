@@ -1,7 +1,7 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { AuthTokenService } from '../services/auth-token.service';
 import { PrismaService } from '@/shared/services/prisma.service';
+import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { AuthTokenService } from '../services/auth-token.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
     const authUser = {
@@ -11,9 +11,7 @@ describe('JwtAuthGuard', () => {
         provider: 'jwt' as const,
     };
 
-    const createGuard = (authToken: Partial<AuthTokenService>, prisma: unknown) => {
-        return new JwtAuthGuard(authToken as AuthTokenService, prisma as PrismaService);
-    };
+    const createGuard = (authToken: Partial<AuthTokenService>, prisma: unknown) => new JwtAuthGuard(authToken as AuthTokenService, prisma as PrismaService);
 
     const createContext = (authorization?: string) => {
         const request = {
@@ -27,10 +25,7 @@ describe('JwtAuthGuard', () => {
     };
 
     it('throws when Authorization Bearer token is missing', async () => {
-        const guard = createGuard(
-            { extractBearerToken: () => null },
-            { user: { findFirst: jest.fn() } },
-        );
+        const guard = createGuard({ extractBearerToken: () => null }, { user: { findFirst: jest.fn() } });
         await expect(guard.canActivate(createContext())).rejects.toBeInstanceOf(UnauthorizedException);
     });
 

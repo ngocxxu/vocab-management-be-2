@@ -1,38 +1,34 @@
-import { BullModule } from '@nestjs/bull';
-import { Module } from '@nestjs/common';
-import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
-
+import { AuthModule as AppAuthModule, GlobalAuthGuard } from '@/auth';
 import { CommonModule } from '@/common/common.module';
 
-import { AuthModule as AppAuthModule, GlobalAuthGuard } from '@/auth';
-
-import { QueuesModule } from '@/queues/queues.module';
-import { envConfigLoaders, validationSchema } from '../config';
 import { AiModule } from '@/domains/ai';
+import { LanguageModule } from '@/domains/catalog/language';
+import { LanguageFolderModule } from '@/domains/catalog/language-folder';
+import { PlanModule } from '@/domains/catalog/plan';
+import { SubjectModule } from '@/domains/catalog/subject';
+import { WordTypeModule } from '@/domains/catalog/word-type';
 import { AuthModule as IdentityAuthModule } from '@/domains/identity/auth';
 import { UserModule } from '@/domains/identity/user';
 import { CloudinaryModule } from '@/domains/media/cloudinary';
 import { SupabaseModule } from '@/domains/media/supabase';
 import { EmailModule, NotificationModule } from '@/domains/notification';
-import { LanguageFolderModule } from '@/domains/catalog/language-folder';
-import { LanguageModule } from '@/domains/catalog/language';
-import { PlanModule } from '@/domains/catalog/plan';
-import { SubjectModule } from '@/domains/catalog/subject';
-import { WordTypeModule } from '@/domains/catalog/word-type';
-import { ConfigModule } from '@/domains/platform/config';
 import { AdminModule } from '@/domains/platform/admin';
+import { ConfigModule } from '@/domains/platform/config';
 import { EventsModule } from '@/domains/platform/events';
 import { SSEModule } from '@/domains/platform/sse';
 import { WebhookModule } from '@/domains/platform/webhook';
 import { ReminderModule } from '@/domains/reminder';
-import { VocabTrainerModule } from '@/domains/vocab-trainer';
 import { VocabModule } from '@/domains/vocab';
+import { VocabTrainerModule } from '@/domains/vocab-trainer';
+import { QueuesModule } from '@/queues/queues.module';
 import { SharedModule, UserThrottlerGuard } from '@/shared';
+import { BullModule } from '@nestjs/bull';
+import { Module } from '@nestjs/common';
+import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
+import { envConfigLoaders, validationSchema } from '../config';
 
 @Module({
     imports: [
@@ -60,9 +56,7 @@ import { SharedModule, UserThrottlerGuard } from '@/shared';
                         limit: 50,
                     },
                 ],
-                storage: new ThrottlerStorageRedisService(
-                    configService.getOrThrow<string>('redis.url'),
-                ) as unknown as ThrottlerStorage,
+                storage: new ThrottlerStorageRedisService(configService.getOrThrow<string>('redis.url')) as unknown as ThrottlerStorage,
             }),
         }),
         SupabaseModule,

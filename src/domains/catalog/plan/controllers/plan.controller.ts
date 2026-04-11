@@ -1,21 +1,9 @@
-import {
-    BadRequestException,
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Post,
-    Put,
-    Query,
-    UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
 import { Public } from '@/shared/decorators/public.decorator';
+import { BadRequestException, Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { CreatePlanInput } from '../dto/create-plan.input';
 import { PlanDto } from '../dto/plan.dto';
 import { UpdatePlanInput } from '../dto/update-plan.input';
@@ -54,10 +42,7 @@ export class PlanController {
     @ApiOperation({ summary: 'Update plan by role (admin only)' })
     @ApiResponse({ status: HttpStatus.OK, type: PlanDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Plan not found' })
-    public async update(
-        @Param('role') role: string,
-        @Body() input: UpdatePlanInput,
-    ): Promise<PlanDto> {
+    public async update(@Param('role') role: string, @Body() input: UpdatePlanInput): Promise<PlanDto> {
         const roleEnum = this.parseRole(role);
         return this.planService.update(roleEnum, input);
     }
@@ -76,9 +61,7 @@ export class PlanController {
 
     private parseRole(role: string): UserRole {
         if (!Object.values(UserRole).includes(role as UserRole)) {
-            throw new BadRequestException(
-                `Invalid role. Must be one of: ${Object.values(UserRole).join(', ')}`,
-            );
+            throw new BadRequestException(`Invalid role. Must be one of: ${Object.values(UserRole).join(', ')}`);
         }
         return role as UserRole;
     }

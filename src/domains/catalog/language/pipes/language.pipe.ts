@@ -1,6 +1,6 @@
+import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 import { Injectable } from '@nestjs/common';
 import * as Joi from 'joi';
-import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 
 @Injectable()
 export class LanguagePipe extends JoiValidationPipe {
@@ -13,8 +13,7 @@ export class LanguagePipe extends JoiValidationPipe {
                 .min(2)
                 .pattern(/^[a-z]{2,3}(-[A-Z]{2})?$/)
                 .messages({
-                    'string.pattern.base':
-                        'Language code must be in ISO format (e.g., en, en-US, zh-CN)',
+                    'string.pattern.base': 'Language code must be in ISO format (e.g., en, en-US, zh-CN)',
                     'string.min': 'Language code must be at least 2 characters',
                     'string.max': 'Language code cannot exceed 10 characters',
                     'string.empty': 'Language code is required',

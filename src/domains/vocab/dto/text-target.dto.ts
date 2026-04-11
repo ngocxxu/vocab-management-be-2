@@ -69,10 +69,7 @@ export class TextTargetDto {
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.wordType = entity.wordType ? new WordTypeDto(entity.wordType) : undefined;
-        this.vocabExamples =
-            entity.vocabExamples?.map((example) => new VocabExampleDto(example)) ?? [];
-        this.textTargetSubjects =
-            entity.textTargetSubjects?.map((assignment) => new TextTargetSubjectDto(assignment)) ??
-            [];
+        this.vocabExamples = entity.vocabExamples?.map((example) => new VocabExampleDto(example)) ?? [];
+        this.textTargetSubjects = entity.textTargetSubjects?.map((assignment) => new TextTargetSubjectDto(assignment)) ?? [];
     }
 }

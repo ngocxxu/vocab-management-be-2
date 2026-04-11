@@ -1,7 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ReminderModule } from '../../reminder';
-import { MailProvider } from './providers';
 import { EmailProcessor } from './processors';
+import { MailProvider } from './providers';
 import { EmailService } from './services';
 
 @Module({

@@ -1,8 +1,8 @@
+import { ConfigService } from '@/domains/platform/config/services';
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import FormData from 'form-data';
-import { ConfigService } from '@/domains/platform/config/services';
 import { AI_CONFIG } from '../utils/const.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 
@@ -21,15 +21,9 @@ export class GroqProvider implements IAiProvider {
         this.apiKey = apiKey;
     }
 
-    public async generateContent(
-        prompt: string,
-        userId?: string,
-        options?: GenerateContentOptions,
-    ): Promise<string> {
+    public async generateContent(prompt: string, userId?: string, options?: GenerateContentOptions): Promise<string> {
         const hasAudio = !!(options?.audioBuffer && options?.audioMimeType);
-        const modelName = hasAudio
-            ? await this.getAudioModelName(userId)
-            : await this.getModelName(userId);
+        const modelName = hasAudio ? await this.getAudioModelName(userId) : await this.getModelName(userId);
 
         try {
             const response = await axios.post(
@@ -51,8 +45,7 @@ export class GroqProvider implements IAiProvider {
                 },
             );
 
-            const content = (response.data as { choices: { message: { content: string } }[] })
-                ?.choices?.[0]?.message?.content;
+            const content = (response.data as { choices: { message: { content: string } }[] })?.choices?.[0]?.message?.content;
 
             if (!content) {
                 throw new Error('No content received from Groq API');
@@ -65,12 +58,7 @@ export class GroqProvider implements IAiProvider {
         }
     }
 
-    public async transcribeAudio(
-        audioBuffer: Buffer,
-        mimeType: string,
-        sourceLanguage: string,
-        userId?: string,
-    ): Promise<string> {
+    public async transcribeAudio(audioBuffer: Buffer, mimeType: string, sourceLanguage: string, userId?: string): Promise<string> {
         const modelName = await this.getAudioModelName(userId);
 
         try {
@@ -88,10 +76,7 @@ export class GroqProvider implements IAiProvider {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
             formData.append('language', sourceLanguage);
             // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-            formData.append(
-                'prompt',
-                `Transcribe this ${sourceLanguage} audio recording. Return only the transcript text, no additional commentary.`,
-            );
+            formData.append('prompt', `Transcribe this ${sourceLanguage} audio recording. Return only the transcript text, no additional commentary.`);
 
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
             const headers = formData.getHeaders();
@@ -111,9 +96,7 @@ export class GroqProvider implements IAiProvider {
             return text.trim();
         } catch (error) {
             if (error instanceof Error && error.message.includes('Cannot find module')) {
-                throw new Error(
-                    'form-data package is required for Groq audio transcription. Please install it: npm install form-data',
-                );
+                throw new Error('form-data package is required for Groq audio transcription. Please install it: npm install form-data');
             }
             this.handleApiError(error, 'transcribeAudio', modelName);
             throw error;
@@ -122,16 +105,11 @@ export class GroqProvider implements IAiProvider {
 
     public async getModelName(userId?: string): Promise<string> {
         const configValue = await this.configService.getConfig(userId || null, 'ai.model');
-        return configValue && typeof configValue === 'string'
-            ? configValue
-            : AI_CONFIG.models?.[0] || '';
+        return configValue && typeof configValue === 'string' ? configValue : AI_CONFIG.models?.[0] || '';
     }
 
     public async getAudioModelName(userId?: string): Promise<string> {
-        const audioModelConfig = await this.configService.getConfig(
-            userId || null,
-            'ai.audio.model',
-        );
+        const audioModelConfig = await this.configService.getConfig(userId || null, 'ai.audio.model');
         if (audioModelConfig && typeof audioModelConfig === 'string') {
             return audioModelConfig;
         }
@@ -163,10 +141,7 @@ export class GroqProvider implements IAiProvider {
         }
 
         const extension = mimeType.split('/')[1]?.split(';')[0];
-        if (
-            extension &&
-            ['wav', 'mp3', 'aiff', 'aac', 'ogg', 'flac', 'm4a', 'webm'].includes(extension)
-        ) {
+        if (extension && ['wav', 'mp3', 'aiff', 'aac', 'ogg', 'flac', 'm4a', 'webm'].includes(extension)) {
             return extension;
         }
 
@@ -192,9 +167,7 @@ export class GroqProvider implements IAiProvider {
             } else if (statusCode === 400) {
                 errorMessage = `Groq API: Bad request. ${errorData?.error?.message || ''}`;
             } else if (statusCode) {
-                errorMessage = `Groq API: Request failed with status ${statusCode}. ${
-                    errorData?.error?.message || ''
-                }`;
+                errorMessage = `Groq API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
             }
 
             this.logger.error(`${errorMessage}`, {

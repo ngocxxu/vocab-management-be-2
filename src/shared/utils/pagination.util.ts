@@ -1,25 +1,21 @@
 export interface PaginationOptions {
-  page?: number;
-  pageSize?: number;
-  defaultPage?: number;
-  defaultPageSize?: number;
+    page?: number;
+    pageSize?: number;
+    defaultPage?: number;
+    defaultPageSize?: number;
 }
 
 export function getPagination(options: PaginationOptions = {}) {
-  const page = Number(options.page) > 0 ? Number(options.page) : (options.defaultPage ?? 1);
-  const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : (options.defaultPageSize ?? 10);
-  const skip = (page - 1) * pageSize;
-  const take = pageSize;
-  return { page, pageSize, skip, take };
+    const page = Number(options.page) > 0 ? Number(options.page) : (options.defaultPage ?? 1);
+    const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : (options.defaultPageSize ?? 10);
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+    return { page, pageSize, skip, take };
 }
 
-export function getOrderBy<T extends string = string>(
-  sortBy: T | undefined,
-  sortOrder: 'asc' | 'desc' | undefined,
-  defaultSort: T,
-): Record<T, 'asc' | 'desc'> {
-  if (!sortBy) {
-    return { [defaultSort]: 'desc' } as Record<T, 'asc' | 'desc'>;
-  }
-  return { [sortBy]: sortOrder ?? 'desc' } as Record<T, 'asc' | 'desc'>;
+export function getOrderBy<T extends string = string>(sortBy: T | undefined, sortOrder: 'asc' | 'desc' | undefined, defaultSort: T): Record<T, 'asc' | 'desc'> {
+    if (!sortBy) {
+        return { [defaultSort]: 'desc' } as Record<T, 'asc' | 'desc'>;
+    }
+    return { [sortBy]: sortOrder ?? 'desc' } as Record<T, 'asc' | 'desc'>;
 }

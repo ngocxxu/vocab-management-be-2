@@ -1,8 +1,8 @@
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { NotificationAction, NotificationType, PriorityLevel } from '@prisma/client';
 import { Job } from 'bullmq';
-import { LoggerService } from '@/shared';
-import { QUEUE_CONFIG } from '@/queues/config/queue.config';
 import { EEmailReminderType, EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { NotificationService } from '../services';
 import { NotificationJobData } from '../utils';
@@ -46,11 +46,7 @@ export class NotificationProcessor {
             //   recipientUserIds,
             // );
 
-            this.logger.info(
-                `Notification sent successfully to ${recipientUserIds.join(
-                    ', ',
-                )} with reminder type: ${reminderType}`,
-            );
+            this.logger.info(`Notification sent successfully to ${recipientUserIds.join(', ')} with reminder type: ${reminderType}`);
         } catch (error) {
             this.logger.error(`Failed to send notification: ${error}`);
             throw error;

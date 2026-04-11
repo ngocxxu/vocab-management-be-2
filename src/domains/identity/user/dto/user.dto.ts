@@ -17,10 +17,10 @@ export class UserDto {
     @ApiProperty({ description: 'User last update date', example: '2024-01-01T00:00:00.000Z' })
     public readonly updatedAt: Date;
 
-    @ApiProperty({ description: 'User first name', example: 'John'})
+    @ApiProperty({ description: 'User first name', example: 'John' })
     public readonly firstName: string;
 
-    @ApiProperty({ description: 'User last name', example: 'Doe'})
+    @ApiProperty({ description: 'User last name', example: 'Doe' })
     public readonly lastName: string;
 
     @ApiProperty({

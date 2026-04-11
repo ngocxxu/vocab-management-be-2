@@ -1,12 +1,12 @@
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-payloads';
+import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { LoggerService } from '@/shared';
-import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
-import { QUEUE_CONFIG } from '@/queues/config/queue.config';
-import type { MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType } from '../../reminder/utils';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
 
 @Injectable()
@@ -23,27 +23,16 @@ export class MultipleChoiceGenerationProcessor {
         name: 'generate-questions',
         concurrency: QUEUE_CONFIG[EReminderType.MULTIPLE_CHOICE_GENERATION].concurrency,
     })
-    public async processMultipleChoiceGeneration(
-        job: Job<MultipleChoiceGenerationJobData>,
-    ): Promise<void> {
+    public async processMultipleChoiceGeneration(job: Job<MultipleChoiceGenerationJobData>): Promise<void> {
         const { vocabTrainerId, vocabList, userId } = job.data;
         const jobId = job.id || '';
 
         try {
-            this.logger.info(
-                `Processing multiple choice generation job ${job.id} for user ${userId}`,
-            );
+            this.logger.info(`Processing multiple choice generation job ${job.id} for user ${userId}`);
 
-            this.notificationGateway.emitMultipleChoiceGenerationProgress(
-                userId,
-                jobId,
-                'generating',
-            );
+            this.notificationGateway.emitMultipleChoiceGenerationProgress(userId, jobId, 'generating');
 
-            const questions = await this.aiService.generateMultipleChoiceQuestions(
-                vocabList,
-                userId,
-            );
+            const questions = await this.aiService.generateMultipleChoiceQuestions(vocabList, userId);
 
             await this.vocabTrainerRepository.updateVocabTrainerFields(vocabTrainerId, {
                 questionAnswers: questions.map((question) => ({
@@ -57,14 +46,9 @@ export class MultipleChoiceGenerationProcessor {
                 })),
             });
 
-            this.notificationGateway.emitMultipleChoiceGenerationProgress(
-                userId,
-                jobId,
-                'completed',
-                {
-                    questions,
-                },
-            );
+            this.notificationGateway.emitMultipleChoiceGenerationProgress(userId, jobId, 'completed', {
+                questions,
+            });
 
             this.logger.info(`Multiple choice generation job ${job.id} completed successfully`);
         } catch (error) {
@@ -79,4 +63,3 @@ export class MultipleChoiceGenerationProcessor {
         }
     }
 }
-

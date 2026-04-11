@@ -8,4 +8,3 @@ export type VocabForTextTargets = {
     targetLanguageCode: string;
     textTargets?: TextTargetRecord[];
 };
-

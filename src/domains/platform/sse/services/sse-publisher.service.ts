@@ -48,7 +48,7 @@ export class SSEPublisherService {
         };
 
         // Send to each recipient
-        recipientUserIds.forEach(userId => {
+        recipientUserIds.forEach((userId) => {
             const userEvent = {
                 ...event,
                 userId,
@@ -86,11 +86,7 @@ export class SSEPublisherService {
      * @param data - The event data
      * @param userIds - Array of user IDs to send the event to
      */
-    public publishCustomEvent(
-        eventType: string,
-        data: Record<string, unknown>,
-        userIds: string[],
-    ): void {
+    public publishCustomEvent(eventType: string, data: Record<string, unknown>, userIds: string[]): void {
         const event = {
             type: 'custom',
             eventType,

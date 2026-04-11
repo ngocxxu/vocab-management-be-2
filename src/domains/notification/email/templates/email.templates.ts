@@ -2,29 +2,17 @@ import { EEmailTemplate } from '../../../reminder/utils';
 import { TemplateData } from '../utils/type';
 
 export class EmailTemplates {
-    private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map(
-        [
-            [
-                EEmailTemplate.REMINDER,
-                (data: TemplateData) => EmailTemplates.reminderTemplate(data),
-            ],
-            [
-                EEmailTemplate.EXAM_REMINDER,
-                (data: TemplateData) => EmailTemplates.examReminderTemplate(data),
-            ],
-            [EEmailTemplate.WELCOME, (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
-        ],
-    );
+    private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map([
+        [EEmailTemplate.REMINDER, (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
+        [EEmailTemplate.EXAM_REMINDER, (data: TemplateData) => EmailTemplates.examReminderTemplate(data)],
+        [EEmailTemplate.WELCOME, (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
+    ]);
 
     public static render(templateName: string, data: TemplateData): string {
         const templateFunction = this.templateRegistry.get(templateName);
 
         if (!templateFunction) {
-            throw new Error(
-                `Template '${templateName}' not found. Available templates: ${Array.from(
-                    this.templateRegistry.keys(),
-                ).join(', ')}`,
-            );
+            throw new Error(`Template '${templateName}' not found. Available templates: ${Array.from(this.templateRegistry.keys()).join(', ')}`);
         }
 
         return templateFunction(data);
@@ -76,11 +64,7 @@ export class EmailTemplates {
           <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
             <h2 style="color: #333;">Hello ${data.userName}!</h2>
             <p style="font-size: 16px; line-height: 1.5;">${data.content}</p>
-            ${
-                data.dueDate
-                    ? `<p style="background: #fff3cd; padding: 10px; border-radius: 4px;"><strong>Due Date:</strong> ${data.dueDate}</p>`
-                    : ''
-            }
+            ${data.dueDate ? `<p style="background: #fff3cd; padding: 10px; border-radius: 4px;"><strong>Due Date:</strong> ${data.dueDate}</p>` : ''}
             <hr style="margin: 20px 0;">
             <p style="font-size: 12px; color: #666;">
               This is an automated reminder from Vocab Management System.

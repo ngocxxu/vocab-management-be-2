@@ -73,12 +73,8 @@ export class VocabDto {
         this.languageFolderId = entity.languageFolderId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
-        this.sourceLanguage = entity.sourceLanguage
-            ? new LanguageDto(entity.sourceLanguage)
-            : undefined;
-        this.targetLanguage = entity.targetLanguage
-            ? new LanguageDto(entity.targetLanguage)
-            : undefined;
+        this.sourceLanguage = entity.sourceLanguage ? new LanguageDto(entity.sourceLanguage) : undefined;
+        this.targetLanguage = entity.targetLanguage ? new LanguageDto(entity.targetLanguage) : undefined;
         this.textTargets = entity.textTargets?.map((target) => new TextTargetDto(target)) ?? [];
         this.masteryScore = entity.vocabMasteries?.[0]?.masteryScore;
     }

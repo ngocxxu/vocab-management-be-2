@@ -1,13 +1,13 @@
+import { QUEUE_CONFIG } from '@/queues/config/queue.config';
+import type { AudioEvaluationJobData } from '@/queues/interfaces/job-payloads';
+import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { TrainerStatus } from '@prisma/client';
 import { Job } from 'bullmq';
-import { LoggerService } from '@/shared';
-import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
-import { QUEUE_CONFIG } from '@/queues/config/queue.config';
-import type { AudioEvaluationJobData } from '@/queues/interfaces/job-payloads';
 import { EReminderType } from '../../reminder/utils';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
 
 @Injectable()
@@ -25,17 +25,7 @@ export class AudioEvaluationProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.AUDIO_EVALUATION].concurrency,
     })
     public async processAudioEvaluation(job: Job<AudioEvaluationJobData>): Promise<void> {
-        const {
-            fileId,
-            targetDialogue,
-            sourceLanguageCode,
-            targetLanguageCode,
-            sourceWords,
-            targetStyle,
-            targetAudience,
-            userId,
-            vocabTrainerId,
-        } = job.data;
+        const { fileId, targetDialogue, sourceLanguageCode, targetLanguageCode, sourceWords, targetStyle, targetAudience, userId, vocabTrainerId } = job.data;
 
         const jobId = job.id || '';
 
@@ -47,12 +37,7 @@ export class AudioEvaluationProcessor {
             const audioBuffer = await this.aiService.downloadAudioFromCloudinary(fileId);
             const mimeType = 'audio/webm';
 
-            const transcript = await this.aiService.transcribeAudio(
-                audioBuffer,
-                mimeType,
-                sourceLanguageCode,
-                userId,
-            );
+            const transcript = await this.aiService.transcribeAudio(audioBuffer, mimeType, sourceLanguageCode, userId);
 
             const evaluationResult = await this.aiService.evaluateTranslation({
                 targetDialogue,
@@ -65,10 +50,7 @@ export class AudioEvaluationProcessor {
                 userId,
             });
 
-            const markdownReport = this.aiService.formatMarkdownReport(
-                evaluationResult,
-                transcript,
-            );
+            const markdownReport = this.aiService.formatMarkdownReport(evaluationResult, transcript);
 
             await this.vocabTrainerRepository.deleteVocabTrainerResults(vocabTrainerId);
 
@@ -101,4 +83,3 @@ export class AudioEvaluationProcessor {
         }
     }
 }
-

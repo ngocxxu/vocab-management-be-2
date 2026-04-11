@@ -50,12 +50,7 @@ export function isObviousTypo(userInput: string, correctAnswer: string): TypoChe
     // Rule 2: Adjacent character transposition
     if (a.length === b.length && a.length > 1) {
         for (let i = 0; i < a.length - 1; i++) {
-            if (
-                a[i] === b[i + 1] &&
-                a[i + 1] === b[i] &&
-                a.slice(0, i) === b.slice(0, i) &&
-                a.slice(i + 2) === b.slice(i + 2)
-            ) {
+            if (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(0, i) === b.slice(0, i) && a.slice(i + 2) === b.slice(i + 2)) {
                 return { isTypo: true, typoType: 'transposition', confidence: 0.95 };
             }
         }
@@ -67,9 +62,7 @@ export function isObviousTypo(userInput: string, correctAnswer: string): TypoChe
             const removed = a.slice(0, i) + a.slice(i + 1);
             if (removed === b) {
                 const removedChar = a[i];
-                const hasDuplicateNeighbor =
-                    (i > 0 && a[i - 1] === removedChar) ||
-                    (i < a.length - 1 && a[i + 1] === removedChar);
+                const hasDuplicateNeighbor = (i > 0 && a[i - 1] === removedChar) || (i < a.length - 1 && a[i + 1] === removedChar);
                 if (hasDuplicateNeighbor) {
                     return { isTypo: true, typoType: 'duplication', confidence: 0.85 };
                 }

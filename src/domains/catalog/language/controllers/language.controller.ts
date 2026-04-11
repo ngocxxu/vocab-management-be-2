@@ -1,18 +1,8 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Post,
-    Put,
-    UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { LanguageDto, LanguageInput } from '../dto';
 import { LanguageService } from '../services';
 
@@ -61,10 +51,7 @@ export class LanguageController {
     @ApiOperation({ summary: 'Update language' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language not found' })
-    public async update(
-        @Param('id') id: string,
-        @Body() updateLanguageData: LanguageInput,
-    ): Promise<LanguageDto> {
+    public async update(@Param('id') id: string, @Body() updateLanguageData: LanguageInput): Promise<LanguageDto> {
         const language = await this.languageService.update(id, updateLanguageData);
         this.logger.info(`Updated language with ID ${id}`);
         return language;

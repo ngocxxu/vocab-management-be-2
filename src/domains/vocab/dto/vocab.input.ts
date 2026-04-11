@@ -3,12 +3,7 @@ import { ApiProperty, PickType } from '@nestjs/swagger';
 import { VocabExampleDto } from './vocab-example.dto';
 import { VocabDto } from './vocab.dto';
 
-export class VocabInput extends PickType(VocabDto, [
-    'textSource',
-    'sourceLanguageCode',
-    'targetLanguageCode',
-    'languageFolderId',
-] as const) {
+export class VocabInput extends PickType(VocabDto, ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'languageFolderId'] as const) {
     @ApiProperty({
         description: 'List of text targets for this vocabulary',
         type: 'array',
@@ -33,8 +28,7 @@ export class VocabInput extends PickType(VocabDto, [
     public readonly textTargets: CreateTextTargetInput[];
 
     @ApiProperty({
-        description:
-            'List of subject ids (used when textTargets is empty and AI translation is needed)',
+        description: 'List of subject ids (used when textTargets is empty and AI translation is needed)',
         type: 'array',
         items: { type: 'string' },
         required: false,

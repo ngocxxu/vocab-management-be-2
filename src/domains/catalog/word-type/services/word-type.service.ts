@@ -1,8 +1,8 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
 import { IResponse } from '@/shared';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { WordTypeDto, WordTypeInput } from '../dto';
 import { WordTypeNotFoundException } from '../exceptions';
 import { WordTypeMapper } from '../mappers';
-import { WordTypeDto, WordTypeInput } from '../dto';
 import { WordTypeRepository } from '../repositories';
 
 @Injectable()
@@ -31,23 +31,15 @@ export class WordTypeService {
     }
 
     public async create(createWordTypeData: WordTypeInput): Promise<WordTypeDto> {
-        const wordType = await this.wordTypeRepository.create(
-            this.wordTypeMapper.toCreateInput(createWordTypeData),
-        );
+        const wordType = await this.wordTypeRepository.create(this.wordTypeMapper.toCreateInput(createWordTypeData));
 
         return this.wordTypeMapper.toResponse(wordType);
     }
 
-    public async update(
-        id: string,
-        updateWordTypeData: Partial<WordTypeInput>,
-    ): Promise<WordTypeDto> {
+    public async update(id: string, updateWordTypeData: Partial<WordTypeInput>): Promise<WordTypeDto> {
         await this.findOne(id);
 
-        const wordType = await this.wordTypeRepository.update(
-            id,
-            this.wordTypeMapper.buildUpdateInput(updateWordTypeData),
-        );
+        const wordType = await this.wordTypeRepository.update(id, this.wordTypeMapper.buildUpdateInput(updateWordTypeData));
 
         return this.wordTypeMapper.toResponse(wordType);
     }

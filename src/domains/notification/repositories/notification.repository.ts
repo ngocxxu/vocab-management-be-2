@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Notification, NotificationRecipient, Prisma } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { Injectable } from '@nestjs/common';
+import { Notification, NotificationRecipient, Prisma } from '@prisma/client';
 import { NotificationInput } from '../dto';
 
 const notificationInclude = {
@@ -29,11 +29,7 @@ export class NotificationRepository extends BaseRepository {
         });
     }
 
-    public async findManyForUser(
-        userId: string,
-        includeDeleted: boolean,
-        isRead?: boolean,
-    ): Promise<NotificationWithRecipients[]> {
+    public async findManyForUser(userId: string, includeDeleted: boolean, isRead?: boolean): Promise<NotificationWithRecipients[]> {
         return this.prisma.notification.findMany({
             where: {
                 isActive: true,
@@ -72,18 +68,8 @@ export class NotificationRepository extends BaseRepository {
         return this.prisma.notification.findUnique({ where: { id } });
     }
 
-    public async createWithRecipients(
-        input: NotificationInput,
-    ): Promise<NotificationWithRecipients> {
-        const {
-            type,
-            action,
-            priority,
-            data,
-            isActive = true,
-            expiresAt,
-            recipientUserIds,
-        } = input;
+    public async createWithRecipients(input: NotificationInput): Promise<NotificationWithRecipients> {
+        const { type, action, priority, data, isActive = true, expiresAt, recipientUserIds } = input;
 
         return this.prisma.notification.create({
             data: {
@@ -101,10 +87,7 @@ export class NotificationRepository extends BaseRepository {
         });
     }
 
-    public async updateById(
-        id: string,
-        data: Prisma.NotificationUpdateInput,
-    ): Promise<NotificationWithRecipients> {
+    public async updateById(id: string, data: Prisma.NotificationUpdateInput): Promise<NotificationWithRecipients> {
         return this.prisma.notification.update({
             where: { id },
             data,
@@ -112,10 +95,7 @@ export class NotificationRepository extends BaseRepository {
         });
     }
 
-    public async findRecipient(
-        notificationId: string,
-        userId: string,
-    ): Promise<NotificationRecipient | null> {
+    public async findRecipient(notificationId: string, userId: string): Promise<NotificationRecipient | null> {
         return this.prisma.notificationRecipient.findUnique({
             where: {
                 notificationId_userId: { notificationId, userId },
@@ -123,11 +103,7 @@ export class NotificationRepository extends BaseRepository {
         });
     }
 
-    public async updateRecipient(
-        notificationId: string,
-        userId: string,
-        data: Prisma.NotificationRecipientUpdateInput,
-    ): Promise<NotificationRecipient> {
+    public async updateRecipient(notificationId: string, userId: string, data: Prisma.NotificationRecipientUpdateInput): Promise<NotificationRecipient> {
         return this.prisma.notificationRecipient.update({
             where: { notificationId_userId: { notificationId, userId } },
             data,

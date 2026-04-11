@@ -1,9 +1,9 @@
+import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '../services/logger.service';
 import { PrismaService } from '../services/prisma.service';
 import { CookieUtil } from '../utils/cookie.util';
@@ -25,10 +25,7 @@ export class AuthGuard implements CanActivate {
             return true;
         }
 
-        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-            context.getHandler(),
-            context.getClass(),
-        ]);
+        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
         if (isPublic) {
             return true;
         }

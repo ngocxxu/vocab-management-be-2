@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { buildPrismaWhere } from '@/shared/utils/query-builder.util';
+import { Injectable } from '@nestjs/common';
+import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { VocabTrainerQueryParamsInput } from '../dto/vocab-trainer-query-params.input';
 
 @Injectable()
@@ -18,10 +18,7 @@ export class VocabTrainerRepository extends BaseRepository {
         take: number,
         orderBy: Prisma.VocabTrainerOrderByWithRelationInput,
     ): Promise<{ totalItems: number; trainers: VocabTrainer[] }> {
-        const where = buildPrismaWhere<
-            VocabTrainerQueryParamsInput,
-            Prisma.VocabTrainerWhereInput
-        >(query, {
+        const where = buildPrismaWhere<VocabTrainerQueryParamsInput, Prisma.VocabTrainerWhereInput>(query, {
             stringFields: ['name', 'userId'],
             enumFields: ['questionType'],
             customMap: (input, w) => {
@@ -53,10 +50,7 @@ export class VocabTrainerRepository extends BaseRepository {
         return { totalItems, trainers };
     }
 
-    public async findById(
-        id: string,
-        userId?: string,
-    ): Promise<VocabTrainer | null> {
+    public async findById(id: string, userId?: string): Promise<VocabTrainer | null> {
         const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
             id,
         };
@@ -73,10 +67,7 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async findByIdWithVocabs(
-        id: string,
-        userId?: string,
-    ): Promise<VocabTrainer | null> {
+    public async findByIdWithVocabs(id: string, userId?: string): Promise<VocabTrainer | null> {
         const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
             id,
         };
@@ -101,10 +92,7 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async findByIdWithVocabsAndResults(
-        id: string,
-        userId?: string,
-    ): Promise<VocabTrainer | null> {
+    public async findByIdWithVocabsAndResults(id: string, userId?: string): Promise<VocabTrainer | null> {
         const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
             id,
         };
@@ -167,10 +155,7 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async deleteVocabTrainerResults(
-        trainerId: string,
-        tx?: Prisma.TransactionClient,
-    ): Promise<Prisma.BatchPayload> {
+    public async deleteVocabTrainerResults(trainerId: string, tx?: Prisma.TransactionClient): Promise<Prisma.BatchPayload> {
         return this.client(tx).vocabTrainerResult.deleteMany({
             where: { vocabTrainerId: trainerId },
         });
@@ -180,46 +165,30 @@ export class VocabTrainerRepository extends BaseRepository {
         await this.deleteVocabTrainerResults(trainerId);
     }
 
-    public async createVocabTrainerResultsMany(
-        data: Prisma.VocabTrainerResultCreateManyInput[],
-        tx?: Prisma.TransactionClient,
-    ): Promise<{ count: number }> {
+    public async createVocabTrainerResultsMany(data: Prisma.VocabTrainerResultCreateManyInput[], tx?: Prisma.TransactionClient): Promise<{ count: number }> {
         return this.client(tx).vocabTrainerResult.createMany({ data });
     }
 
-    public async createResults(
-        data: Prisma.VocabTrainerResultCreateManyInput[],
-    ): Promise<void> {
+    public async createResults(data: Prisma.VocabTrainerResultCreateManyInput[]): Promise<void> {
         await this.createVocabTrainerResultsMany(data);
     }
 
-    public async createVocabTrainerResult(
-        data: Prisma.VocabTrainerResultUncheckedCreateInput,
-        tx?: Prisma.TransactionClient,
-    ): Promise<void> {
+    public async createVocabTrainerResult(data: Prisma.VocabTrainerResultUncheckedCreateInput, tx?: Prisma.TransactionClient): Promise<void> {
         await this.client(tx).vocabTrainerResult.create({ data });
     }
 
-    public async findVocabTrainerByIdMinimal(
-        id: string,
-        tx?: Prisma.TransactionClient,
-    ): Promise<VocabTrainer | null> {
+    public async findVocabTrainerByIdMinimal(id: string, tx?: Prisma.TransactionClient): Promise<VocabTrainer | null> {
         return this.client(tx).vocabTrainer.findUnique({ where: { id } });
     }
 
-    public async findLastExamSubmittedAt(
-        id: string,
-    ): Promise<{ lastExamSubmittedAt: Date | null } | null> {
+    public async findLastExamSubmittedAt(id: string): Promise<{ lastExamSubmittedAt: Date | null } | null> {
         return this.prisma.vocabTrainer.findUnique({
             where: { id },
             select: { lastExamSubmittedAt: true },
         });
     }
 
-    public async deleteVocabTrainerRow(
-        id: string,
-        tx?: Prisma.TransactionClient,
-    ): Promise<VocabTrainer> {
+    public async deleteVocabTrainerRow(id: string, tx?: Prisma.TransactionClient): Promise<VocabTrainer> {
         return this.client(tx).vocabTrainer.delete({
             where: { id },
             include: {
@@ -229,11 +198,7 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async updateVocabTrainerWithIncludes(
-        id: string,
-        data: Prisma.VocabTrainerUpdateInput,
-        tx?: Prisma.TransactionClient,
-    ): Promise<VocabTrainer> {
+    public async updateVocabTrainerWithIncludes(id: string, data: Prisma.VocabTrainerUpdateInput, tx?: Prisma.TransactionClient): Promise<VocabTrainer> {
         return this.client(tx).vocabTrainer.update({
             where: { id },
             data,
@@ -244,11 +209,7 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async updateVocabTrainerFields(
-        id: string,
-        data: Prisma.VocabTrainerUpdateInput,
-        tx?: Prisma.TransactionClient,
-    ): Promise<VocabTrainer> {
+    public async updateVocabTrainerFields(id: string, data: Prisma.VocabTrainerUpdateInput, tx?: Prisma.TransactionClient): Promise<VocabTrainer> {
         return this.client(tx).vocabTrainer.update({
             where: { id },
             data,
@@ -331,4 +292,3 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 }
-

@@ -7,18 +7,9 @@ import { VocabRepository, VocabMasteryRepository } from './repositories';
 import { VocabService, VocabMasteryService } from './services';
 
 @Module({
-    imports: [
-        PlanModule,
-        forwardRef(() => AiModule),
-    ],
+    imports: [PlanModule, forwardRef(() => AiModule)],
     controllers: [VocabController],
-    providers: [
-        VocabRepository,
-        VocabMasteryRepository,
-        VocabService,
-        VocabMasteryService,
-        VocabTranslationProcessor,
-    ],
+    providers: [VocabRepository, VocabMasteryRepository, VocabService, VocabMasteryService, VocabTranslationProcessor],
     exports: [VocabService, VocabMasteryService, VocabRepository],
 })
 export class VocabModule {}

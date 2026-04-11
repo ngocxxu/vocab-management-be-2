@@ -4,12 +4,7 @@ import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiGenerationException } from '../exceptions';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
-import {
-    EvaluateTranslationParams,
-    QueueAudioEvaluationParams,
-    QueueFillInBlankEvaluationParams,
-    QueueMultipleChoiceGenerationParams,
-} from '../utils/ai-service-types.util';
+import { EvaluateTranslationParams, QueueAudioEvaluationParams, QueueFillInBlankEvaluationParams, QueueMultipleChoiceGenerationParams } from '../utils/ai-service-types.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../utils/type.util';
 import { AiAudioService } from './ai-audio.service';
 import { AiFillInBlankGradingService } from './ai-fill-in-blank-grading.service';
@@ -45,23 +40,13 @@ export class AiService {
         userId?: string,
         retryCount = 0,
     ): Promise<CreateTextTargetInput> {
-        return this.translationService.translateVocab(
-            textSource,
-            sourceLanguageCode,
-            targetLanguageCode,
-            subjectIds,
-            userId,
-            retryCount,
-        );
+        return this.translationService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, retryCount);
     }
 
     /**
      * Generate multiple choice questions for vocabulary training
      */
-    public async generateMultipleChoiceQuestions(
-        vocabList: VocabWithTextTargets[],
-        userId?: string,
-    ): Promise<MultipleChoiceQuestion[]> {
+    public async generateMultipleChoiceQuestions(vocabList: VocabWithTextTargets[], userId?: string): Promise<MultipleChoiceQuestion[]> {
         return this.multipleChoiceService.generateMultipleChoiceQuestions(vocabList, userId);
     }
 
@@ -80,21 +65,15 @@ export class AiService {
         return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId);
     }
 
-    public async queueAudioEvaluation(
-        params: QueueAudioEvaluationParams,
-    ): Promise<{ jobId: string }> {
+    public async queueAudioEvaluation(params: QueueAudioEvaluationParams): Promise<{ jobId: string }> {
         return this.queueService.queueAudioEvaluation(params);
     }
 
-    public async queueMultipleChoiceGeneration(
-        params: QueueMultipleChoiceGenerationParams,
-    ): Promise<{ jobId: string }> {
+    public async queueMultipleChoiceGeneration(params: QueueMultipleChoiceGenerationParams): Promise<{ jobId: string }> {
         return this.queueService.queueMultipleChoiceGeneration(params);
     }
 
-    public async queueFillInBlankEvaluation(
-        params: QueueFillInBlankEvaluationParams,
-    ): Promise<{ jobId: string }> {
+    public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<{ jobId: string }> {
         return this.queueService.queueFillInBlankEvaluation(params);
     }
 
@@ -102,20 +81,8 @@ export class AiService {
         return this.audioService.downloadAudioFromCloudinary(fileId);
     }
 
-    public async transcribeAudio(
-        audioBuffer: Buffer,
-        mimeType: string,
-        sourceLanguageCode: string,
-        userId?: string,
-        retryCount = 0,
-    ): Promise<string> {
-        return this.audioService.transcribeAudio(
-            audioBuffer,
-            mimeType,
-            sourceLanguageCode,
-            userId,
-            retryCount,
-        );
+    public async transcribeAudio(audioBuffer: Buffer, mimeType: string, sourceLanguageCode: string, userId?: string, retryCount = 0): Promise<string> {
+        return this.audioService.transcribeAudio(audioBuffer, mimeType, sourceLanguageCode, userId, retryCount);
     }
 
     public async evaluateTranslation(params: EvaluateTranslationParams): Promise<EvaluationResult> {
@@ -135,10 +102,8 @@ export class AiService {
         retryCount = 0,
     ): Promise<{ dialogue: Array<{ speaker: string; text: string }>; vocabWordsUsed: string[] }> {
         try {
-            const targetLanguageName =
-                await this.languageNameService.getLanguageName(targetLanguageCode);
-            const sourceLanguageName =
-                await this.languageNameService.getLanguageName(sourceLanguageCode);
+            const targetLanguageName = await this.languageNameService.getLanguageName(targetLanguageCode);
+            const sourceLanguageName = await this.languageNameService.getLanguageName(sourceLanguageCode);
 
             const wordsList = targetLanguageWords.join(', ');
             const sourceWordsList = sourceLanguageWords.join(', ');

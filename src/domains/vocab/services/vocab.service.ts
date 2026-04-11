@@ -1,24 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
+import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { LoggerService } from '@/shared/services/logger.service';
 import { getOrderBy, getPagination } from '@/shared/utils/pagination.util';
+import { Injectable } from '@nestjs/common';
+import { Prisma, UserRole } from '@prisma/client';
 import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
-import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
-import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
-import {
-    BulkDeleteInput,
-    CsvImportErrorDto,
-    CsvImportQueryDto,
-    CsvImportResponseDto,
-    CsvRowDto,
-    VocabDto,
-    VocabInput,
-} from '../dto';
-import { VocabMapper } from '../mappers';
+import { BulkDeleteInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabDto, VocabInput } from '../dto';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
+import { VocabMapper } from '../mappers';
 import { CsvImportExistingVocab, VocabRepository } from '../repositories';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
@@ -38,10 +30,7 @@ export class VocabService {
      * @returns Promise<PaginationDto<VocabDto>> Paginated vocabulary DTOs
      * @throws PrismaError when database operation fails
      */
-    public async find(
-        query: VocabQueryParamsInput,
-        userId: string,
-    ): Promise<PaginationDto<VocabDto>> {
+    public async find(query: VocabQueryParamsInput, userId: string): Promise<PaginationDto<VocabDto>> {
         const { page, pageSize, skip, take } = getPagination({
             page: query.page,
             pageSize: query.pageSize,
@@ -49,19 +38,9 @@ export class VocabService {
             defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
         });
 
-        const orderBy = getOrderBy(
-            query.sortBy,
-            query.sortOrder,
-            'createdAt',
-        ) as Prisma.VocabOrderByWithRelationInput;
+        const orderBy = getOrderBy(query.sortBy, query.sortOrder, 'createdAt') as Prisma.VocabOrderByWithRelationInput;
 
-        const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(
-            query,
-            userId,
-            skip,
-            take,
-            orderBy,
-        );
+        const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(query, userId, skip, take, orderBy);
 
         if (!vocabs || !Array.isArray(vocabs)) {
             throw new VocabBadRequestException('Invalid vocabs data returned from repository');
@@ -79,16 +58,9 @@ export class VocabService {
      * @param languageFolderId - Optional language folder ID to filter by
      * @returns Promise<VocabDto[]> The random vocabularies DTOs
      */
-    public async findRandom(
-        count: number,
-        userId: string,
-        languageFolderId?: string,
-    ): Promise<VocabDto[]> {
+    public async findRandom(count: number, userId: string, languageFolderId?: string): Promise<VocabDto[]> {
         if (languageFolderId) {
-            const folder = await this.vocabRepository.findLanguageFolderById(
-                languageFolderId,
-                userId,
-            );
+            const folder = await this.vocabRepository.findLanguageFolderById(languageFolderId, userId);
             if (!folder) {
                 throw new LanguageFolderNotFoundException(languageFolderId);
             }
@@ -124,25 +96,17 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(
-        createVocabData: VocabInput,
-        userId: string,
-        role?: UserRole,
-    ): Promise<VocabDto> {
+    public async create(createVocabData: VocabInput, userId: string, role?: UserRole): Promise<VocabDto> {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
-        const {
-            sourceLanguageCode,
-            targetLanguageCode,
-        }: VocabInput = createVocabData;
+        const { sourceLanguageCode, targetLanguageCode }: VocabInput = createVocabData;
 
         if (sourceLanguageCode === targetLanguageCode) {
             throw new VocabBadRequestException('Source and target languages must be different');
         }
 
-        const { prismaCreate, shouldQueueTranslation, queuePayload } =
-            this.vocabMapper.prepareCreate(createVocabData, userId);
+        const { prismaCreate, shouldQueueTranslation, queuePayload } = this.vocabMapper.prepareCreate(createVocabData, userId);
 
         const vocab = await this.vocabRepository.create(prismaCreate);
 
@@ -159,9 +123,7 @@ export class VocabService {
     }
 
     public async createBulk(createVocabData: VocabInput[], userId: string): Promise<VocabDto[]> {
-        const vocabDtos = await Promise.all(
-            createVocabData.map(async (data) => this.create(data, userId)),
-        );
+        const vocabDtos = await Promise.all(createVocabData.map(async (data) => this.create(data, userId)));
 
         if (vocabDtos.length !== createVocabData.length) {
             throw new VocabBadRequestException('Failed to create all vocabularies');
@@ -182,25 +144,14 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async update(
-        id: string,
-        updateVocabData: Partial<VocabInput>,
-        userId: string,
-    ): Promise<VocabDto> {
+    public async update(id: string, updateVocabData: Partial<VocabInput>, userId: string): Promise<VocabDto> {
         await this.findOne(id, userId);
 
-        if (
-            updateVocabData.sourceLanguageCode &&
-            updateVocabData.targetLanguageCode &&
-            updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode
-        ) {
+        if (updateVocabData.sourceLanguageCode && updateVocabData.targetLanguageCode && updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode) {
             throw new VocabBadRequestException('Source and target languages must be different');
         }
 
-        const vocab = await this.vocabRepository.update(
-            id,
-            this.vocabMapper.buildUpdateInput(updateVocabData),
-        );
+        const vocab = await this.vocabRepository.update(id, this.vocabMapper.buildUpdateInput(updateVocabData));
 
         await this.vocabRepository.clearListCaches();
 
@@ -258,10 +209,7 @@ export class VocabService {
         await this.vocabRepository.clearListCaches();
     }
 
-    public async updateVocabCacheFields(
-        id: string,
-        fields: Record<string, unknown>,
-    ): Promise<void> {
+    public async updateVocabCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
         await this.vocabRepository.updateCacheFields(id, fields);
     }
 
@@ -275,13 +223,8 @@ export class VocabService {
     /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
     /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument */
     /* eslint-disable @typescript-eslint/no-unsafe-return */
-    public async importFromCsv(
-        rows: CsvRowData[],
-        queryParams: CsvImportQueryDto,
-        userId: string,
-    ): Promise<CsvImportResponseDto> {
-        const { languageFolderId, sourceLanguageCode, targetLanguageCode }: CsvImportQueryDto =
-            queryParams;
+    public async importFromCsv(rows: CsvRowData[], queryParams: CsvImportQueryDto, userId: string): Promise<CsvImportResponseDto> {
+        const { languageFolderId, sourceLanguageCode, targetLanguageCode }: CsvImportQueryDto = queryParams;
         const errors: CsvImportErrorDto[] = [];
         let created = 0;
         let updated = 0;
@@ -290,10 +233,7 @@ export class VocabService {
             throw new VocabBadRequestException('Source and target languages must be different');
         }
 
-        const languageFolder = await this.vocabRepository.findLanguageFolderById(
-            languageFolderId,
-            userId,
-        );
+        const languageFolder = await this.vocabRepository.findLanguageFolderById(languageFolderId, userId);
         if (!languageFolder) {
             throw new LanguageFolderNotFoundException(languageFolderId);
         }
@@ -318,9 +258,7 @@ export class VocabService {
         const wordTypeMap = new Map<string, string>();
 
         if (wordTypesInCsv.size > 0) {
-            const wordTypes = await this.vocabRepository.findWordTypesByNames(
-                Array.from(wordTypesInCsv),
-            );
+            const wordTypes = await this.vocabRepository.findWordTypesByNames(Array.from(wordTypesInCsv));
 
             // Create map: wordTypeName (lowercase) -> wordTypeId
             const foundWordTypeNames = new Set<string>();
@@ -331,10 +269,7 @@ export class VocabService {
                 // Also handle partial matches
                 Array.from(wordTypesInCsv).forEach((csvName) => {
                     const csvNameKey = csvName.toLowerCase();
-                    if (
-                        wt.name.toLowerCase().includes(csvNameKey) &&
-                        !wordTypeMap.has(csvNameKey)
-                    ) {
+                    if (wt.name.toLowerCase().includes(csvNameKey) && !wordTypeMap.has(csvNameKey)) {
                         wordTypeMap.set(csvNameKey, wt.id);
                         foundWordTypeNames.add(csvNameKey);
                     }
@@ -345,9 +280,7 @@ export class VocabService {
             for (const wordTypeName of wordTypesInCsv) {
                 const nameKey = wordTypeName.toLowerCase();
                 if (!foundWordTypeNames.has(nameKey) && !wordTypeMap.has(nameKey)) {
-                    wordTypeErrors.push(
-                        `Word type '${wordTypeName}' not found. Please create it first.`,
-                    );
+                    wordTypeErrors.push(`Word type '${wordTypeName}' not found. Please create it first.`);
                 }
             }
         }
@@ -357,10 +290,7 @@ export class VocabService {
         const subjectMap = new Map<string, string>();
 
         if (subjectsInCsv.size > 0) {
-            const subjects = await this.vocabRepository.findSubjectsByNames(
-                Array.from(subjectsInCsv),
-                userId,
-            );
+            const subjects = await this.vocabRepository.findSubjectsByNames(Array.from(subjectsInCsv), userId);
 
             // Create map: subjectName (lowercase) -> subjectId
             const foundSubjectNames = new Set<string>();
@@ -374,9 +304,7 @@ export class VocabService {
             for (const subjectName of subjectsInCsv) {
                 const nameKey = subjectName.toLowerCase();
                 if (!foundSubjectNames.has(nameKey)) {
-                    subjectErrors.push(
-                        `Subject '${subjectName}' not found. Please create it first.`,
-                    );
+                    subjectErrors.push(`Subject '${subjectName}' not found. Please create it first.`);
                 }
             }
         }
@@ -470,7 +398,7 @@ export class VocabService {
                             { maxWait: 10000, timeout: 30000 },
                         )
                         .then((r) => ({ ok: true as const, ...r }))
-                        .catch((error: unknown) => ({ ok: false as const, error }));
+                        .catch((txError: unknown) => ({ ok: false as const, error: txError }));
 
                     if (outcome.ok) {
                         created += outcome.created;
@@ -496,13 +424,13 @@ export class VocabService {
                     }
 
                     const errorMessage = this.getErrorMessage(error);
-                    const firstRow = textTargetRows.length > 0 ? textTargetRows[0] : undefined;
-                    if (firstRow) {
+                    const errorRow = textTargetRows.length > 0 ? textTargetRows[0] : undefined;
+                    if (errorRow) {
                         this.logger.error(
                             `CSV Import Error Details: ${JSON.stringify({
                                 textSource,
                                 error: errorMessage,
-                                firstRow,
+                                firstRow: errorRow,
                                 userId,
                                 languageFolderId,
                                 sourceLanguageCode,
@@ -517,7 +445,7 @@ export class VocabService {
                                     return typedR.textSource.toLowerCase() === textSource;
                                 }) + 1,
                             error: errorMessage,
-                            data: firstRow as CsvRowDto,
+                            data: errorRow as CsvRowDto,
                         });
                     }
                 }),

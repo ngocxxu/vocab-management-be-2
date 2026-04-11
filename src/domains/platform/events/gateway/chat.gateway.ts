@@ -1,14 +1,5 @@
 import { Logger } from '@nestjs/common';
-import {
-    WebSocketGateway,
-    WebSocketServer,
-    SubscribeMessage,
-    OnGatewayInit,
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    MessageBody,
-    ConnectedSocket,
-} from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
@@ -22,10 +13,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly logger = new Logger('ChatGateway');
 
     @SubscribeMessage('join-room')
-    public handleJoinRoom(
-        @MessageBody() data: { room: string; userId?: string },
-        @ConnectedSocket() client: Socket,
-    ): void {
+    public handleJoinRoom(@MessageBody() data: { room: string; userId?: string }, @ConnectedSocket() client: Socket): void {
         void client.join(data.room);
         this.logger.log(`Client ${client.id} joined room: ${data.room}`);
 
@@ -38,10 +26,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     @SubscribeMessage('send-message')
-    public handleMessage(
-        @MessageBody() data: { room: string; message: string; userId?: string },
-        @ConnectedSocket() client: Socket,
-    ): void {
+    public handleMessage(@MessageBody() data: { room: string; message: string; userId?: string }, @ConnectedSocket() client: Socket): void {
         const messageData = {
             message: data.message,
             userId: data.userId,

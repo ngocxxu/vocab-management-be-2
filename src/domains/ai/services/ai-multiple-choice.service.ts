@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/utils';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
+import { parseJsonOrThrow } from '../utils/ai-json.util';
+import { TextTargetRecord, VocabForTextTargets } from '../utils/ai-text-types.util';
 import { AI_CONFIG } from '../utils/const.util';
 import { MultipleChoiceQuestion } from '../utils/type.util';
-import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/utils';
-import { parseJsonOrThrow } from '../utils/ai-json.util';
 import { AiLanguageNameService } from './ai-language-name.service';
-import { TextTargetRecord, VocabForTextTargets } from '../utils/ai-text-types.util';
 
 @Injectable()
 export class AiMultipleChoiceService {
@@ -16,18 +16,12 @@ export class AiMultipleChoiceService {
         private readonly languageNameService: AiLanguageNameService,
     ) {}
 
-    public async generateMultipleChoiceQuestions(
-        vocabList: VocabWithTextTargets[],
-        userId?: string,
-    ): Promise<MultipleChoiceQuestion[]> {
+    public async generateMultipleChoiceQuestions(vocabList: VocabWithTextTargets[], userId?: string): Promise<MultipleChoiceQuestion[]> {
         if (vocabList.length === 0) return [];
         return this.generateAllQuestionsInBatch(vocabList, userId);
     }
 
-    private async generateAllQuestionsInBatch(
-        vocabList: VocabWithTextTargets[],
-        userId?: string,
-    ): Promise<MultipleChoiceQuestion[]> {
+    private async generateAllQuestionsInBatch(vocabList: VocabWithTextTargets[], userId?: string): Promise<MultipleChoiceQuestion[]> {
         const vocabItems: Array<{
             index: number;
             vocab: unknown;
@@ -55,20 +49,15 @@ export class AiMultipleChoiceService {
 
         const vocabDetailsPromises = vocabItems.map(async (item, idx) => {
             const vocab = item.vocab as VocabForTextTargets;
-            const textTargets = (vocab.textTargets ?? []) as TextTargetRecord[];
+            const textTargets = vocab.textTargets ?? [];
             const targetTexts = textTargets.map((tt: TextTargetRecord) => tt.textTarget).join(', ');
-            const sourceLanguageName = await this.languageNameService.getLanguageName(
-                vocab.sourceLanguageCode,
-            );
-            const targetLanguageName = await this.languageNameService.getLanguageName(
-                vocab.targetLanguageCode,
-            );
+            const sourceLanguageName = await this.languageNameService.getLanguageName(vocab.sourceLanguageCode);
+            const targetLanguageName = await this.languageNameService.getLanguageName(vocab.targetLanguageCode);
             const questionDirection =
                 item.questionType === 'source'
                     ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
                     : `What is the translation of "${item.selectedTarget}" in ${sourceLanguageName}?`;
-            const correctAnswer =
-                item.questionType === 'source' ? item.selectedTarget : vocab.textSource;
+            const correctAnswer = item.questionType === 'source' ? item.selectedTarget : vocab.textSource;
 
             return (
                 `${idx + 1}. Source: "${vocab.textSource}", Target(s): "${targetTexts}", ` +
@@ -155,4 +144,3 @@ Return ONLY the JSON array, no markdown formatting, no code blocks, no additiona
         }
     }
 }
-

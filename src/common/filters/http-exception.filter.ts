@@ -1,14 +1,7 @@
-import {
-    ArgumentsHost,
-    Catch,
-    ExceptionFilter,
-    HttpException,
-    HttpStatus,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
-
 import { buildHttpErrorBody, extractHttpExceptionMessage } from '@/common/http/error-response.util';
 import { WinstonLogger } from '@/common/logger/winston.logger';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import { Request, Response } from 'express';
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -20,11 +13,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const request = ctx.getRequest<Request>();
         const statusCode = exception.getStatus();
         const raw = exception.getResponse();
-        const message = extractHttpExceptionMessage(
-            typeof raw === 'string' || typeof raw === 'object'
-                ? (raw as string | Record<string, unknown>)
-                : { message: String(raw) },
-        );
+        const message = extractHttpExceptionMessage(typeof raw === 'string' || typeof raw === 'object' ? (raw as string | Record<string, unknown>) : { message: String(raw) });
         const body = buildHttpErrorBody(statusCode, message, request);
 
         const meta: Record<string, unknown> = {
@@ -37,10 +26,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
             meta.body = request.body;
         }
 
-        const logMessage =
-            typeof message === 'string' ? message : message.join('; ');
+        const logMessage = typeof message === 'string' ? message : message.join('; ');
 
-        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR.valueOf()) {
             this.logger.logError(logMessage, exception.stack, meta);
         } else {
             this.logger.logWarn(logMessage, meta);

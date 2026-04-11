@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, Vocab } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { RedisService } from '@/shared/services/redis.service';
 import { buildPrismaWhere, coerceQueryStringArray } from '@/shared/utils/query-builder.util';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
+import { Injectable } from '@nestjs/common';
+import { Prisma, Vocab } from '@prisma/client';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
@@ -37,7 +37,10 @@ export interface CsvImportGroupParams {
 
 @Injectable()
 export class VocabRepository extends BaseRepository {
-    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+    public constructor(
+        prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {
         super(prismaService);
     }
 
@@ -60,13 +63,7 @@ export class VocabRepository extends BaseRepository {
 
         // 2. Build WHERE Condition
         const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
-            stringFields: [
-                'textSource',
-                'sourceLanguageCode',
-                'targetLanguageCode',
-                'userId',
-                'languageFolderId',
-            ],
+            stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId', 'languageFolderId'],
             customMap: (input, w) => {
                 if (userId) (w as Prisma.VocabWhereInput).userId = userId;
                 const subjectIds = coerceQueryStringArray(input.subjectIds);
@@ -143,11 +140,7 @@ export class VocabRepository extends BaseRepository {
         return result;
     }
 
-    public async findRandom(
-        count: number,
-        userId?: string,
-        languageFolderId?: string,
-    ): Promise<Vocab[]> {
+    public async findRandom(count: number, userId?: string, languageFolderId?: string): Promise<Vocab[]> {
         const cacheKey = `random:${count}:${userId || 'all'}:${languageFolderId || 'all'}`;
 
         const cached = await this.redisService.jsonGet<Vocab[]>(RedisPrefix.VOCAB, cacheKey);
@@ -358,9 +351,7 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    public async findWordTypesByNames(
-        names: string[],
-    ): Promise<Array<{ id: string; name: string }>> {
+    public async findWordTypesByNames(names: string[]): Promise<Array<{ id: string; name: string }>> {
         return this.prisma.wordType.findMany({
             where: {
                 OR: names.map((name) => ({
@@ -371,10 +362,7 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    public async findSubjectsByNames(
-        names: string[],
-        userId: string,
-    ): Promise<Array<{ id: string; name: string }>> {
+    public async findSubjectsByNames(names: string[], userId: string): Promise<Array<{ id: string; name: string }>> {
         return this.prisma.subject.findMany({
             where: {
                 userId,
@@ -386,10 +374,7 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    public async findLanguageFolderById(
-        id: string,
-        userId: string,
-    ): Promise<{ id: string } | null> {
+    public async findLanguageFolderById(id: string, userId: string): Promise<{ id: string } | null> {
         return this.prisma.languageFolder.findFirst({
             where: { id, userId },
             select: { id: true },
@@ -403,8 +388,7 @@ export class VocabRepository extends BaseRepository {
         languageFolderId: string;
         textSources: string[];
     }): Promise<CsvImportExistingVocab[]> {
-        const { userId, sourceLanguageCode, targetLanguageCode, languageFolderId, textSources } =
-            params;
+        const { userId, sourceLanguageCode, targetLanguageCode, languageFolderId, textSources } = params;
 
         if (textSources.length === 0) {
             return [];
@@ -428,35 +412,42 @@ export class VocabRepository extends BaseRepository {
         params: CsvImportGroupParams,
         transactionOptions: { maxWait: number; timeout: number },
     ): Promise<{ created: number; updated: number }> {
-        return this.runInTransaction(
-            async (tx) => this.applyCsvBatchInTransaction(tx, params),
-            transactionOptions,
-        );
+        return this.runInTransaction(async (tx) => this.applyCsvBatchInTransaction(tx, params), transactionOptions);
     }
 
-    public async deleteTextTargetById(
-        id: string,
-        tx?: Prisma.TransactionClient,
-    ): Promise<void> {
+    public async deleteTextTargetById(id: string, tx?: Prisma.TransactionClient): Promise<void> {
         const client = tx ?? this.prisma;
         await client.textTarget.delete({ where: { id } });
     }
 
-    private async applyCsvBatchInTransaction(
-        tx: Prisma.TransactionClient,
-        params: CsvImportGroupParams,
-    ): Promise<{ created: number; updated: number }> {
-        const {
-            textSource,
-            textTargetRows,
-            userId,
-            sourceLanguageCode,
-            targetLanguageCode,
-            languageFolderId,
-            wordTypeMap,
-            subjectMap,
-            existingVocabMap,
-        } = params;
+    public async clearCache(): Promise<void> {
+        await this.redisService.clearByPrefix(RedisPrefix.VOCAB);
+    }
+
+    public async clearCacheById(id: string): Promise<void> {
+        await this.redisService.del(RedisPrefix.VOCAB, `id:${id}`);
+    }
+
+    public async clearListCaches(): Promise<void> {
+        const listKeys = await this.redisService.getKeysByPrefix(RedisPrefix.VOCAB);
+        const filteredKeys = listKeys.filter((key) => key.includes('list:') || key.includes('random:'));
+
+        if (filteredKeys.length > 0) {
+            await this.redisService.client.del(...filteredKeys);
+        }
+    }
+
+    public async updateCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
+        const cached = await this.redisService.jsonGet<Vocab>(RedisPrefix.VOCAB, `id:${id}`);
+
+        if (cached) {
+            const updated = { ...cached, ...fields };
+            await this.setJsonCacheSafely(`id:${id}`, updated);
+        }
+    }
+
+    private async applyCsvBatchInTransaction(tx: Prisma.TransactionClient, params: CsvImportGroupParams): Promise<{ created: number; updated: number }> {
+        const { textSource, textTargetRows, userId, sourceLanguageCode, targetLanguageCode, languageFolderId, wordTypeMap, subjectMap, existingVocabMap } = params;
 
         const mapKey = `${textSource}:${languageFolderId}`;
         const existingVocab = existingVocabMap.get(mapKey);
@@ -493,18 +484,13 @@ export class VocabRepository extends BaseRepository {
                 explanationTarget: typedRow.explanationTarget || '',
                 wordTypeId,
                 subjectIds,
-                vocabExamples:
-                    typedRow.exampleSource && typedRow.exampleTarget
-                        ? [{ source: typedRow.exampleSource, target: typedRow.exampleTarget }]
-                        : [],
+                vocabExamples: typedRow.exampleSource && typedRow.exampleTarget ? [{ source: typedRow.exampleSource, target: typedRow.exampleTarget }] : [],
             };
         });
 
         if (existingVocab) {
             for (const textTargetData of textTargetsData) {
-                const existingTextTarget = existingVocab.textTargets.find(
-                    (tt) => tt.textTarget === textTargetData.textTarget,
-                );
+                const existingTextTarget = existingVocab.textTargets.find((tt) => tt.textTarget === textTargetData.textTarget);
 
                 if (!existingTextTarget) {
                     await tx.textTarget.create({
@@ -521,12 +507,10 @@ export class VocabRepository extends BaseRepository {
                                 })),
                             },
                             vocabExamples: {
-                                create: textTargetData.vocabExamples.map(
-                                    (example: { source: string; target: string }) => ({
-                                        source: example.source,
-                                        target: example.target,
-                                    }),
-                                ),
+                                create: textTargetData.vocabExamples.map((example: { source: string; target: string }) => ({
+                                    source: example.source,
+                                    target: example.target,
+                                })),
                             },
                         },
                     });
@@ -555,46 +539,16 @@ export class VocabRepository extends BaseRepository {
                             })),
                         },
                         vocabExamples: {
-                            create: textTargetData.vocabExamples.map(
-                                (example: { source: string; target: string }) => ({
-                                    source: example.source,
-                                    target: example.target,
-                                }),
-                            ),
+                            create: textTargetData.vocabExamples.map((example: { source: string; target: string }) => ({
+                                source: example.source,
+                                target: example.target,
+                            })),
                         },
                     })),
                 },
             },
         });
         return { created: 1, updated: 0 };
-    }
-
-    public async clearCache(): Promise<void> {
-        await this.redisService.clearByPrefix(RedisPrefix.VOCAB);
-    }
-
-    public async clearCacheById(id: string): Promise<void> {
-        await this.redisService.del(RedisPrefix.VOCAB, `id:${id}`);
-    }
-
-    public async clearListCaches(): Promise<void> {
-        const listKeys = await this.redisService.getKeysByPrefix(RedisPrefix.VOCAB);
-        const filteredKeys = listKeys.filter(
-            (key) => key.includes('list:') || key.includes('random:'),
-        );
-
-        if (filteredKeys.length > 0) {
-            await this.redisService.client.del(...filteredKeys);
-        }
-    }
-
-    public async updateCacheFields(id: string, fields: Record<string, unknown>): Promise<void> {
-        const cached = await this.redisService.jsonGet<Vocab>(RedisPrefix.VOCAB, `id:${id}`);
-
-        if (cached) {
-            const updated = { ...cached, ...fields };
-            await this.setJsonCacheSafely(`id:${id}`, updated);
-        }
     }
 
     private async setJsonCacheSafely(key: string, data: unknown, ttl?: number): Promise<void> {

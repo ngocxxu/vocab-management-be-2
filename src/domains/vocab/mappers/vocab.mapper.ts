@@ -1,5 +1,5 @@
-import { Prisma } from '@prisma/client';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
+import { Prisma } from '@prisma/client';
 import { VocabDto } from '../dto';
 import { CreateTextTargetInput, VocabInput } from '../dto/vocab.input';
 
@@ -15,27 +15,19 @@ export type VocabTranslationQueuePayload = {
 };
 
 export class VocabMapper {
-    public prepareCreate(input: VocabInput, userId: string): {
+    public prepareCreate(
+        input: VocabInput,
+        userId: string,
+    ): {
         prismaCreate: Prisma.VocabCreateInput;
         shouldQueueTranslation: boolean;
         queuePayload: Omit<VocabTranslationQueuePayload, 'vocabId'> | null;
     } {
-        const {
-            textSource,
-            sourceLanguageCode,
-            targetLanguageCode,
-            textTargets,
-            languageFolderId,
-        } = input;
+        const { textSource, sourceLanguageCode, targetLanguageCode, textTargets, languageFolderId } = input;
 
-        const shouldQueueTranslation =
-            Boolean(textSource) && Boolean(textTargets?.some((t) => !t.textTarget));
-        const emptyTextTarget = textTargets?.find(
-            (t) => !t.textTarget || t.textTarget.trim() === '',
-        );
-        const subjectIdsForTranslation = emptyTextTarget?.subjectIds?.length
-            ? emptyTextTarget.subjectIds
-            : input.subjectIds ?? [];
+        const shouldQueueTranslation = Boolean(textSource) && Boolean(textTargets?.some((t) => !t.textTarget));
+        const emptyTextTarget = textTargets?.find((t) => !t.textTarget || t.textTarget.trim() === '');
+        const subjectIdsForTranslation = emptyTextTarget?.subjectIds?.length ? emptyTextTarget.subjectIds : (input.subjectIds ?? []);
 
         const textTargetsToCreate =
             shouldQueueTranslation && !textTargets?.length
@@ -61,16 +53,15 @@ export class VocabMapper {
             },
         };
 
-        const queuePayload =
-            shouldQueueTranslation
-                ? {
-                      textSource,
-                      sourceLanguageCode,
-                      targetLanguageCode,
-                      subjectIds: subjectIdsForTranslation,
-                      userId,
-                  }
-                : null;
+        const queuePayload = shouldQueueTranslation
+            ? {
+                  textSource,
+                  sourceLanguageCode,
+                  targetLanguageCode,
+                  subjectIds: subjectIdsForTranslation,
+                  userId,
+              }
+            : null;
 
         return { prismaCreate, shouldQueueTranslation, queuePayload };
     }
@@ -101,18 +92,11 @@ export class VocabMapper {
         return vocabs.map((v) => this.toResponse(v));
     }
 
-    public toPaginated(
-        items: VocabDto[],
-        totalItems: number,
-        page: number,
-        pageSize: number,
-    ): PaginationDto<VocabDto> {
+    public toPaginated(items: VocabDto[], totalItems: number, page: number, pageSize: number): PaginationDto<VocabDto> {
         return new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
     }
 
-    private mapTextTargetCreate(
-        target: CreateTextTargetInput,
-    ): Prisma.TextTargetCreateWithoutVocabInput {
+    private mapTextTargetCreate(target: CreateTextTargetInput): Prisma.TextTargetCreateWithoutVocabInput {
         return {
             textTarget: target.textTarget,
             grammar: target.grammar,

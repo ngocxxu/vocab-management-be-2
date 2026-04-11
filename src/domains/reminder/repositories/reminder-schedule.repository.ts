@@ -1,22 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import {
-    Prisma,
-    ReminderChannel,
-    ReminderSchedule,
-    ReminderScheduleKind,
-    ReminderScheduleStatus,
-} from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared/services';
+import { Injectable } from '@nestjs/common';
+import { Prisma, ReminderChannel, ReminderSchedule, ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
 import { ESCALATION_CONFIG } from '../config/reminder.config';
 import { addUtcDays } from '../utils/reminder-date.util';
 import { buildReminderDedupeKey } from '../utils/reminder-dedupe-key.util';
 
-const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [
-    ReminderScheduleStatus.PENDING,
-    ReminderScheduleStatus.CLAIMED,
-    ReminderScheduleStatus.QUEUED,
-];
+const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [ReminderScheduleStatus.PENDING, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED];
 
 @Injectable()
 export class ReminderScheduleRepository extends BaseRepository {
@@ -73,12 +63,7 @@ export class ReminderScheduleRepository extends BaseRepository {
         return result.count === 1;
     }
 
-    public async cancelByEntity(
-        entityType: string,
-        entityId: string,
-        reason: string,
-        cancelledBy: string,
-    ): Promise<number> {
+    public async cancelByEntity(entityType: string, entityId: string, reason: string, cancelledBy: string): Promise<number> {
         const now = new Date();
         const result = await this.prisma.reminderSchedule.updateMany({
             where: {
@@ -99,10 +84,7 @@ export class ReminderScheduleRepository extends BaseRepository {
         return result.count;
     }
 
-    public async cancelSiblingEscalations(
-        initialReminderId: string,
-        excludeId: string,
-    ): Promise<number> {
+    public async cancelSiblingEscalations(initialReminderId: string, excludeId: string): Promise<number> {
         const now = new Date();
         const result = await this.prisma.reminderSchedule.updateMany({
             where: {
@@ -139,24 +121,14 @@ export class ReminderScheduleRepository extends BaseRepository {
         return result.count;
     }
 
-    public async createEscalationsForInitial(
-        tx: Prisma.TransactionClient,
-        initial: ReminderSchedule,
-        sentAt: Date,
-    ): Promise<void> {
+    public async createEscalationsForInitial(tx: Prisma.TransactionClient, initial: ReminderSchedule, sentAt: Date): Promise<void> {
         const template = initial.template;
-        if (
-            !ESCALATION_CONFIG.enabledTemplates.includes(
-                template as (typeof ESCALATION_CONFIG.enabledTemplates)[number],
-            )
-        ) {
+        if (!ESCALATION_CONFIG.enabledTemplates.includes(template as (typeof ESCALATION_CONFIG.enabledTemplates)[number])) {
             return;
         }
-        const override =
-            ESCALATION_CONFIG.overrides[template as keyof typeof ESCALATION_CONFIG.overrides];
+        const override = ESCALATION_CONFIG.overrides[template as keyof typeof ESCALATION_CONFIG.overrides];
         const maxEscalations = override?.maxEscalations ?? ESCALATION_CONFIG.maxEscalations;
-        const intervalDays =
-            override?.escalationIntervalDays ?? ESCALATION_CONFIG.escalationIntervalDays;
+        const intervalDays = override?.escalationIntervalDays ?? ESCALATION_CONFIG.escalationIntervalDays;
 
         const rows: Prisma.ReminderScheduleCreateManyInput[] = [];
         for (let level = 1; level <= maxEscalations; level++) {
@@ -221,10 +193,7 @@ export class ReminderScheduleRepository extends BaseRepository {
         });
     }
 
-    public async findInitialSentRemindersBefore(
-        threshold: Date,
-        take: number,
-    ): Promise<ReminderSchedule[]> {
+    public async findInitialSentRemindersBefore(threshold: Date, take: number): Promise<ReminderSchedule[]> {
         return this.prisma.reminderSchedule.findMany({
             where: {
                 reminderType: ReminderScheduleKind.INITIAL,
@@ -244,11 +213,7 @@ export class ReminderScheduleRepository extends BaseRepository {
         });
     }
 
-    public async markSentIfStillSending(
-        tx: Prisma.TransactionClient,
-        scheduleId: string,
-        sentAt: Date,
-    ): Promise<number> {
+    public async markSentIfStillSending(tx: Prisma.TransactionClient, scheduleId: string, sentAt: Date): Promise<number> {
         const updated = await tx.reminderSchedule.updateMany({
             where: {
                 id: scheduleId,
@@ -264,20 +229,11 @@ export class ReminderScheduleRepository extends BaseRepository {
         return updated.count;
     }
 
-    public findByIdWithClient(
-        tx: Prisma.TransactionClient,
-        id: string,
-    ): Promise<ReminderSchedule | null> {
+    public async findByIdWithClient(tx: Prisma.TransactionClient, id: string): Promise<ReminderSchedule | null> {
         return tx.reminderSchedule.findUnique({ where: { id } });
     }
 
-    public async resetSendingToPendingRetry(
-        scheduleId: string,
-        nextAttempt: number,
-        nextAttemptAt: Date,
-        lastErrorCode: string,
-        lastErrorMsg: string,
-    ): Promise<number> {
+    public async resetSendingToPendingRetry(scheduleId: string, nextAttempt: number, nextAttemptAt: Date, lastErrorCode: string, lastErrorMsg: string): Promise<number> {
         const result = await this.prisma.reminderSchedule.updateMany({
             where: { id: scheduleId, status: ReminderScheduleStatus.SENDING },
             data: {

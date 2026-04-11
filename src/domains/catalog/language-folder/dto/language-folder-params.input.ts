@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { QueryParamsInput } from '@/shared/dto/query-params.input';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class LanguageFolderParamsInput extends QueryParamsInput {
     @ApiProperty({

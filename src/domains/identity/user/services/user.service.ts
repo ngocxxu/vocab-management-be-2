@@ -1,13 +1,9 @@
+import { SupabaseAuthProvider } from '@/domains/media/supabase';
+import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { IResponse } from '@/shared';
-import { SupabaseAuthProvider } from '@/domains/media/supabase';
-import {
-    UserBadRequestException,
-    UserNotFoundException,
-    UserNotFoundInDatabaseException,
-} from '../exceptions';
 import { UserDto, UserInput } from '../dto';
+import { UserBadRequestException, UserNotFoundException, UserNotFoundInDatabaseException } from '../exceptions';
 import { UserRepository } from '../repositories';
 
 @Injectable()
@@ -73,8 +69,7 @@ export class UserService {
     }
 
     public async update(updateUserData: UserInput): Promise<UserDto> {
-        const { id, email, firstName, lastName, phone, avatar, role, isActive, password } =
-            updateUserData;
+        const { id, email, firstName, lastName, phone, avatar, role, isActive, password } = updateUserData;
 
         if (!id) {
             throw new UserBadRequestException('Supabase user ID is required for update');
@@ -87,24 +82,18 @@ export class UserService {
         }
 
         if (password) {
-            const { error } = await this.supabase.auth.admin.updateUserById(
-                existingUser.supabaseUserId ?? '',
-                {
-                    password,
-                },
-            );
+            const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
+                password,
+            });
             if (error) {
                 throw new UserBadRequestException(`Supabase update password error: ${error.message}`);
             }
         }
 
         if (email && email !== existingUser.email) {
-            const { error } = await this.supabase.auth.admin.updateUserById(
-                existingUser.supabaseUserId ?? '',
-                {
-                    email,
-                },
-            );
+            const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
+                email,
+            });
 
             if (error) {
                 throw new UserBadRequestException(`Supabase update email error: ${error.message}`);

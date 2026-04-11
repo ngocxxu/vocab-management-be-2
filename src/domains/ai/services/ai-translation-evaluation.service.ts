@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
+import { EvaluateTranslationParams } from '../utils/ai-service-types.util';
 import { AI_CONFIG } from '../utils/const.util';
 import { EvaluationResult } from '../utils/type.util';
 import { AiLanguageNameService } from './ai-language-name.service';
-import { EvaluateTranslationParams } from '../utils/ai-service-types.util';
 
 @Injectable()
 export class AiTranslationEvaluationService {
@@ -16,27 +16,13 @@ export class AiTranslationEvaluationService {
     ) {}
 
     public async evaluateTranslation(params: EvaluateTranslationParams): Promise<EvaluationResult> {
-        const {
-            targetDialogue,
-            transcript,
-            sourceLanguageCode,
-            targetLanguageCode,
-            sourceWords,
-            targetStyle,
-            targetAudience,
-            userId,
-            retryCount = 0,
-        } = params;
+        const { targetDialogue, transcript, sourceLanguageCode, targetLanguageCode, sourceWords, targetStyle, targetAudience, userId, retryCount = 0 } = params;
 
         try {
-            const sourceLanguage =
-                await this.languageNameService.getLanguageName(sourceLanguageCode);
-            const targetLanguage =
-                await this.languageNameService.getLanguageName(targetLanguageCode);
+            const sourceLanguage = await this.languageNameService.getLanguageName(sourceLanguageCode);
+            const targetLanguage = await this.languageNameService.getLanguageName(targetLanguageCode);
 
-            const dialogueText = targetDialogue
-                .map((item) => `${item.speaker}: "${item.text}"`)
-                .join('\n');
+            const dialogueText = targetDialogue.map((item) => `${item.speaker}: "${item.text}"`).join('\n');
 
             const sourceWordsList = sourceWords.join(', ');
             const styleContext = targetStyle ? `target style = ${targetStyle}` : '';
@@ -108,9 +94,7 @@ ${context ? `Context: ${context}` : ''}
 
             if (retryCount < AI_CONFIG.maxRetries) {
                 this.logger.warn('Retrying translation evaluation...');
-                await new Promise((resolve) =>
-                    setTimeout(resolve, AI_CONFIG.retryDelayMs * (retryCount + 1)),
-                );
+                await new Promise((resolve) => setTimeout(resolve, AI_CONFIG.retryDelayMs * (retryCount + 1)));
                 return this.evaluateTranslation({ ...params, retryCount: retryCount + 1 });
             }
 
@@ -130,8 +114,7 @@ ${context ? `Context: ${context}` : ''}
         report += `- **Completeness**: ${safe(evaluation.scores?.completeness, 0)}/10 — Coverage of source ideas (computed from meaning coverage %).\n\n`;
 
         report += '### Scoring Formula\n';
-        report +=
-            'OverallScore = accuracy * 2.5 + fluency * 2 + register * 1.5 + completeness * 4 (clamped 0–100)\n\n';
+        report += 'OverallScore = accuracy * 2.5 + fluency * 2 + register * 1.5 + completeness * 4 (clamped 0–100)\n\n';
 
         const errors = safe(evaluation.errors, []);
         if (Array.isArray(errors) && errors.length > 0) {
@@ -156,8 +139,7 @@ ${context ? `Context: ${context}` : ''}
 
         const missing = safe(evaluation.missingIdeas, []);
         if (Array.isArray(missing) && missing.length > 0) {
-            report +=
-                '## Missing Ideas (explicit list of source ideas not covered by the transcript)\n\n';
+            report += '## Missing Ideas (explicit list of source ideas not covered by the transcript)\n\n';
             missing.forEach((mi, i) => {
                 report += `${i + 1}. ${mi}\n`;
             });

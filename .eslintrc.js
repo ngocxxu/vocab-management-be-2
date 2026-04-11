@@ -8,6 +8,7 @@ module.exports = {
     extends: [
         'plugin:@typescript-eslint/recommended',
         'plugin:@typescript-eslint/recommended-requiring-type-checking',
+        'prettier',
     ],
     parser: '@typescript-eslint/parser',
     parserOptions: {
@@ -102,7 +103,6 @@ module.exports = {
         '@typescript-eslint/prefer-namespace-keyword': 'error',
         '@typescript-eslint/prefer-readonly': 'error',
         '@typescript-eslint/promise-function-async': 'error',
-        '@typescript-eslint/quotes': ['error', 'single'],
         '@typescript-eslint/restrict-plus-operands': 'error',
         '@typescript-eslint/semi': ['error', 'always'],
         '@typescript-eslint/triple-slash-reference': [
@@ -242,4 +242,43 @@ module.exports = {
         'use-isnan': 'error',
         'valid-typeof': 'off',
     },
+    overrides: [
+        {
+            files: ['**/*.spec.ts', '**/*.integration.spec.ts'],
+            rules: {
+                'import/no-unassigned-import': 'off',
+                'import/no-extraneous-dependencies': [
+                    'error',
+                    {
+                        devDependencies: true,
+                        optionalDependencies: false,
+                        peerDependencies: false,
+                    },
+                ],
+                '@typescript-eslint/no-unsafe-argument': 'off',
+                '@typescript-eslint/no-unsafe-assignment': 'off',
+                '@typescript-eslint/no-unsafe-member-access': 'off',
+            },
+        },
+        {
+            files: ['src/config/**/*.ts'],
+            rules: {
+                'import/no-default-export': 'off',
+            },
+        },
+        {
+            files: ['src/auth/decorators/*.ts'],
+            rules: {
+                '@typescript-eslint/naming-convention': [
+                    'error',
+                    {
+                        selector: 'variable',
+                        format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
+                        leadingUnderscore: 'forbid',
+                        trailingUnderscore: 'forbid',
+                    },
+                ],
+            },
+        },
+    ],
 };

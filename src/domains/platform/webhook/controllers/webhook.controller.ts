@@ -1,6 +1,6 @@
+import { Public } from '@/shared/decorators';
 import { Controller, Get, HttpStatus } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Public } from '@/shared/decorators';
 
 @Controller('webhook')
 @ApiTags('webhook')

@@ -1,11 +1,11 @@
+import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { IResponse } from '@/shared';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
-import { SubjectBadRequestException, SubjectNotFoundException } from '../exceptions';
-import { SubjectMapper } from '../mappers';
 import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
+import { SubjectBadRequestException, SubjectNotFoundException } from '../exceptions';
+import { SubjectMapper } from '../mappers';
 import { SubjectRepository } from '../repositories';
 
 @Injectable()
@@ -36,11 +36,7 @@ export class SubjectService {
         return this.subjectMapper.toResponse(subject);
     }
 
-    public async create(
-        createSubjectData: CreateSubjectInput,
-        userId: string,
-        role?: UserRole,
-    ): Promise<SubjectDto> {
+    public async create(createSubjectData: CreateSubjectInput, userId: string, role?: UserRole): Promise<SubjectDto> {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'subject');
         }
@@ -59,11 +55,7 @@ export class SubjectService {
         return this.subjectMapper.toResponse(subject);
     }
 
-    public async update(
-        id: string,
-        updateSubjectData: SubjectInput,
-        userId?: string,
-    ): Promise<SubjectDto> {
+    public async update(id: string, updateSubjectData: SubjectInput, userId?: string): Promise<SubjectDto> {
         if (!id) {
             throw new SubjectBadRequestException('Subject ID is required');
         }
@@ -74,10 +66,7 @@ export class SubjectService {
             throw new SubjectNotFoundException(id);
         }
 
-        const subject = await this.subjectRepository.update(
-            id,
-            this.subjectMapper.toUpdatePayload(updateSubjectData),
-        );
+        const subject = await this.subjectRepository.update(id, this.subjectMapper.toUpdatePayload(updateSubjectData));
 
         return this.subjectMapper.toResponse(subject);
     }

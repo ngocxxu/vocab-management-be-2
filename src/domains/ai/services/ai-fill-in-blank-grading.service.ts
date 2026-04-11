@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
-import { isObviousTypo, normalizeForCompare } from '../utils/text-normalization.util';
-import { TextTargetRecord, VocabForTextTargets } from '../utils/ai-text-types.util';
-import { AiLanguageNameService } from './ai-language-name.service';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
+import { TextTargetRecord, VocabForTextTargets } from '../utils/ai-text-types.util';
+import { isObviousTypo, normalizeForCompare } from '../utils/text-normalization.util';
+import { AiLanguageNameService } from './ai-language-name.service';
 
 @Injectable()
 export class AiFillInBlankGradingService {
@@ -28,9 +28,7 @@ export class AiFillInBlankGradingService {
     ): Promise<Array<{ isCorrect: boolean; explanation?: string }>> {
         if (evaluations.length === 0) return [];
 
-        const results: Array<{ isCorrect: boolean; explanation?: string } | undefined> = Array.from(
-            { length: evaluations.length },
-        );
+        const results: Array<{ isCorrect: boolean; explanation?: string } | undefined> = Array.from({ length: evaluations.length });
 
         const llmEvaluations: typeof evaluations = [];
         const llmIndexMap: number[] = [];
@@ -40,13 +38,9 @@ export class AiFillInBlankGradingService {
             const vocab = evaluationItem.vocab as unknown as VocabForTextTargets;
             const textTargets = vocab.textTargets ?? [];
             const targetTexts = textTargets.map((tt: TextTargetRecord) => tt.textTarget).join(', ');
-            const correctAnswer =
-                evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
+            const correctAnswer = evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
 
-            const answerLanguageCode =
-                evaluationItem.questionType === 'textSource'
-                    ? vocab.targetLanguageCode
-                    : vocab.sourceLanguageCode;
+            const answerLanguageCode = evaluationItem.questionType === 'textSource' ? vocab.targetLanguageCode : vocab.sourceLanguageCode;
 
             const useLowercase = this.latinScriptLanguageCodes.has(answerLanguageCode);
             const userNorm = normalizeForCompare(evaluationItem.userAnswer ?? '', {
@@ -82,18 +76,13 @@ export class AiFillInBlankGradingService {
             const vocab = evaluationItem.vocab as unknown as VocabForTextTargets;
             const textTargets = vocab.textTargets ?? [];
             const targetTexts = textTargets.map((tt: TextTargetRecord) => tt.textTarget).join(', ');
-            const sourceLanguageName = await this.languageNameService.getLanguageName(
-                vocab.sourceLanguageCode,
-            );
-            const targetLanguageName = await this.languageNameService.getLanguageName(
-                vocab.targetLanguageCode,
-            );
+            const sourceLanguageName = await this.languageNameService.getLanguageName(vocab.sourceLanguageCode);
+            const targetLanguageName = await this.languageNameService.getLanguageName(vocab.targetLanguageCode);
             const questionContext =
                 evaluationItem.questionType === 'textSource'
                     ? `What is the translation of "${vocab.textSource}" in ${targetLanguageName}?`
                     : `What is the translation of "${evaluationItem.systemAnswer}" in ${sourceLanguageName}?`;
-            const correctAnswer =
-                evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
+            const correctAnswer = evaluationItem.questionType === 'textSource' ? targetTexts : vocab.textSource;
 
             return (
                 `${idx + 1}. Source language: ${sourceLanguageName}, ` +
@@ -145,16 +134,12 @@ Explanation must be in Vietnamese.
         try {
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);
-            const batchResponse = parseJsonOrThrow<
-                Array<{ answerIndex: number; isCorrect: boolean; explanation?: string }>
-            >(text);
+            const batchResponse = parseJsonOrThrow<Array<{ answerIndex: number; isCorrect: boolean; explanation?: string }>>(text);
 
             llmEvaluations.forEach((_, llmIdx) => {
                 const originalIdx = llmIndexMap[llmIdx];
                 const responseItem = batchResponse.find((item) => item.answerIndex === llmIdx);
-                results[originalIdx] = responseItem
-                    ? { isCorrect: responseItem.isCorrect, explanation: responseItem.explanation }
-                    : { isCorrect: false };
+                results[originalIdx] = responseItem ? { isCorrect: responseItem.isCorrect, explanation: responseItem.explanation } : { isCorrect: false };
             });
 
             return results.map((r) => r ?? { isCorrect: false });
@@ -164,4 +149,3 @@ Explanation must be in Vietnamese.
         }
     }
 }
-

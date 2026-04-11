@@ -2,10 +2,10 @@ import { Controller, Delete, Get, HttpCode, HttpStatus, UseGuards } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../decorators/roles.decorator';
-import { LoggerService } from '../services/logger.service';
-import { RedisService } from '../services/redis.service';
 import { RolesGuard } from '../guards/roles.guard';
 import { CacheManagerService } from '../services/cache-manager.service';
+import { LoggerService } from '../services/logger.service';
+import { RedisService } from '../services/redis.service';
 
 @Controller('cache')
 @ApiTags('cache')
@@ -64,8 +64,7 @@ export class CacheController {
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: 'Flush entire Redis database (Admin only - DANGEROUS)',
-        description:
-            'This will delete ALL keys in the Redis database, including sessions, queues, and other non-cache data. Use with extreme caution.',
+        description: 'This will delete ALL keys in the Redis database, including sessions, queues, and other non-cache data. Use with extreme caution.',
     })
     @ApiResponse({
         status: HttpStatus.OK,

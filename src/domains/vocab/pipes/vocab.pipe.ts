@@ -1,6 +1,6 @@
+import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 import { Injectable } from '@nestjs/common';
 import * as Joi from 'joi';
-import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 
 @Injectable()
 export class VocabPipe extends JoiValidationPipe {
@@ -54,25 +54,15 @@ export class VocabPipe extends JoiValidationPipe {
                             'string.max': 'Grammar cannot exceed 100 characters',
                         }),
 
-                        explanationSource: Joi.string()
-                            .optional()
-                            .max(1000)
-                            .trim()
-                            .min(1)
-                            .messages({
-                                'string.min': 'Source explanation cannot be empty if provided',
-                                'string.max': 'Source explanation cannot exceed 1000 characters',
-                            }),
+                        explanationSource: Joi.string().optional().max(1000).trim().min(1).messages({
+                            'string.min': 'Source explanation cannot be empty if provided',
+                            'string.max': 'Source explanation cannot exceed 1000 characters',
+                        }),
 
-                        explanationTarget: Joi.string()
-                            .optional()
-                            .max(1000)
-                            .trim()
-                            .min(1)
-                            .messages({
-                                'string.min': 'Target explanation cannot be empty if provided',
-                                'string.max': 'Target explanation cannot exceed 1000 characters',
-                            }),
+                        explanationTarget: Joi.string().optional().max(1000).trim().min(1).messages({
+                            'string.min': 'Target explanation cannot be empty if provided',
+                            'string.max': 'Target explanation cannot exceed 1000 characters',
+                        }),
 
                         subjectIds: Joi.array()
                             .items(
@@ -94,33 +84,20 @@ export class VocabPipe extends JoiValidationPipe {
                         vocabExamples: Joi.array()
                             .items(
                                 Joi.object({
-                                    source: Joi.string()
-                                        .required()
-                                        .max(1000)
-                                        .trim()
-                                        .min(1)
-                                        .messages({
-                                            'string.empty': 'Example source is required',
-                                            'string.min': 'Example source cannot be empty',
-                                            'string.max':
-                                                'Example source cannot exceed 1000 characters',
-                                            'any.required': 'Example source is required',
-                                        }),
-                                    target: Joi.string()
-                                        .required()
-                                        .max(1000)
-                                        .trim()
-                                        .min(1)
-                                        .messages({
-                                            'string.empty': 'Example target is required',
-                                            'string.min': 'Example target cannot be empty',
-                                            'string.max':
-                                                'Example target cannot exceed 1000 characters',
-                                            'any.required': 'Example target is required',
-                                        }),
+                                    source: Joi.string().required().max(1000).trim().min(1).messages({
+                                        'string.empty': 'Example source is required',
+                                        'string.min': 'Example source cannot be empty',
+                                        'string.max': 'Example source cannot exceed 1000 characters',
+                                        'any.required': 'Example source is required',
+                                    }),
+                                    target: Joi.string().required().max(1000).trim().min(1).messages({
+                                        'string.empty': 'Example target is required',
+                                        'string.min': 'Example target cannot be empty',
+                                        'string.max': 'Example target cannot exceed 1000 characters',
+                                        'any.required': 'Example target is required',
+                                    }),
                                 }).messages({
-                                    'object.base':
-                                        'Each example must be a valid object with source and target',
+                                    'object.base': 'Each example must be a valid object with source and target',
                                 }),
                             )
                             .optional()

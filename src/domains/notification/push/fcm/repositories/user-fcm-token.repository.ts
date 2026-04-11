@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, UserFcmToken } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { Injectable } from '@nestjs/common';
+import { Prisma, UserFcmToken } from '@prisma/client';
 
 @Injectable()
 export class UserFcmTokenRepository extends BaseRepository {
@@ -9,10 +9,7 @@ export class UserFcmTokenRepository extends BaseRepository {
         super(prismaService);
     }
 
-    public async findByUserAndToken(
-        userId: string,
-        fcmToken: string,
-    ): Promise<UserFcmToken | null> {
+    public async findByUserAndToken(userId: string, fcmToken: string): Promise<UserFcmToken | null> {
         return this.prisma.userFcmToken.findUnique({
             where: {
                 userId_fcmToken: { userId, fcmToken },
@@ -20,11 +17,7 @@ export class UserFcmTokenRepository extends BaseRepository {
         });
     }
 
-    public async updateByUserAndToken(
-        userId: string,
-        fcmToken: string,
-        data: Prisma.UserFcmTokenUpdateInput,
-    ): Promise<UserFcmToken> {
+    public async updateByUserAndToken(userId: string, fcmToken: string, data: Prisma.UserFcmTokenUpdateInput): Promise<UserFcmToken> {
         return this.prisma.userFcmToken.update({
             where: { userId_fcmToken: { userId, fcmToken } },
             data,

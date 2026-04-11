@@ -1,9 +1,9 @@
+import { CurrentUser } from '@/shared/decorators/user.decorator';
 import { Controller, Get, HttpStatus, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User as UserEntity } from '@prisma/client';
 import { Request } from 'express';
 import { Response } from 'express';
-import { CurrentUser } from '@/shared/decorators/user.decorator';
 import { SSEService } from '../services/sse.service';
 
 @Controller('sse')
@@ -15,22 +15,15 @@ export class SSEController {
     @Get('events')
     @ApiOperation({ summary: 'Establish SSE connection for events' })
     @ApiResponse({ status: HttpStatus.OK, description: 'SSE connection established' })
-    public connect(
-        @Req() request: Request,
-        @Res() response: Response,
-        @CurrentUser() user: UserEntity,
-    ): void {
+    public connect(@Req() request: Request, @Res() response: Response, @CurrentUser() user: UserEntity): void {
         // Get allowed origins from environment or use default
-        const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || [
-            'http://localhost:5173',
-        ];
+        const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || ['http://localhost:5173'];
 
         // Get the requesting origin
         const requestOrigin = request.headers.origin || 'http://localhost:5173';
 
         // Find the matching domain from allowed origins
-        const corsOrigin =
-            allowedOrigins.find((origin) => origin === requestOrigin) || 'http://localhost:5173';
+        const corsOrigin = allowedOrigins.find((origin) => origin === requestOrigin) || 'http://localhost:5173';
 
         // Set SSE headers with proper CORS for cookie-based authentication
         response.writeHead(HttpStatus.OK, {

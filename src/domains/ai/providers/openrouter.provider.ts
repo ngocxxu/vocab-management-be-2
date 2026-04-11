@@ -1,6 +1,6 @@
+import { ConfigService } from '@/domains/platform/config/services';
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
-import { ConfigService } from '@/domains/platform/config/services';
 import { AI_CONFIG } from '../utils/const.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 
@@ -18,16 +18,10 @@ export class OpenRouterProvider implements IAiProvider {
         this.apiKey = apiKey;
     }
 
-    public async generateContent(
-        prompt: string,
-        userId?: string,
-        options?: GenerateContentOptions,
-    ): Promise<string> {
+    public async generateContent(prompt: string, userId?: string, options?: GenerateContentOptions): Promise<string> {
         // 1. Prepare Model & Logic common
         const hasAudio = !!(options?.audioBuffer && options?.audioMimeType);
-        const modelName = hasAudio
-            ? await this.getAudioModelName(userId)
-            : await this.getModelName(userId);
+        const modelName = hasAudio ? await this.getAudioModelName(userId) : await this.getModelName(userId);
         const openRouterModelName = this.mapModelNameToOpenRouter(modelName);
 
         // 2. Build Content Payload
@@ -76,22 +70,14 @@ export class OpenRouterProvider implements IAiProvider {
                 },
             );
 
-            return (
-                (response.data as { choices: { message: { content: string } }[] })?.choices?.[0]
-                    ?.message?.content || ''
-            );
+            return (response.data as { choices: { message: { content: string } }[] })?.choices?.[0]?.message?.content || '';
         } catch (error) {
             this.handleApiError(error, 'generateContent', openRouterModelName);
             throw error;
         }
     }
 
-    public async transcribeAudio(
-        audioBuffer: Buffer,
-        mimeType: string,
-        sourceLanguage: string,
-        userId?: string,
-    ): Promise<string> {
+    public async transcribeAudio(audioBuffer: Buffer, mimeType: string, sourceLanguage: string, userId?: string): Promise<string> {
         const prompt = `Transcribe this ${sourceLanguage} audio recording. Return only the transcript text, no additional commentary.`;
 
         const result = await this.generateContent(prompt, userId, {
@@ -104,16 +90,11 @@ export class OpenRouterProvider implements IAiProvider {
 
     public async getModelName(userId?: string): Promise<string> {
         const configValue = await this.configService.getConfig(userId || null, 'ai.model');
-        return configValue && typeof configValue === 'string'
-            ? configValue
-            : AI_CONFIG.models?.[0] || '';
+        return configValue && typeof configValue === 'string' ? configValue : AI_CONFIG.models?.[0] || '';
     }
 
     public async getAudioModelName(userId?: string): Promise<string> {
-        const audioModelConfig = await this.configService.getConfig(
-            userId || null,
-            'ai.audio.model',
-        );
+        const audioModelConfig = await this.configService.getConfig(userId || null, 'ai.audio.model');
         if (audioModelConfig && typeof audioModelConfig === 'string') {
             return audioModelConfig;
         }
@@ -178,9 +159,7 @@ export class OpenRouterProvider implements IAiProvider {
             } else if (statusCode === 400) {
                 errorMessage = `OpenRouter API: Bad request. ${errorData?.error?.message || ''}`;
             } else if (statusCode) {
-                errorMessage = `OpenRouter API: Request failed with status ${statusCode}. ${
-                    errorData?.error?.message || ''
-                }`;
+                errorMessage = `OpenRouter API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
             }
 
             this.logger.error(`${errorMessage}`, {

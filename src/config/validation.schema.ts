@@ -1,9 +1,7 @@
 import * as Joi from 'joi';
 
 export const validationSchema = Joi.object({
-    NODE_ENV: Joi.string().valid('development', 'production', 'test', 'staging').default(
-        'development',
-    ),
+    NODE_ENV: Joi.string().valid('development', 'production', 'test', 'staging').default('development'),
 
     API_PORT: Joi.number().required(),
     API_PREFIX: Joi.string().required(),
@@ -59,10 +57,14 @@ export const validationSchema = Joi.object({
     REDIS_TTL: Joi.string().allow(''),
 })
     .unknown(true)
-    .custom((value, helpers) => {
-        const url = typeof value.REDIS_URL === 'string' ? value.REDIS_URL.trim() : '';
-        const host = typeof value.REDIS_HOST === 'string' ? value.REDIS_HOST.trim() : '';
-        const port = typeof value.REDIS_PORT === 'string' ? value.REDIS_PORT.trim() : '';
+    .custom((value: unknown, helpers) => {
+        if (typeof value !== 'object' || value === null) {
+            return helpers.error('any.custom', { message: 'Invalid environment value' });
+        }
+        const v = value as Record<string, unknown>;
+        const url = typeof v.REDIS_URL === 'string' ? v.REDIS_URL.trim() : '';
+        const host = typeof v.REDIS_HOST === 'string' ? v.REDIS_HOST.trim() : '';
+        const port = typeof v.REDIS_PORT === 'string' ? v.REDIS_PORT.trim() : '';
         const hasUrl = Boolean(url);
         const hasHostPort = Boolean(host && port);
         if (!hasUrl && !hasHostPort) {

@@ -29,12 +29,7 @@ export class FlipCardQuestionDto {
     })
     public backLanguageCode: string;
 
-    public constructor(data: {
-        frontText: string[];
-        backText: string[];
-        frontLanguageCode: string;
-        backLanguageCode: string;
-    }) {
+    public constructor(data: { frontText: string[]; backText: string[]; frontLanguageCode: string; backLanguageCode: string }) {
         this.frontText = data.frontText;
         this.backText = data.backText;
         this.frontLanguageCode = data.frontLanguageCode;

@@ -1,5 +1,5 @@
-import type { TemplateData } from '@/shared/utils/type.util';
 import type { VocabWithTextTargets } from '@/domains/vocab-trainer/utils';
+import type { TemplateData } from '@/shared/utils/type.util';
 
 export interface AudioEvaluationJobData {
     fileId: string;

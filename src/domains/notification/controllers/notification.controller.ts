@@ -1,20 +1,8 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Patch,
-    Post,
-    Put,
-    Query,
-    UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { User, UserRole } from '@prisma/client';
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Roles } from '@/shared/decorators';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { User, UserRole } from '@prisma/client';
 import { NotificationDto, NotificationInput, UpdateNotificationStatusInput } from '../dto';
 import { NotificationService } from '../services';
 
@@ -42,10 +30,7 @@ export class NotificationController {
     @ApiOperation({ summary: 'Get current user notifications' })
     @ApiQuery({ name: 'includeDeleted', required: false, type: Boolean })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
-    public async getMyNotifications(
-        @CurrentUser() user: User,
-        @Query('includeDeleted') includeDeleted: boolean = false,
-    ): Promise<IResponse<NotificationDto[]>> {
+    public async getMyNotifications(@CurrentUser() user: User, @Query('includeDeleted') includeDeleted: boolean = false): Promise<IResponse<NotificationDto[]>> {
         return this.notificationService.findByUser(user.id, includeDeleted);
     }
 
@@ -54,9 +39,7 @@ export class NotificationController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get unread notifications for current user' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
-    public async getMyUnreadNotifications(
-        @CurrentUser() user: User,
-    ): Promise<IResponse<NotificationDto[]>> {
+    public async getMyUnreadNotifications(@CurrentUser() user: User): Promise<IResponse<NotificationDto[]>> {
         return this.notificationService.findUnreadByUser(user.id);
     }
 
@@ -81,10 +64,7 @@ export class NotificationController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Mark notification as read for current user' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
-    public async markAsRead(
-        @Param('id') notificationId: string,
-        @CurrentUser() user: User,
-    ): Promise<NotificationDto> {
+    public async markAsRead(@Param('id') notificationId: string, @CurrentUser() user: User): Promise<NotificationDto> {
         return this.notificationService.markAsRead(notificationId, user.id);
     }
 
@@ -134,10 +114,7 @@ export class NotificationController {
     @ApiOperation({ summary: 'Update notification' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
-    public async update(
-        @Param('id') id: string,
-        @Body() updateNotificationData: Partial<NotificationInput>,
-    ): Promise<NotificationDto> {
+    public async update(@Param('id') id: string, @Body() updateNotificationData: Partial<NotificationInput>): Promise<NotificationDto> {
         const notification = await this.notificationService.update(id, updateNotificationData);
         this.logger.info(`Updated notification with ID ${id}`);
         return notification;
@@ -153,19 +130,9 @@ export class NotificationController {
         status: HttpStatus.FORBIDDEN,
         description: 'User is not a recipient of this notification',
     })
-    public async updateStatus(
-        @Param('id') notificationId: string,
-        @Param('id') userId: string,
-        @Body() updateData: UpdateNotificationStatusInput,
-    ): Promise<NotificationDto> {
-        const notification = await this.notificationService.updateUserStatus(
-            notificationId,
-            userId,
-            updateData,
-        );
-        this.logger.info(
-            `Updated notification status for notification ${notificationId} and user ${userId}`,
-        );
+    public async updateStatus(@Param('id') notificationId: string, @Param('id') userId: string, @Body() updateData: UpdateNotificationStatusInput): Promise<NotificationDto> {
+        const notification = await this.notificationService.updateUserStatus(notificationId, userId, updateData);
+        this.logger.info(`Updated notification status for notification ${notificationId} and user ${userId}`);
         return notification;
     }
 

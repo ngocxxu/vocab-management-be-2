@@ -1,7 +1,7 @@
 import { BadRequestException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ArgumentsHost } from '@nestjs/common';
-import { HttpExceptionFilter } from './http-exception.filter';
 import { WinstonLogger } from '../logger/winston.logger';
+import { HttpExceptionFilter } from './http-exception.filter';
 
 describe('HttpExceptionFilter', () => {
     const createFilter = () => {

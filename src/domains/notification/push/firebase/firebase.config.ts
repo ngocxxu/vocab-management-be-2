@@ -1,7 +1,7 @@
+import { LoggerService } from '@/shared';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
-import { LoggerService } from '@/shared';
 
 @Injectable()
 export class FirebaseConfig implements OnModuleInit {
@@ -52,11 +52,7 @@ export class FirebaseConfig implements OnModuleInit {
 
             this.logger.info('Firebase initialized successfully');
         } catch (error) {
-            this.logger.error(
-                `Failed to initialize Firebase: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            this.logger.error(`Failed to initialize Firebase: ${error instanceof Error ? error.message : String(error)}`);
             throw error;
         }
     }

@@ -28,4 +28,3 @@ export class AiLanguageNameService {
         return language.name;
     }
 }
-

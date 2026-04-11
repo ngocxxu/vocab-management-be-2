@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, User } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { Injectable } from '@nestjs/common';
+import { Prisma, User } from '@prisma/client';
 
 @Injectable()
 export class UserRepository extends BaseRepository {
@@ -50,4 +50,3 @@ export class UserRepository extends BaseRepository {
         });
     }
 }
-

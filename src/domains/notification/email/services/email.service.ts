@@ -13,12 +13,7 @@ export class EmailService {
         await this.mailProvider.verifyConnection();
     }
 
-    public async sendReminderEmail(
-        userEmail: string,
-        reminderType: string,
-        templateName: string,
-        data: TemplateData,
-    ) {
+    public async sendReminderEmail(userEmail: string, reminderType: string, templateName: string, data: TemplateData) {
         try {
             this.logger.log(`📤 Sending ${templateName} email to: ${userEmail}`);
 

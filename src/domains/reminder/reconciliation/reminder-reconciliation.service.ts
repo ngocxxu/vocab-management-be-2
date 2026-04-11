@@ -1,13 +1,13 @@
+import type { ReminderScheduleEmailJobData } from '@/queues/interfaces/job-payloads';
+import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
+import { LoggerService } from '@/shared';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ReminderScheduleStatus } from '@prisma/client';
 import { Job } from 'bullmq';
-import { LoggerService } from '@/shared';
-import type { ReminderScheduleEmailJobData } from '@/queues/interfaces/job-payloads';
-import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
-import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
+import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 @Injectable()
 export class ReminderReconciliationService implements OnModuleInit, OnModuleDestroy {
     private timer?: NodeJS.Timeout;
@@ -43,9 +43,7 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
         if (this.stopped) {
             return;
         }
-        const staleBefore = new Date(
-            Date.now() - REMINDER_CONFIG.reconciliation.staleClaimedAfterMs,
-        );
+        const staleBefore = new Date(Date.now() - REMINDER_CONFIG.reconciliation.staleClaimedAfterMs);
         const released = await this.reminderScheduleRepository.releaseStaleClaims(staleBefore);
         if (released > 0) {
             this.logger.info(`Reconciliation: released ${released} stale CLAIMED rows`);
@@ -68,17 +66,13 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
         const rows = await this.reminderScheduleRepository.findQueuedScheduleIds(50);
         let count = 0;
         for (const row of rows) {
-            const job = (await this.emailReminderProducer.getReminderScheduleJob(
-                row.id,
-            )) as Job<ReminderScheduleEmailJobData> | undefined;
+            const job = (await this.emailReminderProducer.getReminderScheduleJob(row.id)) as Job<ReminderScheduleEmailJobData> | undefined;
 
             if (!job) {
-                const ok = await this.reminderScheduleRepository.transitionStatus(
-                    row.id,
-                    ReminderScheduleStatus.QUEUED,
-                    ReminderScheduleStatus.PENDING,
-                    { lockedBy: null, lockedAt: null },
-                );
+                const ok = await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.QUEUED, ReminderScheduleStatus.PENDING, {
+                    lockedBy: null,
+                    lockedAt: null,
+                });
                 if (ok) {
                     count += 1;
                 }
@@ -88,17 +82,10 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
     }
 
     private async repairMissingEscalations(): Promise<void> {
-        const threshold = new Date(
-            Date.now() - REMINDER_CONFIG.reconciliation.missingEscalationAfterMs,
-        );
-        const candidates = await this.reminderScheduleRepository.findInitialSentRemindersBefore(
-            threshold,
-            20,
-        );
+        const threshold = new Date(Date.now() - REMINDER_CONFIG.reconciliation.missingEscalationAfterMs);
+        const candidates = await this.reminderScheduleRepository.findInitialSentRemindersBefore(threshold, 20);
         for (const initial of candidates) {
-            const childCount = await this.reminderScheduleRepository.countEscalationsForInitial(
-                initial.id,
-            );
+            const childCount = await this.reminderScheduleRepository.countEscalationsForInitial(initial.id);
             if (childCount > 0) {
                 continue;
             }
@@ -106,19 +93,13 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
                 continue;
             }
             if (initial.entityType === VOCAB_TRAINER_ENTITY && initial.entityId) {
-                const vt = await this.vocabTrainerRepository.findLastExamSubmittedAt(
-                    initial.entityId,
-                );
+                const vt = await this.vocabTrainerRepository.findLastExamSubmittedAt(initial.entityId);
                 if (vt?.lastExamSubmittedAt && vt.lastExamSubmittedAt > initial.sentAt) {
                     continue;
                 }
             }
             await this.reminderScheduleRepository.inTransaction(async (tx) => {
-                await this.reminderScheduleRepository.createEscalationsForInitial(
-                    tx,
-                    initial,
-                    initial.sentAt as Date,
-                );
+                await this.reminderScheduleRepository.createEscalationsForInitial(tx, initial, initial.sentAt as Date);
             });
             this.logger.info(`Reconciliation: backfilled escalations for initial ${initial.id}`);
         }

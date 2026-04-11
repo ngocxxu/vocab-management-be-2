@@ -1,6 +1,6 @@
+import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 import { Injectable } from '@nestjs/common';
 import * as Joi from 'joi';
-import { JoiValidationPipe } from '@/shared/pipes/joi-validation.pipe';
 
 @Injectable()
 export class WordTypePipe extends JoiValidationPipe {

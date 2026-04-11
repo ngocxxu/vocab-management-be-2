@@ -1,8 +1,8 @@
+import { QueryParamsInput } from '@/shared/dto/query-params.input';
 import { ApiProperty } from '@nestjs/swagger';
 import { QuestionType, TrainerStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsArray } from 'class-validator';
-import { QueryParamsInput } from '@/shared/dto/query-params.input';
 
 export class VocabTrainerQueryParamsInput extends QueryParamsInput {
     @ApiProperty({ description: 'Name of the vocab trainer', required: false })

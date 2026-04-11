@@ -18,6 +18,10 @@ cd ./my-project
 pnpm install
 ```
 
+The `prepare` script runs `husky install`, so Git hooks under `.husky/` are wired after install. Hooks run **lint-staged** (Prettier + ESLint on staged files) on pre-commit, and **`pnpm run typecheck`** plus **`pnpm run lint`** on pre-push.
+
+Before `tsc` / `pnpm run typecheck` succeeds (locally or in CI), generate the Prisma client: `pnpm run db:generate` or `pnpm exec prisma generate`.
+
 Once the dependencies are installed, you can now configure your project by creating a new `.env` file containing the environment variables used for development.
 
 ```

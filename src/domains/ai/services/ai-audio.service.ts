@@ -31,21 +31,11 @@ export class AiAudioService {
             return Buffer.from(response.data);
         } catch (error) {
             this.logger.error(`Failed to download audio from Cloudinary: ${error}`);
-            throw new Error(
-                `Failed to download audio: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
+            throw new Error(`Failed to download audio: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
-    public async transcribeAudio(
-        audioBuffer: Buffer,
-        mimeType: string,
-        sourceLanguage: string,
-        userId?: string,
-        retryCount = 0,
-    ): Promise<string> {
+    public async transcribeAudio(audioBuffer: Buffer, mimeType: string, sourceLanguage: string, userId?: string, retryCount = 0): Promise<string> {
         try {
             const provider = await this.providerFactory.getAudioProvider(userId);
             return await provider.transcribeAudio(audioBuffer, mimeType, sourceLanguage, userId);
@@ -54,20 +44,11 @@ export class AiAudioService {
 
             if (retryCount < AI_CONFIG.maxRetries) {
                 this.logger.warn('Retrying audio transcription...');
-                await new Promise((resolve) =>
-                    setTimeout(resolve, AI_CONFIG.retryDelayMs * (retryCount + 1)),
-                );
-                return this.transcribeAudio(
-                    audioBuffer,
-                    mimeType,
-                    sourceLanguage,
-                    userId,
-                    retryCount + 1,
-                );
+                await new Promise((resolve) => setTimeout(resolve, AI_CONFIG.retryDelayMs * (retryCount + 1)));
+                return this.transcribeAudio(audioBuffer, mimeType, sourceLanguage, userId, retryCount + 1);
             }
 
             throw error;
         }
     }
 }
-

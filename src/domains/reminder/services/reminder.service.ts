@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { Job } from 'bullmq';
 import type { EmailJobData } from '@/queues/interfaces/job-payloads';
 import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { NotificationProducer } from '@/queues/producers/notification.producer';
+import { Injectable } from '@nestjs/common';
+import { Job } from 'bullmq';
 import { TemplateData } from '../../notification/email/utils/type';
 
 @Injectable()
@@ -12,12 +12,7 @@ export class ReminderService {
         private readonly notificationProducer: NotificationProducer,
     ) {}
 
-    public async sendImmediateReminder(
-        userEmail: string,
-        reminderType: string,
-        templateName: string,
-        data: TemplateData,
-    ) {
+    public async sendImmediateReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData) {
         await this.emailReminderProducer.sendReminder({
             userEmail,
             reminderType,
@@ -26,13 +21,7 @@ export class ReminderService {
         });
     }
 
-    public async scheduleReminder(
-        userEmail: string,
-        reminderType: string,
-        templateName: string,
-        data: TemplateData,
-        delayInMs: number,
-    ) {
+    public async scheduleReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData, delayInMs: number) {
         await this.emailReminderProducer.sendReminder(
             {
                 userEmail,
@@ -46,13 +35,7 @@ export class ReminderService {
         );
     }
 
-    public async scheduleRecurringReminder(
-        userEmail: string,
-        reminderType: string,
-        templateName: string,
-        data: TemplateData,
-        cronPattern: string,
-    ) {
+    public async scheduleRecurringReminder(userEmail: string, reminderType: string, templateName: string, data: TemplateData, cronPattern: string) {
         await this.emailReminderProducer.sendReminder(
             {
                 userEmail,
@@ -66,11 +49,7 @@ export class ReminderService {
         );
     }
 
-    public async sendImmediateCreateNotification(
-        recipientUserIds: string[],
-        reminderType: string,
-        data: TemplateData,
-    ) {
+    public async sendImmediateCreateNotification(recipientUserIds: string[], reminderType: string, data: TemplateData) {
         await this.notificationProducer.sendCreateNotification({
             recipientUserIds,
             reminderType,
@@ -78,12 +57,7 @@ export class ReminderService {
         });
     }
 
-    public async scheduleCreateNotification(
-        recipientUserIds: string[],
-        reminderType: string,
-        data: TemplateData,
-        delayInMs: number,
-    ) {
+    public async scheduleCreateNotification(recipientUserIds: string[], reminderType: string, data: TemplateData, delayInMs: number) {
         await this.notificationProducer.sendCreateNotification(
             {
                 recipientUserIds,

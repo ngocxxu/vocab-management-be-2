@@ -1,16 +1,12 @@
+import { EReminderType } from '@/domains/reminder/utils';
+import { LoggerService } from '@/shared';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
 import { Queue, QueueEvents } from 'bullmq';
-import { EReminderType } from '@/domains/reminder/utils';
-import { LoggerService } from '@/shared';
-import {
-    DEAD_LETTER_QUEUE,
-    JOB_NAMES,
-    WORKLOAD_QUEUE_NAMES,
-} from '../constants/queue.constants';
 import { DEAD_LETTER_QUEUE_DEFAULT_OPTIONS } from '../config/queue.config';
+import { DEAD_LETTER_QUEUE, JOB_NAMES, WORKLOAD_QUEUE_NAMES } from '../constants/queue.constants';
 import { JobFailureService } from './job-failure.service';
 
 @Injectable()
@@ -74,7 +70,7 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
                             sourceQueue: queueName,
                             originalJobId: jobId,
                             jobName: job.name,
-                            payload: job.data,
+                            payload: job.data as unknown,
                             error: job.failedReason,
                             attemptsMade: job.attemptsMade,
                             maxAttempts,
@@ -94,6 +90,6 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
     }
 
     public async onModuleDestroy(): Promise<void> {
-        await Promise.all(this.queueEventsInstances.map((qe) => qe.close()));
+        await Promise.all(this.queueEventsInstances.map(async (qe) => qe.close()));
     }
 }

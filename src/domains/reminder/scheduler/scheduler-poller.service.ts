@@ -1,7 +1,7 @@
+import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
+import { LoggerService } from '@/shared';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ReminderSchedule, ReminderScheduleStatus } from '@prisma/client';
-import { LoggerService } from '@/shared';
-import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
 @Injectable()
@@ -46,10 +46,7 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
         }
         this.processing = true;
         try {
-            const batch = await this.reminderScheduleRepository.claimDueBatch(
-                REMINDER_CONFIG.poller.batchSize,
-                this.instanceId,
-            );
+            const batch = await this.reminderScheduleRepository.claimDueBatch(REMINDER_CONFIG.poller.batchSize, this.instanceId);
             for (const row of batch) {
                 await this.enqueueOne(row);
             }
@@ -69,17 +66,13 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
                     removeOnComplete: true,
                 },
             );
-            const migrated = await this.reminderScheduleRepository.transitionStatus(
-                row.id,
-                ReminderScheduleStatus.CLAIMED,
-                ReminderScheduleStatus.QUEUED,
-                { lockedBy: null, lockedAt: null },
-            );
+            const migrated = await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED, {
+                lockedBy: null,
+                lockedAt: null,
+            });
             if (!migrated && job) {
                 await job.remove();
-                this.logger.warn(
-                    `Poller: stale claim for schedule ${row.id}, removed duplicate job`,
-                );
+                this.logger.warn(`Poller: stale claim for schedule ${row.id}, removed duplicate job`);
             }
         } catch (err: unknown) {
             if (job) {
@@ -89,12 +82,7 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
                     /* ignore */
                 }
             }
-            await this.reminderScheduleRepository.transitionStatus(
-                row.id,
-                ReminderScheduleStatus.CLAIMED,
-                ReminderScheduleStatus.PENDING,
-                { lockedBy: null, lockedAt: null },
-            );
+            await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.PENDING, { lockedBy: null, lockedAt: null });
             const msg = err instanceof Error ? err.message : String(err);
             this.logger.error(`Poller enqueue failed for schedule ${row.id}: ${msg}`);
         }

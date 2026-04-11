@@ -75,8 +75,8 @@ export class SSEService {
      * @param event - The event data to send
      */
     public sendToUsers(userIds: string[], event: Record<string, unknown>): void {
-        const results = userIds.map(userId => this.sendToUser(userId, event));
-        const successCount = results.filter(result => result).length;
+        const results = userIds.map((userId) => this.sendToUser(userId, event));
+        const successCount = results.filter((result) => result).length;
         this.logger.log(`Event sent to ${successCount}/${userIds.length} users`);
     }
 
@@ -123,7 +123,7 @@ export class SSEService {
             }
         }
 
-        deadConnections.forEach(userId => this.removeConnection(userId));
+        deadConnections.forEach((userId) => this.removeConnection(userId));
 
         if (deadConnections.length > 0) {
             this.logger.log(`Cleaned up ${deadConnections.length} dead connections`);

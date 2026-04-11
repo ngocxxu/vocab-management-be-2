@@ -1,6 +1,6 @@
+import { JoiValidationPipe } from '@/shared';
 import { UserRole } from '@prisma/client';
 import * as Joi from 'joi';
-import { JoiValidationPipe } from '@/shared';
 import { UserInput } from '../dto';
 
 export class UserPipe extends JoiValidationPipe {

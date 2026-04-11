@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { QueryParamsInput } from '@/shared/dto/query-params.input';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class VocabQueryParamsInput extends QueryParamsInput {
     @ApiProperty({ description: 'Source text of the vocabulary', example: 'Xin chào', required: false })

@@ -1,21 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { Language, Prisma } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { RedisService } from '@/shared/services/redis.service';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
+import { Injectable } from '@nestjs/common';
+import { Language, Prisma } from '@prisma/client';
 
 @Injectable()
 export class LanguageRepository extends BaseRepository {
-    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+    public constructor(
+        prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {
         super(prismaService);
     }
 
     public async findAll(): Promise<Language[]> {
-        const cached = await this.redisService.jsonGet<Language[]>(
-            RedisPrefix.LANGUAGE,
-            'all',
-        );
+        const cached = await this.redisService.jsonGet<Language[]>(RedisPrefix.LANGUAGE, 'all');
         if (cached) {
             return cached;
         }
@@ -32,10 +32,7 @@ export class LanguageRepository extends BaseRepository {
     }
 
     public async findById(id: string): Promise<Language | null> {
-        const cached = await this.redisService.jsonGet<Language>(
-            RedisPrefix.LANGUAGE,
-            `id:${id}`,
-        );
+        const cached = await this.redisService.jsonGet<Language>(RedisPrefix.LANGUAGE, `id:${id}`);
         if (cached) {
             return cached;
         }
@@ -45,11 +42,7 @@ export class LanguageRepository extends BaseRepository {
         });
 
         if (language) {
-            await this.redisService.jsonSet(
-                RedisPrefix.LANGUAGE,
-                `id:${id}`,
-                language,
-            );
+            await this.redisService.jsonSet(RedisPrefix.LANGUAGE, `id:${id}`, language);
         }
 
         return language;
@@ -94,4 +87,3 @@ export class LanguageRepository extends BaseRepository {
         return language;
     }
 }
-

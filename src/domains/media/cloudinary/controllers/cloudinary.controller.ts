@@ -1,9 +1,9 @@
-import { Controller, Get, HttpStatus, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { User, UserRole } from '@prisma/client';
 import { LoggerService, RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
 import { CurrentUser } from '@/shared/decorators/user.decorator';
+import { Controller, Get, HttpStatus, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { User, UserRole } from '@prisma/client';
 import { GenerateUploadSignatureInput, GenerateUploadSignatureOutput } from '../dto';
 import { CloudinaryService } from '../services/cloudinary.service';
 
@@ -29,10 +29,7 @@ export class CloudinaryController {
         status: HttpStatus.BAD_REQUEST,
         description: 'Invalid parameters provided',
     })
-    public generateUploadSignature(
-        @Query() input: GenerateUploadSignatureInput,
-        @CurrentUser() user: User,
-    ): GenerateUploadSignatureOutput {
+    public generateUploadSignature(@Query() input: GenerateUploadSignatureInput, @CurrentUser() user: User): GenerateUploadSignatureOutput {
         this.logger.info(`User ${user.id} requested Cloudinary upload signature`);
         return this.cloudinaryService.generateUploadSignature(input);
     }

@@ -16,11 +16,7 @@ export class ActedCheckRegistry implements OnModuleInit {
         this.strategies.set(strategy.entityType, strategy);
     }
 
-    public async hasActedSince(
-        entityType: string | null | undefined,
-        entityId: string | null | undefined,
-        since: Date,
-    ): Promise<boolean> {
+    public async hasActedSince(entityType: string | null | undefined, entityId: string | null | undefined, since: Date): Promise<boolean> {
         if (!entityType || !entityId) {
             return false;
         }

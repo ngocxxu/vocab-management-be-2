@@ -1,23 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, Subject } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { RedisService } from '@/shared/services/redis.service';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, Subject } from '@prisma/client';
 
 @Injectable()
 export class SubjectRepository extends BaseRepository {
     private readonly logger = new Logger(SubjectRepository.name);
 
-    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+    public constructor(
+        prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {
         super(prismaService);
     }
 
     public async findByUserId(userId: string): Promise<Subject[]> {
-        const cached = await this.redisService.jsonGet<Subject[]>(
-            RedisPrefix.SUBJECT,
-            `userId:${userId}`,
-        );
+        const cached = await this.redisService.jsonGet<Subject[]>(RedisPrefix.SUBJECT, `userId:${userId}`);
         if (cached) {
             return cached;
         }
@@ -153,9 +153,7 @@ export class SubjectRepository extends BaseRepository {
         return subject;
     }
 
-    public async updateMany(
-        updates: Array<{ id: string; data: Prisma.SubjectUpdateInput }>,
-    ): Promise<void> {
+    public async updateMany(updates: Array<{ id: string; data: Prisma.SubjectUpdateInput }>): Promise<void> {
         await Promise.all(
             updates.map(async (update) =>
                 this.prisma.subject.update({
@@ -166,9 +164,7 @@ export class SubjectRepository extends BaseRepository {
         );
     }
 
-    public async updateManyInTransaction(
-        updates: Array<{ id: string; data: Prisma.SubjectUpdateInput }>,
-    ): Promise<void> {
+    public async updateManyInTransaction(updates: Array<{ id: string; data: Prisma.SubjectUpdateInput }>): Promise<void> {
         await this.runInTransaction(async (tx) => {
             await Promise.all(
                 updates.map(async (update) =>

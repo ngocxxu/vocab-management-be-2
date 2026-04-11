@@ -1,6 +1,6 @@
+import { PrismaService } from '@/shared';
 import { Injectable } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import { PrismaService } from '@/shared';
 
 @Injectable()
 export class JobFailureService {
@@ -14,8 +14,7 @@ export class JobFailureService {
 
         const jobId = String(job.id ?? '');
         const stack = job.stacktrace;
-        const stackTrace =
-            Array.isArray(stack) && stack.length > 0 ? stack.join('\n') : null;
+        const stackTrace = Array.isArray(stack) && stack.length > 0 ? stack.join('\n') : null;
 
         await this.prisma.jobFailure.upsert({
             where: {
@@ -25,8 +24,7 @@ export class JobFailureService {
                 queueName,
                 jobId,
                 jobName: job.name ?? '',
-                payload:
-                    job.data === undefined ? {} : (job.data as object),
+                payload: job.data === undefined ? {} : (job.data as object),
                 error: job.failedReason ?? 'unknown',
                 stackTrace,
                 attemptsMade: job.attemptsMade,

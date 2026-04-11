@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { VocabBadRequestException } from '../exceptions';
 import { VocabDto } from '../dto';
+import { VocabBadRequestException } from '../exceptions';
 import { VocabMasteryRepository, VocabMasteryWithVocab } from '../repositories';
 
 @Injectable()
@@ -36,9 +36,7 @@ export class VocabMasteryService {
 
         const newCorrectCount = isCorrect ? mastery.correctCount + 1 : mastery.correctCount;
         const newIncorrectCount = isCorrect ? mastery.incorrectCount : mastery.incorrectCount + 1;
-        const newMasteryScore = isCorrect
-            ? Math.min(10, mastery.masteryScore + 1)
-            : Math.max(0, mastery.masteryScore - 1);
+        const newMasteryScore = isCorrect ? Math.min(10, mastery.masteryScore + 1) : Math.max(0, mastery.masteryScore - 1);
 
         const updatedMastery = await this.vocabMasteryRepository.update(mastery.id, {
             masteryScore: newMasteryScore,
@@ -51,12 +49,7 @@ export class VocabMasteryService {
         return updatedMastery;
     }
 
-    public async saveHistory(
-        vocabMasteryId: string,
-        masteryScore: number,
-        correctCount: number,
-        incorrectCount: number,
-    ) {
+    public async saveHistory(vocabMasteryId: string, masteryScore: number, correctCount: number, incorrectCount: number) {
         if (!vocabMasteryId) {
             throw new VocabBadRequestException('Vocab mastery ID is required');
         }
@@ -104,7 +97,7 @@ export class VocabMasteryService {
             throw new VocabBadRequestException('User ID is required');
         }
 
-        return await this.vocabMasteryRepository.getMasteryBySubjectRaw(userId);
+        return this.vocabMasteryRepository.getMasteryBySubjectRaw(userId);
     }
 
     public async getProgressOverTime(userId: string, startDate?: Date, endDate?: Date) {
@@ -116,18 +109,10 @@ export class VocabMasteryService {
             throw new VocabBadRequestException('Start date must be before end date');
         }
 
-        return await this.vocabMasteryRepository.getProgressOverTimeRaw(
-            userId,
-            startDate,
-            endDate,
-        );
+        return this.vocabMasteryRepository.getProgressOverTimeRaw(userId, startDate, endDate);
     }
 
-    public async getTopProblematicVocabs(
-        userId: string,
-        minIncorrect: number = 5,
-        limit: number = 10,
-    ) {
+    public async getTopProblematicVocabs(userId: string, minIncorrect: number = 5, limit: number = 10) {
         if (!userId) {
             throw new VocabBadRequestException('User ID is required');
         }
@@ -140,11 +125,7 @@ export class VocabMasteryService {
             throw new VocabBadRequestException('Limit must be between 1 and 100');
         }
 
-        const vocabs = await this.vocabMasteryRepository.findTopProblematic(
-            userId,
-            minIncorrect,
-            limit,
-        );
+        const vocabs = await this.vocabMasteryRepository.findTopProblematic(userId, minIncorrect, limit);
 
         return vocabs.map((vm: VocabMasteryWithVocab) => ({
             vocabId: vm.vocabId,
@@ -160,6 +141,6 @@ export class VocabMasteryService {
             throw new VocabBadRequestException('User ID is required');
         }
 
-        return await this.vocabMasteryRepository.getMasteryDistributionRaw(userId);
+        return this.vocabMasteryRepository.getMasteryDistributionRaw(userId);
     }
 }

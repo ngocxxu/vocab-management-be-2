@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Config, ConfigScope, Prisma } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { Injectable } from '@nestjs/common';
+import { Config, ConfigScope, Prisma } from '@prisma/client';
 
 @Injectable()
 export class ConfigRepository extends BaseRepository {
@@ -116,11 +116,7 @@ export class ConfigRepository extends BaseRepository {
         });
     }
 
-    public async upsertUserConfig(
-        userId: string,
-        key: string,
-        value: Prisma.InputJsonValue,
-    ): Promise<Config> {
+    public async upsertUserConfig(userId: string, key: string, value: Prisma.InputJsonValue): Promise<Config> {
         return this.prisma.config.upsert({
             where: {
                 scope_userId_key: {

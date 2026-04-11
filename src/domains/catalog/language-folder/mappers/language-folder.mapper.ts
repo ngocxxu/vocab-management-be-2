@@ -1,5 +1,5 @@
-import { Prisma } from '@prisma/client';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
+import { Prisma } from '@prisma/client';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
 
 type LanguageFolderEntity = ConstructorParameters<typeof LanguageFolderDto>[0];
@@ -24,9 +24,7 @@ export class LanguageFolderMapper {
         };
     }
 
-    public buildUpdateInput(
-        data: Partial<LanguageFolderInput>,
-    ): Prisma.LanguageFolderUpdateInput {
+    public buildUpdateInput(data: Partial<LanguageFolderInput>): Prisma.LanguageFolderUpdateInput {
         return {
             ...(data.name !== undefined && { name: data.name }),
             ...(data.folderColor !== undefined && { folderColor: data.folderColor }),
@@ -47,12 +45,7 @@ export class LanguageFolderMapper {
         return entities.map((e) => this.toResponse(e));
     }
 
-    public toPaginated(
-        items: LanguageFolderDto[],
-        totalItems: number,
-        page: number,
-        pageSize: number,
-    ): PaginationDto<LanguageFolderDto> {
+    public toPaginated(items: LanguageFolderDto[], totalItems: number, page: number, pageSize: number): PaginationDto<LanguageFolderDto> {
         return new PaginationDto<LanguageFolderDto>(items, totalItems, page, pageSize);
     }
 }

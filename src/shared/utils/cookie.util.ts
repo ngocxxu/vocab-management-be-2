@@ -9,26 +9,14 @@ export class CookieUtil {
     /**
      * Set refresh token cookie with optimized settings for both Localhost and Production.
      */
-    public static setRefreshTokenCookie(
-        response: Response,
-        refreshToken: string,
-        maxAge?: number,
-    ): void {
+    public static setRefreshTokenCookie(response: Response, refreshToken: string, maxAge?: number): void {
         const isProduction = process.env.NODE_ENV === 'production';
         const { domain, secure } = this.getCookieOptions(isProduction);
 
-        const cookieValue = `${
-            this.REFRESH_TOKEN_COOKIE_NAME
-        }=${refreshToken}; HttpOnly; ${secure} SameSite=Lax; ${domain} Max-Age=${
-            maxAge || this.DEFAULT_MAX_AGE
-        }; Path=/`;
+        const cookieValue = `${this.REFRESH_TOKEN_COOKIE_NAME}=${refreshToken}; HttpOnly; ${secure} SameSite=Lax; ${domain} Max-Age=${maxAge || this.DEFAULT_MAX_AGE}; Path=/`;
 
         const existingCookies = response.getHeader('Set-Cookie');
-        const newCookies = existingCookies
-            ? Array.isArray(existingCookies)
-                ? existingCookies
-                : [existingCookies]
-            : [];
+        const newCookies = existingCookies ? (Array.isArray(existingCookies) ? existingCookies : [existingCookies]) : [];
 
         newCookies.push(cookieValue);
         response.setHeader('Set-Cookie', newCookies as string[]);
@@ -37,26 +25,14 @@ export class CookieUtil {
     /**
      * Set access token cookie with optimized settings.
      */
-    public static setAccessTokenCookie(
-        response: Response,
-        accessToken: string,
-        maxAge?: number,
-    ): void {
+    public static setAccessTokenCookie(response: Response, accessToken: string, maxAge?: number): void {
         const isProduction = process.env.NODE_ENV === 'production';
         const { domain, secure } = this.getCookieOptions(isProduction);
 
-        const cookieValue = `${
-            this.ACCESS_TOKEN_COOKIE_NAME
-        }=${accessToken}; HttpOnly; ${secure} SameSite=Lax; ${domain} Max-Age=${
-            maxAge || this.ACCESS_TOKEN_MAX_AGE
-        }; Path=/`;
+        const cookieValue = `${this.ACCESS_TOKEN_COOKIE_NAME}=${accessToken}; HttpOnly; ${secure} SameSite=Lax; ${domain} Max-Age=${maxAge || this.ACCESS_TOKEN_MAX_AGE}; Path=/`;
 
         const existingCookies = response.getHeader('Set-Cookie');
-        const newCookies = existingCookies
-            ? Array.isArray(existingCookies)
-                ? existingCookies
-                : [existingCookies]
-            : [];
+        const newCookies = existingCookies ? (Array.isArray(existingCookies) ? existingCookies : [existingCookies]) : [];
 
         newCookies.push(cookieValue);
         response.setHeader('Set-Cookie', newCookies as string[]);
@@ -65,13 +41,7 @@ export class CookieUtil {
     /**
      * Set both access and refresh token cookies
      */
-    public static setAuthCookies(
-        response: Response,
-        accessToken: string,
-        refreshToken: string,
-        accessTokenMaxAge?: number,
-        refreshTokenMaxAge?: number,
-    ): void {
+    public static setAuthCookies(response: Response, accessToken: string, refreshToken: string, accessTokenMaxAge?: number, refreshTokenMaxAge?: number): void {
         this.setAccessTokenCookie(response, accessToken, accessTokenMaxAge);
         this.setRefreshTokenCookie(response, refreshToken, refreshTokenMaxAge);
     }
@@ -88,11 +58,7 @@ export class CookieUtil {
         const accessCookieValue = `${this.ACCESS_TOKEN_COOKIE_NAME}=; HttpOnly; ${secure} SameSite=Lax; ${domain} Max-Age=0; Path=/`;
 
         const existingCookies = response.getHeader('Set-Cookie');
-        const newCookies = existingCookies
-            ? Array.isArray(existingCookies)
-                ? existingCookies
-                : [existingCookies]
-            : [];
+        const newCookies = existingCookies ? (Array.isArray(existingCookies) ? existingCookies : [existingCookies]) : [];
 
         newCookies.push(refreshCookieValue, accessCookieValue);
         response.setHeader('Set-Cookie', newCookies as string[]);

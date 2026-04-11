@@ -1,13 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, WordType } from '@prisma/client';
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { RedisService } from '@/shared/services/redis.service';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
+import { Injectable } from '@nestjs/common';
+import { Prisma, WordType } from '@prisma/client';
 
 @Injectable()
 export class WordTypeRepository extends BaseRepository {
-    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+    public constructor(
+        prismaService: PrismaService,
+        private readonly redisService: RedisService,
+    ) {
         super(prismaService);
     }
 

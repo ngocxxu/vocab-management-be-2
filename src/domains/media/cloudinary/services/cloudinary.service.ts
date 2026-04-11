@@ -1,12 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
-import { FileUploadException } from '../../exceptions';
 import * as crypto from 'crypto';
-import {
-    CloudinaryResourceType,
-    GenerateUploadSignatureInput,
-    GenerateUploadSignatureOutput,
-} from '../dto';
+import { FileUploadException } from '../../exceptions';
+import { CloudinaryResourceType, GenerateUploadSignatureInput, GenerateUploadSignatureOutput } from '../dto';
 
 @Injectable()
 export class CloudinaryService {
@@ -22,17 +18,13 @@ export class CloudinaryService {
 
         const urlMatch = cloudinaryUrl.match(/cloudinary:\/\/([^:]+):([^@]+)@(.+)/);
         if (!urlMatch) {
-            throw new Error(
-                'Invalid CLOUDINARY_URL format. Expected: cloudinary://api_key:api_secret@cloud_name',
-            );
+            throw new Error('Invalid CLOUDINARY_URL format. Expected: cloudinary://api_key:api_secret@cloud_name');
         }
 
         [, this.apiKey, this.apiSecret, this.cloudName] = urlMatch;
     }
 
-    public generateUploadSignature(
-        input: GenerateUploadSignatureInput,
-    ): GenerateUploadSignatureOutput {
+    public generateUploadSignature(input: GenerateUploadSignatureInput): GenerateUploadSignatureOutput {
         const folder = input.folder ? this.validateAndNormalizeFolder(input.folder) : undefined;
         const resourceType = input.resourceType || CloudinaryResourceType.AUDIO;
         const maxFileSize = input.maxFileSize || 10 * 1024 * 1024;
@@ -83,9 +75,7 @@ export class CloudinaryService {
         }
 
         if (!/^[a-zA-Z0-9_\/-]+$/.test(normalized)) {
-            throw new FileUploadException(
-                'Folder can only contain letters, numbers, underscores, hyphens, and forward slashes',
-            );
+            throw new FileUploadException('Folder can only contain letters, numbers, underscores, hyphens, and forward slashes');
         }
 
         return normalized;
@@ -96,9 +86,7 @@ export class CloudinaryService {
         const maxSize = 100 * 1024 * 1024;
 
         if (maxFileSize < minSize || maxFileSize > maxSize) {
-            throw new FileUploadException(
-                `Max file size must be between ${minSize} bytes (1MB) and ${maxSize} bytes (100MB)`,
-            );
+            throw new FileUploadException(`Max file size must be between ${minSize} bytes (1MB) and ${maxSize} bytes (100MB)`);
         }
     }
 

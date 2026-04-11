@@ -1,19 +1,8 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Patch,
-    Post,
-    Put,
-    UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { User, UserRole } from '@prisma/client';
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Roles } from '@/shared/decorators';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { User, UserRole } from '@prisma/client';
 import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
 import { SubjectService } from '../services';
@@ -51,10 +40,7 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create subject' })
     @ApiResponse({ status: HttpStatus.CREATED, type: SubjectDto })
-    public async create(
-        @Body() input: CreateSubjectInput,
-        @CurrentUser() user: User,
-    ): Promise<SubjectDto> {
+    public async create(@Body() input: CreateSubjectInput, @CurrentUser() user: User): Promise<SubjectDto> {
         const subject = await this.subjectService.create(input, user.id, user.role);
         this.logger.info(`Created new subject with ID ${subject.id}`);
         return subject;
@@ -66,11 +52,7 @@ export class SubjectController {
     @ApiOperation({ summary: 'Update subject' })
     @ApiResponse({ status: HttpStatus.OK, type: SubjectDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Subject not found' })
-    public async update(
-        @Param('id') id: string,
-        @Body() updateSubjectData: SubjectInput,
-        @CurrentUser() user: User,
-    ): Promise<SubjectDto> {
+    public async update(@Param('id') id: string, @Body() updateSubjectData: SubjectInput, @CurrentUser() user: User): Promise<SubjectDto> {
         const subject = await this.subjectService.update(id, updateSubjectData, user.id);
         this.logger.info(`Updated subject with ID ${id}`);
         return subject;
@@ -81,10 +63,7 @@ export class SubjectController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Reorder subjects' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
-    public async reorder(
-        @Body() input: ReorderSubjectInput,
-        @CurrentUser() user: User,
-    ): Promise<SubjectDto[]> {
+    public async reorder(@Body() input: ReorderSubjectInput, @CurrentUser() user: User): Promise<SubjectDto[]> {
         return this.subjectService.reorder(input, user.id);
     }
 

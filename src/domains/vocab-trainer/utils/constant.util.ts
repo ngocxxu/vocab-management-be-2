@@ -13,11 +13,7 @@ const getRandomTextTarget = (vocab: VocabWithTextTargets): string => {
     return vocab.textTargets[randomIndex]?.textTarget ?? '';
 };
 
-export const createQuestion = (
-    vocab: VocabWithTextTargets,
-    type: string,
-    wrongVocabs: VocabWithTextTargets[],
-) => {
+export const createQuestion = (vocab: VocabWithTextTargets, type: string, wrongVocabs: VocabWithTextTargets[]) => {
     const isSourceType = type === 'source';
 
     const content = [isSourceType ? vocab.textSource : getRandomTextTarget(vocab)];
@@ -28,7 +24,7 @@ export const createQuestion = (
     };
 
     const wrongOptions = wrongVocabs.map((item: VocabWithTextTargets) => ({
-        label: isSourceType ? getRandomTextTarget(item) : item.textSource ?? '',
+        label: isSourceType ? getRandomTextTarget(item) : (item.textSource ?? ''),
         value: item.id,
     }));
 
@@ -37,20 +33,14 @@ export const createQuestion = (
     return { systemSelected, options, content, type };
 };
 
-export function evaluateMultipleChoiceAnswers(
-    trainerId: string,
-    wordTestSelects: WordTestSelect[],
-    vocabIdMap?: Map<string, string>,
-): EvaluateResult {
+export function evaluateMultipleChoiceAnswers(trainerId: string, wordTestSelects: WordTestSelect[], vocabIdMap?: Map<string, string>): EvaluateResult {
     const createResults: Prisma.VocabTrainerResultCreateManyInput[] = [];
     let correctAnswers = 0;
 
     for (const wordTest of wordTestSelects) {
         let isCorrect = false;
 
-        const questionAnswer = wordTestSelects.find(
-            (answer) => answer.systemSelected === wordTest.userSelected,
-        );
+        const questionAnswer = wordTestSelects.find((answer) => answer.systemSelected === wordTest.userSelected);
 
         isCorrect = questionAnswer?.systemSelected === wordTest.userSelected;
 

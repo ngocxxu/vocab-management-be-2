@@ -1,5 +1,5 @@
-import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { PaginationDto } from '@/shared/dto';
+import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { UpdateVocabTrainerInput, VocabTrainerDto, VocabTrainerInput } from '../dto';
 
 export type VocabTrainerScalarPatch = {
@@ -41,10 +41,7 @@ export class VocabTrainerMapper {
         };
     }
 
-    public toScalarPatch(
-        trainerData: Omit<UpdateVocabTrainerInput, 'vocabAssignmentIds'>,
-        existing: VocabTrainer,
-    ): VocabTrainerScalarPatch {
+    public toScalarPatch(trainerData: Omit<UpdateVocabTrainerInput, 'vocabAssignmentIds'>, existing: VocabTrainer): VocabTrainerScalarPatch {
         return {
             name: trainerData.name,
             status: trainerData.status,
@@ -58,10 +55,7 @@ export class VocabTrainerMapper {
         };
     }
 
-    public buildUpdateInput(
-        trainerData: Omit<UpdateVocabTrainerInput, 'vocabAssignmentIds'>,
-        existing: VocabTrainer,
-    ): Prisma.VocabTrainerUpdateInput {
+    public buildUpdateInput(trainerData: Omit<UpdateVocabTrainerInput, 'vocabAssignmentIds'>, existing: VocabTrainer): Prisma.VocabTrainerUpdateInput {
         const p = this.toScalarPatch(trainerData, existing);
         return {
             name: p.name,
@@ -84,12 +78,7 @@ export class VocabTrainerMapper {
         return trainers.map((t) => this.toResponse(t));
     }
 
-    public toPaginated(
-        items: VocabTrainerDto[],
-        totalItems: number,
-        page: number,
-        pageSize: number,
-    ): PaginationDto<VocabTrainerDto> {
+    public toPaginated(items: VocabTrainerDto[], totalItems: number, page: number, pageSize: number): PaginationDto<VocabTrainerDto> {
         return new PaginationDto<VocabTrainerDto>(items, totalItems, page, pageSize);
     }
 }

@@ -1,35 +1,12 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    UseGuards,
-    Query,
-    BadRequestException,
-    Req,
-    Res,
-    StreamableFile,
-} from '@nestjs/common';
-import {
-    ApiBearerAuth,
-    ApiOperation,
-    ApiResponse,
-    ApiTags,
-    ApiConsumes,
-    ApiQuery,
-} from '@nestjs/swagger';
+import { LoggerService, RolesGuard } from '@/shared';
+import { CurrentUser, Roles } from '@/shared/decorators';
+import { PaginationDto } from '@/shared/dto/pagination.dto';
+import { Body, Controller, Delete, Get, HttpStatus, Param, ParseIntPipe, Post, Put, UseGuards, Query, BadRequestException, Req, Res, StreamableFile } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 import { AiService } from '../../ai/services/ai.service';
-import { LoggerService, RolesGuard } from '@/shared';
-import { CurrentUser, Roles } from '@/shared/decorators';
-import { PaginationDto } from '@/shared/dto/pagination.dto';
 import {
     VocabDto,
     VocabInput,
@@ -78,10 +55,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async find(
-        @Query() query: VocabQueryParamsInput,
-        @CurrentUser() user: User,
-    ): Promise<PaginationDto<VocabDto>> {
+    public async find(@Query() query: VocabQueryParamsInput, @CurrentUser() user: User): Promise<PaginationDto<VocabDto>> {
         return this.vocabService.find(query, user.id);
     }
 
@@ -126,10 +100,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @ApiOperation({ summary: 'Create multiple vocabs' })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
-    public async createBulk(
-        @Body() input: VocabInput[],
-        @CurrentUser() user: User,
-    ): Promise<VocabDto[]> {
+    public async createBulk(@Body() input: VocabInput[], @CurrentUser() user: User): Promise<VocabDto[]> {
         return this.vocabService.createBulk(input, user.id);
     }
 
@@ -146,22 +117,12 @@ export class VocabController {
         @CurrentUser() user: User,
     ): Promise<CreateTextTargetInput> {
         if (!input.textSource || !input.sourceLanguageCode || !input.targetLanguageCode) {
-            throw new BadRequestException(
-                'textSource, sourceLanguageCode, and targetLanguageCode are required',
-            );
+            throw new BadRequestException('textSource, sourceLanguageCode, and targetLanguageCode are required');
         }
 
-        const result = await this.aiService.translateVocab(
-            input.textSource,
-            input.sourceLanguageCode,
-            input.targetLanguageCode,
-            undefined,
-            user.id,
-        );
+        const result = await this.aiService.translateVocab(input.textSource, input.sourceLanguageCode, input.targetLanguageCode, undefined, user.id);
 
-        this.logger.info(
-            `Generated text target for user ${user.id}, textSource: ${input.textSource}`,
-        );
+        this.logger.info(`Generated text target for user ${user.id}, textSource: ${input.textSource}`);
         return result;
     }
 
@@ -171,11 +132,7 @@ export class VocabController {
     @ApiOperation({ summary: 'Update vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
-    public async update(
-        @Param('id') id: string,
-        @Body() updateVocabData: VocabInput,
-        @CurrentUser() user: User,
-    ): Promise<VocabDto> {
+    public async update(@Param('id') id: string, @Body() updateVocabData: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
         const vocab = await this.vocabService.update(id, updateVocabData, user.id);
         this.logger.info(`Updated vocab with ID ${id}`);
         return vocab;
@@ -198,10 +155,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete multiple vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async deleteBulk(
-        @Body() input: BulkDeleteInput,
-        @CurrentUser() user: User,
-    ): Promise<VocabDto[]> {
+    public async deleteBulk(@Body() input: BulkDeleteInput, @CurrentUser() user: User): Promise<VocabDto[]> {
         return this.vocabService.deleteBulk(input, user.id);
     }
 
@@ -214,11 +168,7 @@ export class VocabController {
     @ApiResponse({ status: HttpStatus.CREATED, type: CsvImportResponseDto })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid CSV file or parameters' })
     @ApiResponse({ status: HttpStatus.REQUEST_TIMEOUT, description: 'Request timeout' })
-    public async importCsv(
-        @Req() request: Request,
-        @Query() queryParams: CsvImportQueryDto,
-        @CurrentUser() user: User,
-    ): Promise<CsvImportResponseDto> {
+    public async importCsv(@Req() request: Request, @Query() queryParams: CsvImportQueryDto, @CurrentUser() user: User): Promise<CsvImportResponseDto> {
         const startTime = Date.now();
         const file = (request as RequestWithFile).file;
 
@@ -226,9 +176,7 @@ export class VocabController {
             throw new BadRequestException('CSV file is required');
         }
 
-        this.logger.info(
-            `CSV import started for user ${user.id}, file: ${file.originalname}, size: ${file.size} bytes`,
-        );
+        this.logger.info(`CSV import started for user ${user.id}, file: ${file.originalname}, size: ${file.size} bytes`);
 
         if (!file.originalname?.toLowerCase().endsWith('.csv')) {
             throw new BadRequestException('File must be a CSV file');
@@ -253,11 +201,7 @@ export class VocabController {
         }
 
         const importStartTime = Date.now();
-        const result: CsvImportResponseDto = await this.vocabService.importFromCsv(
-            rows,
-            queryParams,
-            user.id,
-        );
+        const result: CsvImportResponseDto = await this.vocabService.importFromCsv(rows, queryParams, user.id);
         const importDuration = Date.now() - importStartTime;
         const totalDuration = Date.now() - startTime;
 
@@ -274,11 +218,7 @@ export class VocabController {
     @ApiOperation({ summary: 'Export vocabs to CSV file' })
     @ApiResponse({ status: HttpStatus.OK, description: 'CSV file download' })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid query parameters' })
-    public async exportCsv(
-        @Query() query: VocabQueryParamsInput,
-        @CurrentUser() user: User,
-        @Res({ passthrough: true }) res: Response,
-    ): Promise<StreamableFile> {
+    public async exportCsv(@Query() query: VocabQueryParamsInput, @CurrentUser() user: User, @Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
         const csvBuffer: Buffer = await this.vocabService.exportToCsv(query, user.id);
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -319,11 +259,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get mastery progress over time' })
     @ApiResponse({ status: HttpStatus.OK, type: [ProgressOverTimeDto] })
-    public async getProgressOverTime(
-        @CurrentUser() user: User,
-        @Query('startDate') startDate?: string,
-        @Query('endDate') endDate?: string,
-    ): Promise<ProgressOverTimeDto[]> {
+    public async getProgressOverTime(@CurrentUser() user: User, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string): Promise<ProgressOverTimeDto[]> {
         const start = startDate ? new Date(startDate) : undefined;
         const end = endDate ? new Date(endDate) : undefined;
         const results = await this.vocabMasteryService.getProgressOverTime(user.id, start, end);
@@ -351,9 +287,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Get mastery score distribution' })
     @ApiResponse({ status: HttpStatus.OK, type: [MasteryDistributionDto] })
-    public async getMasteryDistribution(
-        @CurrentUser() user: User,
-    ): Promise<MasteryDistributionDto[]> {
+    public async getMasteryDistribution(@CurrentUser() user: User): Promise<MasteryDistributionDto[]> {
         const results = await this.vocabMasteryService.getMasteryDistribution(user.id);
         return results.map((r) => new MasteryDistributionDto(r));
     }

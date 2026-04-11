@@ -38,8 +38,6 @@ export class VocabTrainerWordDto {
         this.vocabId = entity.vocabId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
-        this.vocab = entity.vocab
-            ? new VocabDto(entity.vocab)
-            : undefined;
+        this.vocab = entity.vocab ? new VocabDto(entity.vocab) : undefined;
     }
 }

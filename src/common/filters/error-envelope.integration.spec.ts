@@ -1,16 +1,15 @@
 import 'reflect-metadata';
 
-import { Controller, Get, INestApplication, Module } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import { NextFunction, Request, Response } from 'express';
-import { nanoid } from 'nanoid';
-import request from 'supertest';
-
 import { CommonModule } from '@/common/common.module';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '@/common/filters/prisma-exception.filter';
 import { WinstonLogger } from '@/common/logger/winston.logger';
 import { VocabNotFoundException } from '@/domains/vocab/exceptions';
+import { Controller, Get, INestApplication, Module } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { NextFunction, Request, Response } from 'express';
+import { nanoid } from 'nanoid';
+import request from 'supertest';
 
 @Controller()
 class EnvelopeTestController {
@@ -38,8 +37,7 @@ describe('Error response envelope (integration)', () => {
         const winston = app.get(WinstonLogger);
         app.use((req: Request, _res: Response, next: NextFunction) => {
             const header = req.headers['x-request-id'];
-            req.requestId =
-                typeof header === 'string' && header.length > 0 ? header : nanoid();
+            req.requestId = typeof header === 'string' && header.length > 0 ? header : nanoid();
             next();
         });
         app.useGlobalFilters(new PrismaExceptionFilter(winston), new HttpExceptionFilter(winston));
@@ -67,10 +65,7 @@ describe('Error response envelope (integration)', () => {
 
     it('echoes x-request-id on error body when present', async () => {
         const id = 'client-req-abc';
-        const res = await request(app.getHttpServer())
-            .get('/throw-vocab-not-found')
-            .set('x-request-id', id)
-            .expect(404);
+        const res = await request(app.getHttpServer()).get('/throw-vocab-not-found').set('x-request-id', id).expect(404);
         expect(res.body.requestId).toBe(id);
     });
 });

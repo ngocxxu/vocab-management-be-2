@@ -2,13 +2,13 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { nanoid } from 'nanoid';
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import { nanoid } from 'nanoid';
 
 import { ApplicationModule } from './app/application.module';
-import { buildHttpErrorBody } from './common/http/error-response.util';
 import { HttpExceptionFilter, PrismaExceptionFilter } from './common/filters';
+import { buildHttpErrorBody } from './common/http/error-response.util';
 import { WinstonLogger } from './common/logger/winston.logger';
 import { SharedModule, LogInterceptor } from './shared';
 
@@ -53,11 +53,7 @@ function getCorsOptions() {
 }
 
 function createSwagger(app: INestApplication) {
-    const options = new DocumentBuilder()
-        .setTitle(SWAGGER_TITLE)
-        .setDescription(SWAGGER_DESCRIPTION)
-        .addBearerAuth()
-        .build();
+    const options = new DocumentBuilder().setTitle(SWAGGER_TITLE).setDescription(SWAGGER_DESCRIPTION).addBearerAuth().build();
 
     const document = SwaggerModule.createDocument(app, options);
     SwaggerModule.setup(process.env.SWAGGER_PREFIX || '/', app, document);
@@ -65,8 +61,7 @@ function createSwagger(app: INestApplication) {
 
 function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
     const header = req.headers['x-request-id'];
-    const fromHeader =
-        typeof header === 'string' ? header : Array.isArray(header) ? header[0] : undefined;
+    const fromHeader = typeof header === 'string' ? header : Array.isArray(header) ? header[0] : undefined;
     const trimmed = fromHeader?.trim();
     req.requestId = trimmed && trimmed.length > 0 ? trimmed : `req_${Date.now()}_${nanoid(7)}`;
     next();
@@ -93,9 +88,7 @@ function createMulterMiddleware(maxFileSize: number, winstonLogger: WinstonLogge
                             path: req.originalUrl,
                             requestId: req.requestId,
                         });
-                        const detail = `File size exceeds the maximum allowed limit of ${maxFileSize} bytes (${getFileSizeInMB(
-                            maxFileSize,
-                        )}MB)`;
+                        const detail = `File size exceeds the maximum allowed limit of ${maxFileSize} bytes (${getFileSizeInMB(maxFileSize)}MB)`;
                         return res.status(413).json(buildHttpErrorBody(413, detail, req));
                     }
                     winstonLogger.logError(`Multer error: ${err.code} - ${err.message}`, undefined, {
@@ -129,9 +122,7 @@ function createTimeoutMiddleware(timeoutMs: number, winstonLogger: WinstonLogger
                 requestId: req.requestId,
             });
             if (!res.headersSent) {
-                res.status(408).json(
-                    buildHttpErrorBody(408, 'Request took too long to process', req),
-                );
+                res.status(408).json(buildHttpErrorBody(408, 'Request took too long to process', req));
             }
         });
         next();
@@ -155,10 +146,7 @@ async function bootstrap(): Promise<void> {
         }),
     );
 
-    app.useGlobalFilters(
-        new PrismaExceptionFilter(winstonLogger),
-        new HttpExceptionFilter(winstonLogger),
-    );
+    app.useGlobalFilters(new PrismaExceptionFilter(winstonLogger), new HttpExceptionFilter(winstonLogger));
 
     app.enableCors(getCorsOptions());
 

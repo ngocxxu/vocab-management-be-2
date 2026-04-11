@@ -1,11 +1,11 @@
+import { getOrderBy, getPagination, IResponse, PaginationDto } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
-import { getOrderBy, getPagination, IResponse, PaginationDto } from '@/shared';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
-import { LanguageFolderBadRequestException, LanguageFolderNotFoundException } from '../exceptions';
-import { LanguageFolderMapper } from '../mappers';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
 import { LanguageFolderParamsInput } from '../dto/language-folder-params.input';
+import { LanguageFolderBadRequestException, LanguageFolderNotFoundException } from '../exceptions';
+import { LanguageFolderMapper } from '../mappers';
 import { LanguageFolderRepository } from '../repositories';
 
 @Injectable()
@@ -26,10 +26,7 @@ export class LanguageFolderService {
         };
     }
 
-    public async find(
-        query: LanguageFolderParamsInput,
-        userId: string,
-    ): Promise<PaginationDto<LanguageFolderDto>> {
+    public async find(query: LanguageFolderParamsInput, userId: string): Promise<PaginationDto<LanguageFolderDto>> {
         const { page, pageSize, skip, take } = getPagination({
             page: query.page,
             pageSize: query.pageSize,
@@ -37,19 +34,9 @@ export class LanguageFolderService {
             defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
         });
 
-        const orderBy = getOrderBy(
-            query.sortBy,
-            query.sortOrder,
-            'createdAt',
-        ) as Prisma.LanguageFolderOrderByWithRelationInput;
+        const orderBy = getOrderBy(query.sortBy, query.sortOrder, 'createdAt') as Prisma.LanguageFolderOrderByWithRelationInput;
 
-        const { totalItems, folders } = await this.languageFolderRepository.findWithPagination(
-            query,
-            userId,
-            skip,
-            take,
-            orderBy,
-        );
+        const { totalItems, folders } = await this.languageFolderRepository.findWithPagination(query, userId, skip, take, orderBy);
 
         const items = this.languageFolderMapper.toResponseList(folders);
         return this.languageFolderMapper.toPaginated(items, totalItems, page, pageSize);
@@ -65,36 +52,23 @@ export class LanguageFolderService {
         return this.languageFolderMapper.toResponse(folder);
     }
 
-    public async create(
-        createFolderData: LanguageFolderInput,
-        userId: string,
-        role?: UserRole,
-    ): Promise<LanguageFolderDto> {
+    public async create(createFolderData: LanguageFolderInput, userId: string, role?: UserRole): Promise<LanguageFolderDto> {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'languageFolder');
         }
-        const folder = await this.languageFolderRepository.create(
-            this.languageFolderMapper.toCreatePayload(createFolderData, userId),
-        );
+        const folder = await this.languageFolderRepository.create(this.languageFolderMapper.toCreatePayload(createFolderData, userId));
 
         return this.languageFolderMapper.toResponse(folder);
     }
 
-    public async update(
-        id: string,
-        updateFolderData: Partial<LanguageFolderInput>,
-        userId: string,
-    ): Promise<LanguageFolderDto> {
+    public async update(id: string, updateFolderData: Partial<LanguageFolderInput>, userId: string): Promise<LanguageFolderDto> {
         const existingFolder = await this.languageFolderRepository.findById(id, userId);
 
         if (!existingFolder) {
             throw new LanguageFolderBadRequestException('Language folder not found or unauthorized');
         }
 
-        const folder = await this.languageFolderRepository.update(
-            id,
-            this.languageFolderMapper.buildUpdateInput(updateFolderData),
-        );
+        const folder = await this.languageFolderRepository.update(id, this.languageFolderMapper.buildUpdateInput(updateFolderData));
 
         return this.languageFolderMapper.toResponse(folder);
     }

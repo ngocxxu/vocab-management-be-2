@@ -1,25 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import {
-    Prisma,
-    ReminderChannel,
-    ReminderScheduleKind,
-    ReminderScheduleStatus,
-    User,
-    VocabTrainer,
-} from '@prisma/client';
+import { Prisma, ReminderChannel, ReminderScheduleKind, ReminderScheduleStatus, User, VocabTrainer } from '@prisma/client';
 import { TemplateData } from '../../notification/email/utils/type';
-import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { ESCALATION_CONFIG, REMINDER_CONFIG } from '../config/reminder.config';
+import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { EEmailTemplate, EReminderTitle } from '../utils';
 import { addUtcDays } from '../utils/reminder-date.util';
 import { buildReminderDedupeKey } from '../utils/reminder-dedupe-key.util';
 import { ReminderService } from './reminder.service';
 
-const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [
-    ReminderScheduleStatus.PENDING,
-    ReminderScheduleStatus.CLAIMED,
-    ReminderScheduleStatus.QUEUED,
-];
+const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [ReminderScheduleStatus.PENDING, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED];
 
 export interface AfterExamReminderInput {
     trainerId: string;
@@ -37,12 +26,7 @@ export interface AfterExamReminderInput {
 export class VocabTrainerReminderAfterExamService {
     public constructor(private readonly reminderService: ReminderService) {}
 
-    public async cancelSchedulesForTrainerTx(
-        tx: Prisma.TransactionClient,
-        trainerId: string,
-        cancelledBy: string,
-        reason: string,
-    ): Promise<void> {
+    public async cancelSchedulesForTrainerTx(tx: Prisma.TransactionClient, trainerId: string, cancelledBy: string, reason: string): Promise<void> {
         const now = new Date();
         await tx.reminderSchedule.updateMany({
             where: {
@@ -62,10 +46,7 @@ export class VocabTrainerReminderAfterExamService {
         });
     }
 
-    public async syncRemindersAfterExamSubmission(
-        tx: Prisma.TransactionClient,
-        input: AfterExamReminderInput,
-    ): Promise<void> {
+    public async syncRemindersAfterExamSubmission(tx: Prisma.TransactionClient, input: AfterExamReminderInput): Promise<void> {
         await this.cancelSchedulesForTrainerTx(tx, input.trainerId, input.userId, 'exam_submitted');
 
         if (input.reminderDisabled) {
@@ -78,11 +59,7 @@ export class VocabTrainerReminderAfterExamService {
                 entityId: input.trainerId,
                 reminderType: ReminderScheduleKind.INITIAL,
                 status: {
-                    in: [
-                        ReminderScheduleStatus.SENT,
-                        ReminderScheduleStatus.FAILED_TERMINAL,
-                        ReminderScheduleStatus.EXPIRED,
-                    ],
+                    in: [ReminderScheduleStatus.SENT, ReminderScheduleStatus.FAILED_TERMINAL, ReminderScheduleStatus.EXPIRED],
                 },
             },
         });
@@ -123,10 +100,7 @@ export class VocabTrainerReminderAfterExamService {
                 },
             });
         } catch (e: unknown) {
-            if (
-                e instanceof Prisma.PrismaClientKnownRequestError &&
-                (e.code === 'P2002' || e.code === 'P2034')
-            ) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2002' || e.code === 'P2034')) {
                 return;
             }
             throw e;
@@ -149,11 +123,6 @@ export class VocabTrainerReminderAfterExamService {
 
         const delayInMs = REMINDER_CONFIG.chain.initialDelayDays * 24 * 60 * 60 * 1000;
 
-        await this.reminderService.scheduleCreateNotification(
-            [user.id],
-            EReminderTitle.VOCAB_TRAINER,
-            sendDataNotification,
-            delayInMs,
-        );
+        await this.reminderService.scheduleCreateNotification([user.id], EReminderTitle.VOCAB_TRAINER, sendDataNotification, delayInMs);
     }
 }

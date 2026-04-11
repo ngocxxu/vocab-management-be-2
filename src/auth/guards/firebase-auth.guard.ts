@@ -1,15 +1,9 @@
-import {
-    CanActivate,
-    ExecutionContext,
-    Injectable,
-    UnauthorizedException,
-} from '@nestjs/common';
+import type { AuthUser } from '../interfaces/auth-user.interface';
+import { PrismaService } from '@/shared/services/prisma.service';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 
-import { PrismaService } from '@/shared/services/prisma.service';
-
-import type { AuthUser } from '../interfaces/auth-user.interface';
 import { AuthTokenService } from '../services/auth-token.service';
 import { bindAuthUserToRequest } from '../utils/bind-request-user.util';
 
@@ -21,9 +15,7 @@ export class FirebaseAuthGuard implements CanActivate {
     ) {}
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
-        const request = context.switchToHttp().getRequest<
-            Request & { authUser?: AuthUser; currentUser?: User }
-        >();
+        const request = context.switchToHttp().getRequest<Request & { authUser?: AuthUser; currentUser?: User }>();
         const token = this.authTokenService.extractBearerToken(request);
         if (!token) {
             throw new UnauthorizedException('No authentication token provided');

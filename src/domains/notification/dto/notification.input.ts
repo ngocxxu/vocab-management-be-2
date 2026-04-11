@@ -3,13 +3,7 @@ import { ApiProperty, PickType } from '@nestjs/swagger';
 import { InputJsonValue, JsonValue } from '@prisma/client/runtime/library';
 import { NotificationDto } from './notification.dto';
 
-export class NotificationInput extends PickType(NotificationDto, [
-    'type',
-    'action',
-    'priority',
-    'isActive',
-    'expiresAt',
-] as const) {
+export class NotificationInput extends PickType(NotificationDto, ['type', 'action', 'priority', 'isActive', 'expiresAt'] as const) {
     @ApiProperty({ description: 'Notification data as JSON object' })
     public readonly data: InputJsonValue;
 
@@ -27,14 +21,7 @@ export class NotificationInput extends PickType(NotificationDto, [
     public readonly recipientUserIds: string[];
 }
 
-export class UpdateNotificationInput extends PickType(NotificationDto, [
-    'type',
-    'action',
-    'priority',
-    'data',
-    'isActive',
-    'expiresAt',
-] as const) {
+export class UpdateNotificationInput extends PickType(NotificationDto, ['type', 'action', 'priority', 'data', 'isActive', 'expiresAt'] as const) {
     @ApiProperty({
         description: 'Notification data as JSON object',
         example: {

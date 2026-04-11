@@ -1,22 +1,12 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpStatus,
-    Param,
-    Post,
-    Put,
-    UseGuards,
-} from '@nestjs/common';
+import { IResponse, LoggerService, RestrictedGuard, RolesGuard } from '@/shared';
+import { Roles } from '@/shared/decorators';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { UserRole } from '@prisma/client';
-import { IResponse, LoggerService, RestrictedGuard, RolesGuard } from '@/shared';
 
-import { Roles } from '@/shared/decorators';
-import { UserPipe } from '../pipes';
 import { UserDto, UserInput } from '../dto';
+import { UserPipe } from '../pipes';
 import { UserService } from '../services';
 
 @Controller('users')

@@ -1,18 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
-import { AuthError } from '@supabase/supabase-js';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
 import { jwtDecode } from '@/shared/utils/jwt.util';
+import { Injectable } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { AuthError } from '@supabase/supabase-js';
 import { UserDto } from '../../user/dto';
 import { UserRepository } from '../../user/repositories';
-import {
-    AuthBadRequestException,
-    AuthSupabaseMessageException,
-    AuthUnauthorizedException,
-    InvalidCredentialsException,
-} from '../exceptions';
 import { OAuthResponseDto, SessionDto, SignUpInput } from '../dto';
+import { AuthBadRequestException, AuthSupabaseMessageException, AuthUnauthorizedException, InvalidCredentialsException } from '../exceptions';
 import { SignInResponse } from '../utils';
 
 @Injectable()
@@ -113,9 +108,7 @@ export class AuthService {
 
         const decodedToken = jwtDecode(data.session.access_token);
 
-        const user = decodedToken?.sub
-            ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
-            : null;
+        const user = decodedToken?.sub ? await this.userRepository.findBySupabaseUserId(decodedToken.sub) : null;
 
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
@@ -128,10 +121,7 @@ export class AuthService {
         };
     }
 
-    public async signInWithOAuth(
-        provider: 'google' | 'github' | 'facebook' | 'apple',
-        redirectTo?: string,
-    ): Promise<OAuthResponseDto> {
+    public async signInWithOAuth(provider: 'google' | 'github' | 'facebook' | 'apple', redirectTo?: string): Promise<OAuthResponseDto> {
         const { data, error } = await this.auth.signInWithOAuth({
             provider,
             options: {
@@ -153,9 +143,7 @@ export class AuthService {
             this.raiseAuthError(error, 'verifyToken');
         }
 
-        const user = data.user?.id
-            ? await this.userRepository.findBySupabaseUserId(data.user.id)
-            : null;
+        const user = data.user?.id ? await this.userRepository.findBySupabaseUserId(data.user.id) : null;
 
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
@@ -178,9 +166,7 @@ export class AuthService {
 
         const decodedToken = jwtDecode(data.session.access_token);
 
-        const user = decodedToken?.sub
-            ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
-            : null;
+        const user = decodedToken?.sub ? await this.userRepository.findBySupabaseUserId(decodedToken.sub) : null;
 
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
@@ -215,11 +201,7 @@ export class AuthService {
         return { message: 'Password reset email sent successfully' };
     }
 
-    public async verifyOtp(
-        email: string,
-        token: string,
-        type: 'signup' | 'recovery' | 'email_change',
-    ): Promise<SessionDto> {
+    public async verifyOtp(email: string, token: string, type: 'signup' | 'recovery' | 'email_change'): Promise<SessionDto> {
         const { data, error } = await this.auth.verifyOtp({
             email,
             token,
@@ -235,9 +217,7 @@ export class AuthService {
 
         const decodedToken = jwtDecode(data.session.access_token);
 
-        const user = decodedToken?.sub
-            ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
-            : null;
+        const user = decodedToken?.sub ? await this.userRepository.findBySupabaseUserId(decodedToken.sub) : null;
 
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
@@ -350,20 +330,13 @@ export class AuthService {
             lastName = (metadata.last_name as string) || (metadata.family_name as string) || '';
         }
 
-        const avatar =
-            (metadata.avatar_url as string) ||
-            (metadata.picture as string) ||
-            (metadata.photo_url as string) ||
-            null;
+        const avatar = (metadata.avatar_url as string) || (metadata.picture as string) || (metadata.photo_url as string) || null;
 
         const phone = supabaseUser.phone || (metadata.phone as string) || null;
 
         const roleFromMetadata = metadata.role as string;
         const validRoles = Object.values(UserRole);
-        const role =
-            roleFromMetadata && validRoles.includes(roleFromMetadata as UserRole)
-                ? (roleFromMetadata as UserRole)
-                : UserRole.GUEST;
+        const role = roleFromMetadata && validRoles.includes(roleFromMetadata as UserRole) ? (roleFromMetadata as UserRole) : UserRole.GUEST;
 
         return {
             email,
@@ -380,9 +353,7 @@ export class AuthService {
             if (error.message === 'Invalid login credentials') {
                 throw new InvalidCredentialsException();
             }
-            const message =
-                this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] ||
-                error.message;
+            const message = this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] || error.message;
             throw new AuthSupabaseMessageException(message);
         }
         this.logger.error(`Authentication ${operation} failed: ${String(error)}`);

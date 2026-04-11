@@ -1,14 +1,5 @@
 import { Logger } from '@nestjs/common';
-import {
-    WebSocketGateway,
-    WebSocketServer,
-    SubscribeMessage,
-    OnGatewayInit,
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    MessageBody,
-    ConnectedSocket,
-} from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { MultipleChoiceQuestion } from '../../../ai/utils/type.util';
 
@@ -16,19 +7,14 @@ import { MultipleChoiceQuestion } from '../../../ai/utils/type.util';
     cors: { origin: '*', credentials: true },
     namespace: '/notification',
 })
-export class NotificationGateway
-    implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
+export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
     public server: Server;
 
     private readonly logger = new Logger('NotificationGateway');
 
     @SubscribeMessage('join-user-room')
-    public handleJoinUserRoom(
-        @MessageBody() data: { userId: string },
-        @ConnectedSocket() client: Socket,
-    ): void {
+    public handleJoinUserRoom(@MessageBody() data: { userId: string }, @ConnectedSocket() client: Socket): void {
         if (data.userId) {
             this.joinUserRoom(data.userId, client);
             client.emit('joined-user-room', { userId: data.userId });

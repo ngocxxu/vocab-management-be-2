@@ -1,5 +1,5 @@
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/shared/services/prisma.service';
+import { Prisma } from '@prisma/client';
 
 export async function withTransaction<T>(
     prisma: PrismaService,

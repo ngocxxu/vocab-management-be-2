@@ -1,10 +1,10 @@
+import { EReminderType } from '@/domains/reminder/utils';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Global, Module } from '@nestjs/common';
-import { EReminderType } from '@/domains/reminder/utils';
-import { DEAD_LETTER_QUEUE, WORKLOAD_QUEUE_NAMES } from './constants/queue.constants';
 import { DEAD_LETTER_QUEUE_DEFAULT_OPTIONS, QUEUE_CONFIG } from './config/queue.config';
+import { DEAD_LETTER_QUEUE, WORKLOAD_QUEUE_NAMES } from './constants/queue.constants';
 import { JobFailureService } from './dlq/job-failure.service';
 import { QueueFailureListener } from './dlq/queue-failure.listener';
 import { AudioEvaluationProducer } from './producers/audio-evaluation.producer';
@@ -52,12 +52,7 @@ const producers = [
 
 @Global()
 @Module({
-    imports: [
-        ...workloadBullModules,
-        deadLetterBull,
-        ...workloadBoardModules,
-        deadLetterBoard,
-    ],
+    imports: [...workloadBullModules, deadLetterBull, ...workloadBoardModules, deadLetterBoard],
     providers: [...producers, JobFailureService, QueueFailureListener],
     exports: [BullModule, ...producers],
 })

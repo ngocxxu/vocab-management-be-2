@@ -25,10 +25,8 @@ export class RedisKeyManager {
      */
     public static readonly vocab = {
         byId: (id: string) => this.generateKey(RedisPrefix.VOCAB, 'id', id),
-        byTextSource: (textSource: string) =>
-            this.generateKey(RedisPrefix.VOCAB, 'text', textSource),
-        byLanguage: (sourceLang: string, targetLang: string) =>
-            this.generateKey(RedisPrefix.VOCAB, 'lang', sourceLang, targetLang),
+        byTextSource: (textSource: string) => this.generateKey(RedisPrefix.VOCAB, 'text', textSource),
+        byLanguage: (sourceLang: string, targetLang: string) => this.generateKey(RedisPrefix.VOCAB, 'lang', sourceLang, targetLang),
         bySubject: (subjectId: string) => this.generateKey(RedisPrefix.VOCAB, 'subject', subjectId),
         list: (filters?: string) => this.generateKey(RedisPrefix.VOCAB, 'list', filters || 'all'),
         count: () => this.generateKey(RedisPrefix.VOCAB, 'count'),
@@ -41,14 +39,10 @@ export class RedisKeyManager {
         byId: (id: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'id', id),
         byStatus: (status: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'status', status),
         byUser: (userId: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'user', userId),
-        questions: (trainerId: string) =>
-            this.generateKey(RedisPrefix.VOCAB_TRAINER, 'questions', trainerId),
-        results: (trainerId: string) =>
-            this.generateKey(RedisPrefix.VOCAB_TRAINER, 'results', trainerId),
-        progress: (trainerId: string, userId: string) =>
-            this.generateKey(RedisPrefix.VOCAB_TRAINER, 'progress', trainerId, userId),
-        list: (filters?: string) =>
-            this.generateKey(RedisPrefix.VOCAB_TRAINER, 'list', filters || 'all'),
+        questions: (trainerId: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'questions', trainerId),
+        results: (trainerId: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'results', trainerId),
+        progress: (trainerId: string, userId: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'progress', trainerId, userId),
+        list: (filters?: string) => this.generateKey(RedisPrefix.VOCAB_TRAINER, 'list', filters || 'all'),
     };
 
     /**
@@ -60,8 +54,7 @@ export class RedisKeyManager {
         session: (userId: string) => this.generateKey(RedisPrefix.USER, 'session', userId),
         preferences: (userId: string) => this.generateKey(RedisPrefix.USER, 'preferences', userId),
         stats: (userId: string) => this.generateKey(RedisPrefix.USER, 'stats', userId),
-        learningProgress: (userId: string) =>
-            this.generateKey(RedisPrefix.USER, 'progress', userId),
+        learningProgress: (userId: string) => this.generateKey(RedisPrefix.USER, 'progress', userId),
     };
 
     /**
@@ -77,8 +70,7 @@ export class RedisKeyManager {
      * Generate cache-related keys
      */
     public static readonly cache = {
-        api: (endpoint: string, params?: string) =>
-            this.generateKey(RedisPrefix.CACHE, 'api', endpoint, params || ''),
+        api: (endpoint: string, params?: string) => this.generateKey(RedisPrefix.CACHE, 'api', endpoint, params || ''),
         config: (key: string) => this.generateKey(RedisPrefix.CACHE, 'config', key),
         stats: (type: string) => this.generateKey(RedisPrefix.CACHE, 'stats', type),
     };
@@ -87,8 +79,7 @@ export class RedisKeyManager {
      * Generate lock-related keys
      */
     public static readonly lock = {
-        resource: (resource: string, id: string) =>
-            this.generateKey(RedisPrefix.LOCK, resource, id),
+        resource: (resource: string, id: string) => this.generateKey(RedisPrefix.LOCK, resource, id),
         user: (userId: string) => this.generateKey(RedisPrefix.LOCK, 'user', userId),
         trainer: (trainerId: string) => this.generateKey(RedisPrefix.LOCK, 'trainer', trainerId),
     };
@@ -113,8 +104,7 @@ export class RedisKeyManager {
     };
 
     public static readonly quota = {
-        vocabDaily: (userId: string, dateStr: string) =>
-            this.generateKey(RedisPrefix.QUOTA, 'vocab', userId, dateStr),
+        vocabDaily: (userId: string, dateStr: string) => this.generateKey(RedisPrefix.QUOTA, 'vocab', userId, dateStr),
     };
 
     /**

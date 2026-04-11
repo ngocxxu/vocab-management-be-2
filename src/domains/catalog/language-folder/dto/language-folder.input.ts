@@ -1,12 +1,7 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
 import { LanguageFolderDto } from './language-folder.dto';
 
-export class LanguageFolderInput extends PickType(LanguageFolderDto, [
-    'name',
-    'folderColor',
-    'sourceLanguageCode',
-    'targetLanguageCode',
-] as const) {
+export class LanguageFolderInput extends PickType(LanguageFolderDto, ['name', 'folderColor', 'sourceLanguageCode', 'targetLanguageCode'] as const) {
     @ApiProperty({
         description: 'Name of the language folder',
         example: 'My English Folder',

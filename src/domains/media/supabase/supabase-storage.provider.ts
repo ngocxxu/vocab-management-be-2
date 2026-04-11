@@ -12,12 +12,7 @@ export class SupabaseStorageProvider {
         this.client = createClient(url, key);
     }
 
-    public async upload(
-        bucket: string,
-        path: string,
-        data: Buffer,
-        contentType?: string,
-    ): Promise<void> {
+    public async upload(bucket: string, path: string, data: Buffer, contentType?: string): Promise<void> {
         const { error } = await this.client.storage.from(bucket).upload(path, data, {
             contentType,
             upsert: true,

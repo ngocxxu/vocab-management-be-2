@@ -1,12 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-    Notification,
-    NotificationAction,
-    NotificationRecipient,
-    NotificationType,
-    PriorityLevel,
-    User,
-} from '@prisma/client';
+import { Notification, NotificationAction, NotificationRecipient, NotificationType, PriorityLevel, User } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { NotificationRecipientDto } from '.';
 
@@ -71,8 +64,6 @@ export class NotificationDto {
         this.expiresAt = entity.expiresAt;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
-        this.recipients = entity.notificationRecipients?.map(
-            (recipient) => new NotificationRecipientDto(recipient),
-        );
+        this.recipients = entity.notificationRecipients?.map((recipient) => new NotificationRecipientDto(recipient));
     }
 }

@@ -1,25 +1,14 @@
+import { buildHttpErrorBody } from '@/common/http/error-response.util';
+import { WinstonLogger } from '@/common/logger/winston.logger';
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 
-import { buildHttpErrorBody } from '@/common/http/error-response.util';
-import { WinstonLogger } from '@/common/logger/winston.logger';
-
-@Catch(
-    Prisma.PrismaClientKnownRequestError,
-    Prisma.PrismaClientUnknownRequestError,
-    Prisma.PrismaClientValidationError,
-)
+@Catch(Prisma.PrismaClientKnownRequestError, Prisma.PrismaClientUnknownRequestError, Prisma.PrismaClientValidationError)
 export class PrismaExceptionFilter implements ExceptionFilter {
     public constructor(private readonly logger: WinstonLogger) {}
 
-    public catch(
-        exception:
-            | Prisma.PrismaClientKnownRequestError
-            | Prisma.PrismaClientUnknownRequestError
-            | Prisma.PrismaClientValidationError,
-        host: ArgumentsHost,
-    ): void {
+    public catch(exception: Prisma.PrismaClientKnownRequestError | Prisma.PrismaClientUnknownRequestError | Prisma.PrismaClientValidationError, host: ArgumentsHost): void {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();
         const request = ctx.getRequest<Request>();
@@ -39,7 +28,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
             meta.body = request.body;
         }
 
-        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR.valueOf()) {
             this.logger.logError(message, exception.stack, meta);
         } else {
             this.logger.logWarn(message, meta);
@@ -48,12 +37,11 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         response.status(statusCode).json(body);
     }
 
-    private mapException(
-        exception:
-            | Prisma.PrismaClientKnownRequestError
-            | Prisma.PrismaClientUnknownRequestError
-            | Prisma.PrismaClientValidationError,
-    ): { statusCode: number; message: string; prismaCode?: string } {
+    private mapException(exception: Prisma.PrismaClientKnownRequestError | Prisma.PrismaClientUnknownRequestError | Prisma.PrismaClientValidationError): {
+        statusCode: number;
+        message: string;
+        prismaCode?: string;
+    } {
         if (exception instanceof Prisma.PrismaClientValidationError) {
             return {
                 statusCode: HttpStatus.BAD_REQUEST,
@@ -74,11 +62,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         switch (code) {
             case 'P2002': {
                 const target = exception.meta?.target;
-                const fields = Array.isArray(target)
-                    ? target.join(', ')
-                    : target != null
-                      ? String(target)
-                      : 'unknown';
+                const fields = Array.isArray(target) ? target.join(', ') : target !== undefined && target !== null ? String(target) : 'unknown';
                 return {
                     statusCode: HttpStatus.CONFLICT,
                     message: `Unique constraint violation on: ${fields}`,
