@@ -15,10 +15,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     public async onModuleInit(): Promise<void> {
-        const redisUrl = this.configService.get<string>('REDIS_URL');
-        if (!redisUrl) {
-            throw new Error('REDIS_URL environment variable is required');
-        }
+        const redisUrl = this.configService.getOrThrow<string>('redis.url');
 
         this.redisClient = new Redis(redisUrl, {
             lazyConnect: true,

@@ -3,7 +3,9 @@ import { ExpressAdapter } from '@bull-board/express';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
+import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { envConfigLoaders, validationSchema } from '../config';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -32,8 +34,17 @@ import { WordTypeModule } from './word-type/word-type.module';
 
 @Module({
     imports: [
-        BullModule.forRoot({
-            redis: process.env.REDIS_URL,
+        NestConfigModule.forRoot({
+            isGlobal: true,
+            load: envConfigLoaders,
+            validationSchema,
+            validationOptions: { abortEarly: false },
+        }),
+        BullModule.forRootAsync({
+            inject: [ConfigService],
+            useFactory: (configService: ConfigService) => ({
+                redis: configService.getOrThrow<string>('redis.url'),
+            }),
         }),
         BullBoardModule.forRoot({
             route: '/admin/queues',
@@ -68,7 +79,8 @@ import { WordTypeModule } from './word-type/word-type.module';
             adapter: BullAdapter,
         }),
         ThrottlerModule.forRootAsync({
-            useFactory: (): ThrottlerModuleOptions => ({
+            inject: [ConfigService],
+            useFactory: (configService: ConfigService): ThrottlerModuleOptions => ({
                 throttlers: [
                     {
                         ttl: 60000,
@@ -76,7 +88,7 @@ import { WordTypeModule } from './word-type/word-type.module';
                     },
                 ],
                 storage: new ThrottlerStorageRedisService(
-                    process.env.REDIS_URL || 'redis://localhost:6379',
+                    configService.getOrThrow<string>('redis.url'),
                 ) as unknown as ThrottlerStorage,
             }),
         }),

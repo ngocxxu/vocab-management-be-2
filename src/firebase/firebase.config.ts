@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { LoggerService } from '../modules/common';
 
@@ -6,7 +7,10 @@ import { LoggerService } from '../modules/common';
 export class FirebaseConfig implements OnModuleInit {
     private firebaseApp: admin.app.App;
 
-    public constructor(private readonly logger: LoggerService) {}
+    public constructor(
+        private readonly logger: LoggerService,
+        private readonly configService: ConfigService,
+    ) {}
 
     public onModuleInit(): void {
         this.initializeFirebase();
@@ -33,11 +37,12 @@ export class FirebaseConfig implements OnModuleInit {
             }
 
             // Initialize Firebase Admin SDK
+            const privateKey = this.configService.getOrThrow<string>('firebase.privateKey');
             this.firebaseApp = admin.initializeApp({
                 credential: admin.credential.cert({
-                    projectId: process.env.FCM_PROJECT_ID,
-                    clientEmail: process.env.FCM_CLIENT_EMAIL,
-                    privateKey: process.env.FCM_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+                    projectId: this.configService.getOrThrow<string>('firebase.projectId'),
+                    clientEmail: this.configService.getOrThrow<string>('firebase.clientEmail'),
+                    privateKey: privateKey.replace(/\\n/g, '\n'),
                 }),
             });
 

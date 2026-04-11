@@ -158,7 +158,7 @@ export class AuthService {
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: redirectTo ?? `${process.env.APP_URL}/auth/callback`,
+                    redirectTo: redirectTo ?? '',
                 },
             });
 
