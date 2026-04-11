@@ -25,7 +25,7 @@ export class SSEController {
         // Find the matching domain from allowed origins
         const corsOrigin = allowedOrigins.find((origin) => origin === requestOrigin) || 'http://localhost:5173';
 
-        // Set SSE headers with proper CORS for cookie-based authentication
+        // Set SSE headers with proper CORS (Bearer auth via standard API client)
         response.writeHead(HttpStatus.OK, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',

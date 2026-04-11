@@ -10,7 +10,6 @@ export default registerAs('app', () => ({
     swaggerUser: process.env.SWAGGER_USER as string,
     swaggerPassword: process.env.SWAGGER_PASSWORD as string,
     healthToken: process.env.HEALTH_TOKEN || '',
-    domain: process.env.DOMAIN || '',
     frontendUrl: process.env.FRONTEND_URL as string,
     cloudinaryUrl: process.env.CLOUDINARY_URL as string,
     openrouterApiKey: process.env.OPENROUTER_API_KEY || '',

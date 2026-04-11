@@ -14,7 +14,6 @@ export const validationSchema = Joi.object({
 
     HEALTH_TOKEN: Joi.string().allow(''),
 
-    DOMAIN: Joi.string().allow(''),
     FRONTEND_URL: Joi.string().uri().required(),
 
     CLOUDINARY_URL: Joi.string().required(),

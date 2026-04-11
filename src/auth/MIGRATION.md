@@ -4,7 +4,7 @@
 
 `ApplicationModule` now registers **`GlobalAuthGuard`** instead of the legacy Supabase **`AuthGuard`**. Protected routes expect **`Authorization: Bearer <token>`** where the token is either an **app JWT** (HS256, `JWT_SECRET` / `JWT_ISSUER`) or a **Firebase ID token** (default strategy **`combined`**: try JWT, then Firebase per plan rules).
 
-Cookie-only Supabase sessions **no longer** satisfy the global guard unless you add **`@Public()`** or the client sends a Bearer token.
+The API **does not** set auth **`Set-Cookie`** headers. Use tokens from **`SessionDto`** (`access_token`, `refresh_token`) and send **`Authorization: Bearer <access_token>`** on protected routes.
 
 ## `request.authUser` and `request.currentUser`
 

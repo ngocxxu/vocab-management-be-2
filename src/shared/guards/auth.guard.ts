@@ -6,7 +6,6 @@ import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { LoggerService } from '../services/logger.service';
 import { PrismaService } from '../services/prisma.service';
-import { CookieUtil } from '../utils/cookie.util';
 import { RequestWithUser } from '../utils/type.util';
 
 @Injectable()
@@ -30,13 +29,7 @@ export class AuthGuard implements CanActivate {
             return true;
         }
 
-        // Try to get token from cookies first, then from Authorization header
-        let token = this.extractTokenFromCookies(request.headers.cookie);
-
-        if (!token) {
-            // Fallback to Authorization header
-            token = this.extractTokenFromHeader(request.headers.authorization);
-        }
+        const token = this.extractTokenFromHeader(request.headers.authorization);
 
         if (!token) {
             this.logger.warn('No authentication token provided');
@@ -69,30 +62,5 @@ export class AuthGuard implements CanActivate {
         }
         const [, token] = header.split(' ');
         return token || null;
-    }
-
-    private extractTokenFromCookies(cookieHeader: string | undefined): string | null {
-        if (!cookieHeader) {
-            this.logger.debug('No cookie header in request');
-            return null;
-        }
-
-        const cookies = this.parseCookies(cookieHeader);
-        const token = cookies[CookieUtil.getAccessTokenCookieName()];
-
-        if (!token) {
-            this.logger.debug('Access token cookie not found');
-        }
-
-        return token || null;
-    }
-
-    private parseCookies(cookieHeader: string): Record<string, string> {
-        return Object.fromEntries(
-            cookieHeader.split(';').map((cookie) => {
-                const [key, ...v] = cookie.trim().split('=');
-                return [key, decodeURIComponent(v.join('='))];
-            }),
-        );
     }
 }

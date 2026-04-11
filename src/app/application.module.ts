@@ -37,7 +37,7 @@ import { envConfigLoaders, validationSchema } from '../config';
             isGlobal: true,
             load: envConfigLoaders,
             validationSchema,
-            validationOptions: { abortEarly: false },
+            validationOptions: { abortEarly: false, allowUnknown: true },
         }),
         BullModule.forRootAsync({
             inject: [ConfigService],

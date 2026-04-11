@@ -1,8 +1,8 @@
-import { CookieUtil, LoggerService } from '@/shared';
-import { ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
-import { BadRequestException, Body, Controller, Get, HttpStatus, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { LoggerService } from '@/shared';
+import { CurrentUser, ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
+import { BadRequestException, Body, Controller, Get, HttpStatus, Post, UnauthorizedException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Response, Request } from 'express';
+import { User } from '@prisma/client';
 
 import { UserDto } from '../../user/dto';
 import {
@@ -43,11 +43,9 @@ export class AuthController {
         status: HttpStatus.BAD_REQUEST,
         description: 'Registration failed',
     })
-    public async signUp(@Body(SignUpPipe) input: SignUpInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
+    public async signUp(@Body(SignUpPipe) input: SignUpInput): Promise<SessionDto> {
         const result = await this.authService.signUp(input);
         this.logger.info(`User signed up successfully with email: ${input.email}`);
-
-        CookieUtil.setAuthCookies(response, result.accessToken, result.refreshToken);
 
         return result.session;
     }
@@ -63,14 +61,11 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Authentication failed',
     })
-    public async signIn(@Body(SignInPipe) input: SignInInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
+    public async signIn(@Body(SignInPipe) input: SignInInput): Promise<SessionDto> {
         const { email, password } = input;
 
         const result = await this.authService.signIn(email, password);
         this.logger.info(`User signed in successfully with email: ${email}`);
-
-        // Set both access and refresh token cookies
-        CookieUtil.setAuthCookies(response, result.accessToken, result.refreshToken);
 
         return result.session;
     }
@@ -123,20 +118,18 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Invalid access token',
     })
-    public async syncOAuthUser(@Body(OAuthSyncPipe) input: OAuthSyncInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
+    public async syncOAuthUser(@Body(OAuthSyncPipe) input: OAuthSyncInput): Promise<SessionDto> {
         const { accessToken, refreshToken } = input;
 
         const result = await this.authService.syncOAuthUser(accessToken, refreshToken);
         this.logger.info('OAuth user synced successfully');
-
-        CookieUtil.setAuthCookies(response, result.accessToken, result.refreshToken);
 
         return result.session;
     }
 
     @Get('verify')
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Verify and get user information from access token cookie' })
+    @ApiOperation({ summary: 'Verify session and return current user (requires Authorization: Bearer)' })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'Token verified successfully',
@@ -145,19 +138,14 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Invalid or missing access token',
     })
-    public async verifyToken(@Req() request: Request): Promise<UserDto> {
-        // Extract access token from cookies using the same approach as AuthGuard
-        const accessToken = this.extractTokenFromCookies(request.headers.cookie);
-
-        if (!accessToken) {
-            throw new UnauthorizedException('Access token not found in cookies');
+    public verifyToken(@CurrentUser() user: User): UserDto {
+        if (!user) {
+            throw new UnauthorizedException('User not found');
         }
 
-        const result = await this.authService.verifyToken(accessToken);
+        this.logger.info(`Token verified successfully for user: ${user.email}`);
 
-        this.logger.info(`Token verified successfully for user: ${result.email}`);
-
-        return result;
+        return new UserDto(user);
     }
 
     @Post('refresh')
@@ -172,8 +160,7 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Session refresh failed',
     })
-    public async refreshSession(@Body(RefreshTokenPipe) input: RefreshTokenInput, @Res({ passthrough: true }) response: Response): Promise<SessionDto> {
-        // Try to get refresh token from request body first, then from cookies
+    public async refreshSession(@Body(RefreshTokenPipe) input: RefreshTokenInput): Promise<SessionDto> {
         const refreshToken = input.refreshToken;
 
         if (!refreshToken) {
@@ -181,9 +168,6 @@ export class AuthController {
         }
 
         const result = await this.authService.refreshSession(refreshToken);
-
-        // Set new secure HTTP-only cookies using the utility
-        CookieUtil.setAuthCookies(response, result.accessToken, result.refreshToken);
 
         this.logger.info('Session refreshed successfully');
 
@@ -197,13 +181,12 @@ export class AuthController {
         status: HttpStatus.OK,
         description: 'User signed out successfully',
     })
-    public async signOut(@Res({ passthrough: true }) response: Response) {
-        await this.authService.signOut();
-
-        // Clear authentication cookies
-        CookieUtil.clearAuthCookie(response);
+    public async signOut(): Promise<{ message: string }> {
+        const result = await this.authService.signOut();
 
         this.logger.info('User signed out successfully');
+
+        return result;
     }
 
     @Post('reset-password')
@@ -262,29 +245,5 @@ export class AuthController {
         await this.authService.resendConfirmation(email);
 
         this.logger.info(`Confirmation email resent to: ${email}`);
-    }
-
-    // Add helper method to get cookie name
-    private getAccessTokenCookieName(): string {
-        return CookieUtil.getAccessTokenCookieName();
-    }
-
-    // Add helper method to extract token from cookies (same as AuthGuard)
-    private extractTokenFromCookies(cookieHeader: string | undefined): string | null {
-        if (!cookieHeader) {
-            return null;
-        }
-
-        const cookies = this.parseCookies(cookieHeader);
-        return cookies[this.getAccessTokenCookieName()] || null;
-    }
-
-    private parseCookies(cookieHeader: string): Record<string, string> {
-        return Object.fromEntries(
-            cookieHeader.split(';').map((cookie) => {
-                const [key, ...v] = cookie.trim().split('=');
-                return [key, decodeURIComponent(v.join('='))];
-            }),
-        );
     }
 }
