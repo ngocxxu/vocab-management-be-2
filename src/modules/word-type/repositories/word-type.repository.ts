@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, WordType } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 import { RedisService } from '../../shared/services/redis.service';
 import { RedisPrefix } from '../../shared/utils/redis-key.util';
 
 @Injectable()
-export class WordTypeRepository {
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+export class WordTypeRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+        super(prismaService);
+    }
 
     public async findAll(): Promise<WordType[]> {
         const cached = await this.redisService.jsonGet<WordType[]>(RedisPrefix.WORD_TYPE, 'all');
@@ -17,7 +17,7 @@ export class WordTypeRepository {
             return cached;
         }
 
-        const wordTypes = await this.prismaService.wordType.findMany({
+        const wordTypes = await this.prisma.wordType.findMany({
             orderBy: {
                 name: 'asc',
             },
@@ -35,7 +35,7 @@ export class WordTypeRepository {
             return cached;
         }
 
-        const wordType = await this.prismaService.wordType.findUnique({
+        const wordType = await this.prisma.wordType.findUnique({
             where: { id },
         });
 
@@ -47,13 +47,13 @@ export class WordTypeRepository {
     }
 
     public async findByName(name: string): Promise<WordType | null> {
-        return this.prismaService.wordType.findUnique({
+        return this.prisma.wordType.findUnique({
             where: { name },
         });
     }
 
     public async create(data: Prisma.WordTypeCreateInput): Promise<WordType> {
-        const wordType = await this.prismaService.wordType.create({
+        const wordType = await this.prisma.wordType.create({
             data,
         });
 
@@ -63,7 +63,7 @@ export class WordTypeRepository {
     }
 
     public async update(id: string, data: Prisma.WordTypeUpdateInput): Promise<WordType> {
-        const wordType = await this.prismaService.wordType.update({
+        const wordType = await this.prisma.wordType.update({
             where: { id },
             data,
         });
@@ -75,7 +75,7 @@ export class WordTypeRepository {
     }
 
     public async delete(id: string): Promise<WordType> {
-        const wordType = await this.prismaService.wordType.delete({
+        const wordType = await this.prisma.wordType.delete({
             where: { id },
         });
 

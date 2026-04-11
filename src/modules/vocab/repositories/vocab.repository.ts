@@ -1,17 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, Vocab } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 import { RedisService } from '../../shared/services/redis.service';
 import { buildPrismaWhere, coerceQueryStringArray } from '../../shared/utils/query-builder.util';
 import { RedisPrefix } from '../../shared/utils/redis-key.util';
 import { VocabQueryParamsInput } from '../models/vocab-query-params.input';
+import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
+
+const csvImportVocabInclude = {
+    textTargets: {
+        include: {
+            wordType: true,
+            textTargetSubjects: {
+                include: { subject: true },
+            },
+        },
+    },
+} satisfies Prisma.VocabInclude;
+
+export type CsvImportExistingVocab = Prisma.VocabGetPayload<{
+    include: typeof csvImportVocabInclude;
+}>;
+
+export interface CsvImportGroupParams {
+    textSource: string;
+    textTargetRows: CsvRowData[];
+    userId: string;
+    sourceLanguageCode: string;
+    targetLanguageCode: string;
+    languageFolderId: string;
+    wordTypeMap: Map<string, string>;
+    subjectMap: Map<string, string>;
+    existingVocabMap: Map<string, CsvImportExistingVocab>;
+}
 
 @Injectable()
-export class VocabRepository {
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+export class VocabRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+        super(prismaService);
+    }
 
     public async findWithPagination(
         query: VocabQueryParamsInput,
@@ -57,7 +85,7 @@ export class VocabRepository {
         const isMasterySort = query.sortBy === 'masteryScore';
 
         if (isMasterySort) {
-            const candidates = await this.prismaService.vocab.findMany({
+            const candidates = await this.prisma.vocab.findMany({
                 where,
                 select: {
                     id: true,
@@ -84,7 +112,7 @@ export class VocabRepository {
             // Fetch Full Data for the specific page
             let vocabs: Vocab[] = [];
             if (pagedIds.length > 0) {
-                const unorderedVocabs = await this.prismaService.vocab.findMany({
+                const unorderedVocabs = await this.prisma.vocab.findMany({
                     where: { id: { in: pagedIds } },
                     include: this.getVocabIncludes(userId),
                 });
@@ -98,8 +126,8 @@ export class VocabRepository {
         } else {
             // STRATEGY B: Standard Prisma (Efficient for DB-level sorting)
             const [totalItems, vocabs] = await Promise.all([
-                this.prismaService.vocab.count({ where }),
-                this.prismaService.vocab.findMany({
+                this.prisma.vocab.count({ where }),
+                this.prisma.vocab.findMany({
                     where,
                     include: this.getVocabIncludes(userId),
                     orderBy,
@@ -136,7 +164,7 @@ export class VocabRepository {
             where.languageFolderId = languageFolderId;
         }
 
-        const allIds = await this.prismaService.vocab.findMany({
+        const allIds = await this.prisma.vocab.findMany({
             where,
             select: { id: true },
         });
@@ -148,7 +176,7 @@ export class VocabRepository {
         const shuffled = allIds.sort(() => 0.5 - Math.random());
         const selectedIds = shuffled.slice(0, Math.min(count, allIds.length)).map((x) => x.id);
 
-        const vocabs = await this.prismaService.vocab.findMany({
+        const vocabs = await this.prisma.vocab.findMany({
             where: { id: { in: selectedIds } },
             include: {
                 sourceLanguage: true,
@@ -193,7 +221,7 @@ export class VocabRepository {
             where.userId = userId;
         }
 
-        const vocab = await this.prismaService.vocab.findFirst({
+        const vocab = await this.prisma.vocab.findFirst({
             where,
             include: {
                 sourceLanguage: true,
@@ -229,7 +257,7 @@ export class VocabRepository {
     }
 
     public async create(data: Prisma.VocabCreateInput): Promise<Vocab> {
-        const vocab = await this.prismaService.vocab.create({
+        const vocab = await this.prisma.vocab.create({
             data,
             include: {
                 sourceLanguage: true,
@@ -254,7 +282,7 @@ export class VocabRepository {
     }
 
     public async update(id: string, data: Prisma.VocabUpdateInput): Promise<Vocab> {
-        const vocab = await this.prismaService.vocab.update({
+        const vocab = await this.prisma.vocab.update({
             where: { id },
             data,
             include: {
@@ -285,7 +313,7 @@ export class VocabRepository {
             where.userId = userId;
         }
 
-        const vocab = await this.prismaService.vocab.delete({
+        const vocab = await this.prisma.vocab.delete({
             where,
             include: {
                 sourceLanguage: true,
@@ -310,7 +338,7 @@ export class VocabRepository {
     }
 
     public async findByIds(ids: string[]): Promise<Vocab[]> {
-        return this.prismaService.vocab.findMany({
+        return this.prisma.vocab.findMany({
             where: { id: { in: ids } },
             include: {
                 sourceLanguage: true,
@@ -333,7 +361,7 @@ export class VocabRepository {
     public async findWordTypesByNames(
         names: string[],
     ): Promise<Array<{ id: string; name: string }>> {
-        return this.prismaService.wordType.findMany({
+        return this.prisma.wordType.findMany({
             where: {
                 OR: names.map((name) => ({
                     name: { contains: name, mode: 'insensitive' },
@@ -347,7 +375,7 @@ export class VocabRepository {
         names: string[],
         userId: string,
     ): Promise<Array<{ id: string; name: string }>> {
-        return this.prismaService.subject.findMany({
+        return this.prisma.subject.findMany({
             where: {
                 userId,
                 OR: names.map((name) => ({
@@ -362,10 +390,183 @@ export class VocabRepository {
         id: string,
         userId: string,
     ): Promise<{ id: string } | null> {
-        return this.prismaService.languageFolder.findFirst({
+        return this.prisma.languageFolder.findFirst({
             where: { id, userId },
             select: { id: true },
         });
+    }
+
+    public async findExistingVocabsForCsvImport(params: {
+        userId: string;
+        sourceLanguageCode: string;
+        targetLanguageCode: string;
+        languageFolderId: string;
+        textSources: string[];
+    }): Promise<CsvImportExistingVocab[]> {
+        const { userId, sourceLanguageCode, targetLanguageCode, languageFolderId, textSources } =
+            params;
+
+        if (textSources.length === 0) {
+            return [];
+        }
+
+        return this.prisma.vocab.findMany({
+            where: {
+                userId,
+                sourceLanguageCode,
+                targetLanguageCode,
+                languageFolderId,
+                OR: textSources.map((textSource) => ({
+                    textSource: { equals: textSource, mode: 'insensitive' },
+                })),
+            },
+            include: csvImportVocabInclude,
+        });
+    }
+
+    public async executeCsvImportGroupTransaction(
+        params: CsvImportGroupParams,
+        transactionOptions: { maxWait: number; timeout: number },
+    ): Promise<{ created: number; updated: number }> {
+        return this.runInTransaction(
+            async (tx) => this.applyCsvBatchInTransaction(tx, params),
+            transactionOptions,
+        );
+    }
+
+    public async deleteTextTargetById(
+        id: string,
+        tx?: Prisma.TransactionClient,
+    ): Promise<void> {
+        const client = tx ?? this.prisma;
+        await client.textTarget.delete({ where: { id } });
+    }
+
+    private async applyCsvBatchInTransaction(
+        tx: Prisma.TransactionClient,
+        params: CsvImportGroupParams,
+    ): Promise<{ created: number; updated: number }> {
+        const {
+            textSource,
+            textTargetRows,
+            userId,
+            sourceLanguageCode,
+            targetLanguageCode,
+            languageFolderId,
+            wordTypeMap,
+            subjectMap,
+            existingVocabMap,
+        } = params;
+
+        const mapKey = `${textSource}:${languageFolderId}`;
+        const existingVocab = existingVocabMap.get(mapKey);
+
+        const textTargetsData = textTargetRows.map((row: CsvRowData) => {
+            const typedRow = assertCsvRowData(row);
+
+            let wordTypeId: string | undefined;
+            if (typedRow.wordType) {
+                const nameKey = typedRow.wordType.toLowerCase();
+                wordTypeId = wordTypeMap.get(nameKey);
+                if (!wordTypeId) {
+                    throw new Error(`Word type '${typedRow.wordType}' not found`);
+                }
+            }
+
+            const subjectIds: string[] = [];
+            if (typedRow.subjects) {
+                const subjectNames = CsvParserUtil.parseSubjects(typedRow.subjects);
+                subjectNames.forEach((subjectName) => {
+                    const nameKey = subjectName.toLowerCase();
+                    const subjectId = subjectMap.get(nameKey);
+                    if (!subjectId) {
+                        throw new Error(`Subject '${subjectName}' not found`);
+                    }
+                    subjectIds.push(subjectId);
+                });
+            }
+
+            return {
+                textTarget: typedRow.textTarget,
+                grammar: typedRow.grammar || '',
+                explanationSource: typedRow.explanationSource || '',
+                explanationTarget: typedRow.explanationTarget || '',
+                wordTypeId,
+                subjectIds,
+                vocabExamples:
+                    typedRow.exampleSource && typedRow.exampleTarget
+                        ? [{ source: typedRow.exampleSource, target: typedRow.exampleTarget }]
+                        : [],
+            };
+        });
+
+        if (existingVocab) {
+            for (const textTargetData of textTargetsData) {
+                const existingTextTarget = existingVocab.textTargets.find(
+                    (tt) => tt.textTarget === textTargetData.textTarget,
+                );
+
+                if (!existingTextTarget) {
+                    await tx.textTarget.create({
+                        data: {
+                            vocabId: existingVocab.id,
+                            textTarget: textTargetData.textTarget,
+                            grammar: textTargetData.grammar,
+                            explanationSource: textTargetData.explanationSource,
+                            explanationTarget: textTargetData.explanationTarget,
+                            wordTypeId: textTargetData.wordTypeId,
+                            textTargetSubjects: {
+                                create: textTargetData.subjectIds.map((subjectId: string) => ({
+                                    subjectId,
+                                })),
+                            },
+                            vocabExamples: {
+                                create: textTargetData.vocabExamples.map(
+                                    (example: { source: string; target: string }) => ({
+                                        source: example.source,
+                                        target: example.target,
+                                    }),
+                                ),
+                            },
+                        },
+                    });
+                }
+            }
+            return { created: 0, updated: 1 };
+        }
+
+        await tx.vocab.create({
+            data: {
+                textSource,
+                sourceLanguageCode,
+                targetLanguageCode,
+                languageFolderId,
+                userId,
+                textTargets: {
+                    create: textTargetsData.map((textTargetData) => ({
+                        textTarget: textTargetData.textTarget,
+                        grammar: textTargetData.grammar,
+                        explanationSource: textTargetData.explanationSource,
+                        explanationTarget: textTargetData.explanationTarget,
+                        wordTypeId: textTargetData.wordTypeId,
+                        textTargetSubjects: {
+                            create: textTargetData.subjectIds.map((subjectId: string) => ({
+                                subjectId,
+                            })),
+                        },
+                        vocabExamples: {
+                            create: textTargetData.vocabExamples.map(
+                                (example: { source: string; target: string }) => ({
+                                    source: example.source,
+                                    target: example.target,
+                                }),
+                            ),
+                        },
+                    })),
+                },
+            },
+        });
+        return { created: 1, updated: 0 };
     }
 
     public async clearCache(): Promise<void> {

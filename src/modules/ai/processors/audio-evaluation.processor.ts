@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { TrainerStatus } from '@prisma/client';
 import { Job } from 'bullmq';
 import { LoggerService } from '../../shared';
-import { PrismaService } from '../../shared/services';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { NotificationGateway } from '../../event/gateway/notification.gateway';
 import { EReminderType } from '../../reminder/utils';
 import { AiService } from '../services/ai.service';
@@ -27,7 +27,7 @@ export class AudioEvaluationProcessor {
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
         private readonly notificationGateway: NotificationGateway,
-        private readonly prismaService: PrismaService,
+        private readonly vocabTrainerRepository: VocabTrainerRepository,
     ) {}
 
     @Process('evaluate-audio')
@@ -77,20 +77,16 @@ export class AudioEvaluationProcessor {
                 transcript,
             );
 
-            await this.prismaService.vocabTrainerResult.deleteMany({
-                where: { vocabTrainerId },
-            });
+            await this.vocabTrainerRepository.deleteVocabTrainerResults(vocabTrainerId);
 
-            await this.prismaService.vocabTrainerResult.create({
+            await this.vocabTrainerRepository.createVocabTrainerResult({
+                vocabTrainerId,
+                status: TrainerStatus.COMPLETED,
+                userSelected: transcript,
+                systemSelected: targetDialogue.map((d) => d.text).join(' '),
                 data: {
-                    vocabTrainerId,
-                    status: TrainerStatus.COMPLETED,
-                    userSelected: transcript,
-                    systemSelected: targetDialogue.map((d) => d.text).join(' '),
-                    data: {
-                        transcript,
-                        markdownReport,
-                    },
+                    transcript,
+                    markdownReport,
                 },
             });
 

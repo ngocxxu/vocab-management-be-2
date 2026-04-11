@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { LanguageModule } from '../language/language.module';
 import { NotificationModule } from '../notification/notification.module';
@@ -10,14 +10,14 @@ import { VocabTrainerService } from './services';
 
 @Module({
     imports: [
-        ReminderModule,
-        AiModule,
+        forwardRef(() => ReminderModule),
+        forwardRef(() => AiModule),
         LanguageModule,
         NotificationModule,
         VocabModule,
     ],
     controllers: [VocabTrainerController],
     providers: [VocabTrainerRepository, VocabTrainerService],
-    exports: [VocabTrainerService],
+    exports: [VocabTrainerService, VocabTrainerRepository],
 })
 export class VocabTrainerModule {}

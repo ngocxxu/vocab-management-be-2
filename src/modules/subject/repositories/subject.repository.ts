@@ -1,17 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, Subject } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 import { RedisService } from '../../shared/services/redis.service';
 import { RedisPrefix } from '../../shared/utils/redis-key.util';
 
 @Injectable()
-export class SubjectRepository {
+export class SubjectRepository extends BaseRepository {
     private readonly logger = new Logger(SubjectRepository.name);
 
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+        super(prismaService);
+    }
 
     public async findByUserId(userId: string): Promise<Subject[]> {
         const cached = await this.redisService.jsonGet<Subject[]>(
@@ -22,7 +22,7 @@ export class SubjectRepository {
             return cached;
         }
 
-        const subjects = await this.prismaService.subject.findMany({
+        const subjects = await this.prisma.subject.findMany({
             orderBy: {
                 order: 'asc',
             },
@@ -50,7 +50,7 @@ export class SubjectRepository {
             where.userId = userId;
         }
 
-        const subject = await this.prismaService.subject.findFirst({
+        const subject = await this.prisma.subject.findFirst({
             where,
         });
 
@@ -71,7 +71,7 @@ export class SubjectRepository {
     }
 
     public async findLastOrder(): Promise<Subject | null> {
-        return this.prismaService.subject.findFirst({
+        return this.prisma.subject.findFirst({
             orderBy: {
                 order: 'desc',
             },
@@ -79,7 +79,7 @@ export class SubjectRepository {
     }
 
     public async findByIds(ids: string[], userId: string): Promise<Subject[]> {
-        return this.prismaService.subject.findMany({
+        return this.prisma.subject.findMany({
             where: {
                 id: { in: ids },
                 userId,
@@ -88,7 +88,7 @@ export class SubjectRepository {
     }
 
     public async findByIdsOrdered(ids: string[], userId: string): Promise<Subject[]> {
-        return this.prismaService.subject.findMany({
+        return this.prisma.subject.findMany({
             where: {
                 id: { in: ids },
                 userId,
@@ -100,14 +100,14 @@ export class SubjectRepository {
     }
 
     public async findIdsByUserId(userId: string): Promise<{ id: string }[]> {
-        return this.prismaService.subject.findMany({
+        return this.prisma.subject.findMany({
             where: { userId },
             select: { id: true },
         });
     }
 
     public async create(data: { name: string; order: number; userId: string }): Promise<Subject> {
-        const subject = await this.prismaService.subject.create({
+        const subject = await this.prisma.subject.create({
             data,
         });
 
@@ -130,7 +130,7 @@ export class SubjectRepository {
     }
 
     public async update(id: string, data: Prisma.SubjectUpdateInput): Promise<Subject> {
-        const subject = await this.prismaService.subject.update({
+        const subject = await this.prisma.subject.update({
             where: { id },
             data,
         });
@@ -158,7 +158,7 @@ export class SubjectRepository {
     ): Promise<void> {
         await Promise.all(
             updates.map(async (update) =>
-                this.prismaService.subject.update({
+                this.prisma.subject.update({
                     where: { id: update.id },
                     data: update.data,
                 }),
@@ -169,7 +169,7 @@ export class SubjectRepository {
     public async updateManyInTransaction(
         updates: Array<{ id: string; data: Prisma.SubjectUpdateInput }>,
     ): Promise<void> {
-        await this.prismaService.$transaction(async (tx) => {
+        await this.runInTransaction(async (tx) => {
             await Promise.all(
                 updates.map(async (update) =>
                     tx.subject.update({
@@ -187,7 +187,7 @@ export class SubjectRepository {
             where.userId = userId;
         }
 
-        const subject = await this.prismaService.subject.delete({
+        const subject = await this.prisma.subject.delete({
             where,
         });
 
@@ -197,6 +197,10 @@ export class SubjectRepository {
         }
 
         return subject;
+    }
+
+    public async countByUserId(userId: string): Promise<number> {
+        return this.prisma.subject.count({ where: { userId } });
     }
 
     public async clearUserCache(userId: string): Promise<void> {

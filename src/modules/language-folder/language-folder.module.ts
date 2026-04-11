@@ -1,14 +1,14 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PlanModule } from '../plan/plan.module';
 import { LanguageFolderController } from './controllers';
 import { LanguageFolderRepository } from './repositories';
 import { LanguageFolderService } from './services';
 
 @Module({
-    imports: [PlanModule],
+    imports: [forwardRef(() => PlanModule)],
     controllers: [LanguageFolderController],
     providers: [LanguageFolderRepository, LanguageFolderService],
-    exports: [LanguageFolderService],
+    exports: [LanguageFolderService, LanguageFolderRepository],
 })
 export class LanguageFolderModule {}
 

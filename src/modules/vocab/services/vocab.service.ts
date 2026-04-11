@@ -2,7 +2,6 @@ import { InjectQueue } from '@nestjs/bull';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { Queue } from 'bullmq';
-import { PrismaService } from '../../shared';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
 import { PaginationDto } from '../../shared/models/pagination.dto';
 import { LoggerService } from '../../shared/services/logger.service';
@@ -20,8 +19,8 @@ import {
 } from '../models';
 import { VocabQueryParamsInput } from '../models/vocab-query-params.input';
 import { VocabTranslationJobData } from '../processors/vocab-translation.processor';
-import { VocabRepository } from '../repositories';
-import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
+import { CsvImportExistingVocab, VocabRepository } from '../repositories';
+import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
 @Injectable()
 export class VocabService {
@@ -42,51 +41,11 @@ export class VocabService {
 
     public constructor(
         private readonly vocabRepository: VocabRepository,
-        private readonly prismaService: PrismaService,
         private readonly logger: LoggerService,
         private readonly planQuotaService: PlanQuotaService,
         @InjectQueue(EReminderType.VOCAB_TRANSLATION)
         private readonly vocabTranslationQueue: Queue<VocabTranslationJobData>,
     ) {}
-
-    /**
-     * Type guard to validate and normalize CsvRowData properties
-     */
-    private static assertCsvRowData(row: unknown): CsvRowData {
-        if (!row || typeof row !== 'object') {
-            throw new Error('Invalid CSV row: must be an object');
-        }
-
-        const rowObj = row as Record<string, unknown>;
-
-        const getStringValue = (key: string): string | undefined => {
-            const value = rowObj[key];
-            if (value === null || value === undefined) {
-                return undefined;
-            }
-            const stringValue = String(value).trim();
-            return stringValue.length > 0 ? stringValue : undefined;
-        };
-
-        const textSource = getStringValue('textSource');
-        const textTarget = getStringValue('textTarget');
-
-        if (!textSource || !textTarget) {
-            throw new Error('Invalid CSV row: textSource and textTarget are required');
-        }
-
-        return {
-            textSource,
-            textTarget,
-            wordType: getStringValue('wordType'),
-            grammar: getStringValue('grammar'),
-            explanationSource: getStringValue('explanationSource'),
-            explanationTarget: getStringValue('explanationTarget'),
-            subjects: getStringValue('subjects'),
-            exampleSource: getStringValue('exampleSource'),
-            exampleTarget: getStringValue('exampleTarget'),
-        };
-    }
 
     /**
      * Find all vocabularies in the database (paginated)
@@ -515,7 +474,7 @@ export class VocabService {
         const subjectsInCsv = new Set<string>();
 
         rows.forEach((row: CsvRowData) => {
-            const typedRow = VocabService.assertCsvRowData(row);
+            const typedRow = assertCsvRowData(row);
             if (typedRow.wordType) {
                 wordTypesInCsv.add(typedRow.wordType);
             }
@@ -629,7 +588,7 @@ export class VocabService {
         // Group rows by textSource
         const groupedByTextSource = new Map<string, CsvRowData[]>();
         rows.forEach((row: CsvRowData) => {
-            const typedRow = VocabService.assertCsvRowData(row);
+            const typedRow = assertCsvRowData(row);
             const textSource: string = typedRow.textSource.toLowerCase();
             if (!groupedByTextSource.has(textSource)) {
                 groupedByTextSource.set(textSource, []);
@@ -643,30 +602,15 @@ export class VocabService {
         // OPTIMIZATION: Pre-load all existing vocabs at once
         // Only check duplicates within the same folder (languageFolderId)
         const textSourcesArray = Array.from(groupedByTextSource.keys());
-        const existingVocabs = await this.prismaService.vocab.findMany({
-            where: {
-                userId,
-                sourceLanguageCode,
-                targetLanguageCode,
-                languageFolderId, // Duplicate only within same folder
-                OR: textSourcesArray.map((textSource) => ({
-                    textSource: { equals: textSource, mode: 'insensitive' },
-                })),
-            },
-            include: {
-                textTargets: {
-                    include: {
-                        wordType: true,
-                        textTargetSubjects: {
-                            include: { subject: true },
-                        },
-                    },
-                },
-            },
+        const existingVocabs = await this.vocabRepository.findExistingVocabsForCsvImport({
+            userId,
+            sourceLanguageCode,
+            targetLanguageCode,
+            languageFolderId,
+            textSources: textSourcesArray,
         });
 
-        // Map key includes languageFolderId to differentiate same textSource in different folders
-        const existingVocabMap = new Map<string, (typeof existingVocabs)[0]>();
+        const existingVocabMap = new Map<string, CsvImportExistingVocab>();
         existingVocabs.forEach((v) => {
             const mapKey = `${v.textSource.toLowerCase()}:${v.languageFolderId}`;
             existingVocabMap.set(mapKey, v);
@@ -682,157 +626,23 @@ export class VocabService {
             await Promise.all(
                 batch.map(async ([textSource, textTargetRows]) => {
                     try {
-                        await this.prismaService.$transaction(
-                            async (tx) => {
-                                // OPTIMIZATION: Use pre-loaded existing vocab map with folder-specific key
-                                // Duplicate check only applies within the same folder
-                                const mapKey = `${textSource}:${languageFolderId}`;
-                                const existingVocab = existingVocabMap.get(mapKey);
-
-                                // OPTIMIZATION: Use pre-loaded maps instead of querying in transaction
-                                const textTargetsData = textTargetRows.map((row: CsvRowData) => {
-                                    const typedRow = VocabService.assertCsvRowData(row);
-
-                                    // Use pre-loaded wordType map
-                                    let wordTypeId: string | undefined;
-                                    if (typedRow.wordType) {
-                                        const nameKey = typedRow.wordType.toLowerCase();
-                                        wordTypeId = wordTypeMap.get(nameKey);
-                                        if (!wordTypeId) {
-                                            throw new Error(
-                                                `Word type '${typedRow.wordType}' not found`,
-                                            );
-                                        }
-                                    }
-
-                                    // Use pre-loaded subject map
-                                    const subjectIds: string[] = [];
-                                    if (typedRow.subjects) {
-                                        const subjectNames = CsvParserUtil.parseSubjects(
-                                            typedRow.subjects,
-                                        );
-                                        subjectNames.forEach((subjectName) => {
-                                            const nameKey = subjectName.toLowerCase();
-                                            const subjectId = subjectMap.get(nameKey);
-                                            if (!subjectId) {
-                                                throw new Error(
-                                                    `Subject '${subjectName}' not found`,
-                                                );
-                                            }
-                                            subjectIds.push(subjectId);
-                                        });
-                                    }
-
-                                    return {
-                                        textTarget: typedRow.textTarget,
-                                        grammar: typedRow.grammar || '',
-                                        explanationSource: typedRow.explanationSource || '',
-                                        explanationTarget: typedRow.explanationTarget || '',
-                                        wordTypeId,
-                                        subjectIds,
-                                        vocabExamples:
-                                            typedRow.exampleSource && typedRow.exampleTarget
-                                                ? [
-                                                      {
-                                                          source: typedRow.exampleSource,
-                                                          target: typedRow.exampleTarget,
-                                                      },
-                                                  ]
-                                                : [],
-                                    };
-                                });
-
-                                if (existingVocab) {
-                                    // Update existing vocab - add new text targets
-                                    for (const textTargetData of textTargetsData) {
-                                        // Check if text target already exists
-                                        const existingTextTarget = existingVocab.textTargets.find(
-                                            (tt) => tt.textTarget === textTargetData.textTarget,
-                                        );
-
-                                        if (!existingTextTarget) {
-                                            // Create new text target
-                                            await tx.textTarget.create({
-                                                data: {
-                                                    vocabId: existingVocab.id,
-                                                    textTarget: textTargetData.textTarget,
-                                                    grammar: textTargetData.grammar,
-                                                    explanationSource:
-                                                        textTargetData.explanationSource,
-                                                    explanationTarget:
-                                                        textTargetData.explanationTarget,
-                                                    wordTypeId: textTargetData.wordTypeId,
-                                                    textTargetSubjects: {
-                                                        create: textTargetData.subjectIds.map(
-                                                            (subjectId: string) => ({
-                                                                subjectId,
-                                                            }),
-                                                        ),
-                                                    },
-                                                    vocabExamples: {
-                                                        create: textTargetData.vocabExamples.map(
-                                                            (example: {
-                                                                source: string;
-                                                                target: string;
-                                                            }) => ({
-                                                                source: example.source,
-                                                                target: example.target,
-                                                            }),
-                                                        ),
-                                                    },
-                                                },
-                                            });
-                                        }
-                                    }
-                                    updated++;
-                                } else {
-                                    // Create new vocab
-                                    await tx.vocab.create({
-                                        data: {
-                                            textSource,
-                                            sourceLanguageCode,
-                                            targetLanguageCode,
-                                            languageFolderId,
-                                            userId,
-                                            textTargets: {
-                                                create: textTargetsData.map((textTargetData) => ({
-                                                    textTarget: textTargetData.textTarget,
-                                                    grammar: textTargetData.grammar,
-                                                    explanationSource:
-                                                        textTargetData.explanationSource,
-                                                    explanationTarget:
-                                                        textTargetData.explanationTarget,
-                                                    wordTypeId: textTargetData.wordTypeId,
-                                                    textTargetSubjects: {
-                                                        create: textTargetData.subjectIds.map(
-                                                            (subjectId: string) => ({
-                                                                subjectId,
-                                                            }),
-                                                        ),
-                                                    },
-                                                    vocabExamples: {
-                                                        create: textTargetData.vocabExamples.map(
-                                                            (example: {
-                                                                source: string;
-                                                                target: string;
-                                                            }) => ({
-                                                                source: example.source,
-                                                                target: example.target,
-                                                            }),
-                                                        ),
-                                                    },
-                                                })),
-                                            },
-                                        },
-                                    });
-                                    created++;
-                                }
-                            },
-                            {
-                                maxWait: 10000, // 10 seconds max wait for transaction lock
-                                timeout: 30000, // 30 seconds timeout for transaction
-                            },
-                        );
+                        const { created: batchCreated, updated: batchUpdated } =
+                            await this.vocabRepository.executeCsvImportGroupTransaction(
+                                {
+                                    textSource,
+                                    textTargetRows,
+                                    userId,
+                                    sourceLanguageCode,
+                                    targetLanguageCode,
+                                    languageFolderId,
+                                    wordTypeMap,
+                                    subjectMap,
+                                    existingVocabMap,
+                                },
+                                { maxWait: 10000, timeout: 30000 },
+                            );
+                        created += batchCreated;
+                        updated += batchUpdated;
                     } catch (error: unknown) {
                         // Check if it's a duplicate error (P2002)
                         if (error instanceof Error && error.message.includes('P2002')) {
@@ -843,7 +653,7 @@ export class VocabService {
                                 errors.push({
                                     row:
                                         rows.findIndex((r: CsvRowData) => {
-                                            const typedR = VocabService.assertCsvRowData(r);
+                                            const typedR = assertCsvRowData(r);
                                             return typedR.textSource.toLowerCase() === textSource;
                                         }) + 1,
                                     error: `Vocabulary '${textSource}' already exists with the same language combination`,
@@ -872,7 +682,7 @@ export class VocabService {
                                 errors.push({
                                     row:
                                         rows.findIndex((r: CsvRowData) => {
-                                            const typedR = VocabService.assertCsvRowData(r);
+                                            const typedR = assertCsvRowData(r);
                                             return typedR.textSource.toLowerCase() === textSource;
                                         }) + 1,
                                     error: errorMessage,

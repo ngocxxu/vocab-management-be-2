@@ -21,6 +21,42 @@ export interface ParsedCsvData {
     groupedByTextSource: Map<string, CsvRowData[]>;
 }
 
+export function assertCsvRowData(row: unknown): CsvRowData {
+    if (!row || typeof row !== 'object') {
+        throw new Error('Invalid CSV row: must be an object');
+    }
+
+    const rowObj = row as Record<string, unknown>;
+
+    const getStringValue = (key: string): string | undefined => {
+        const value = rowObj[key];
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+        const stringValue = String(value).trim();
+        return stringValue.length > 0 ? stringValue : undefined;
+    };
+
+    const textSource = getStringValue('textSource');
+    const textTarget = getStringValue('textTarget');
+
+    if (!textSource || !textTarget) {
+        throw new Error('Invalid CSV row: textSource and textTarget are required');
+    }
+
+    return {
+        textSource,
+        textTarget,
+        wordType: getStringValue('wordType'),
+        grammar: getStringValue('grammar'),
+        explanationSource: getStringValue('explanationSource'),
+        explanationTarget: getStringValue('explanationTarget'),
+        subjects: getStringValue('subjects'),
+        exampleSource: getStringValue('exampleSource'),
+        exampleTarget: getStringValue('exampleTarget'),
+    };
+}
+
 export class CsvParserUtil {
     /**
      * Parse CSV buffer to array of CsvRowData

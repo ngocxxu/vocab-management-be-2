@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bull';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { VocabTrainerModule } from '../vocab-trainer/vocab-trainer.module';
 
 import { ActedCheckRegistry } from './strategies/acted-check.registry';
 import { VocabTrainerActedCheckStrategy } from './strategies/vocab-trainer-acted-check.strategy';
@@ -14,6 +15,7 @@ import { EReminderType } from './utils';
     imports: [
         BullModule.registerQueue({ name: EReminderType.EMAIL_REMINDER }),
         BullModule.registerQueue({ name: EReminderType.NOTIFICATION }),
+        forwardRef(() => VocabTrainerModule),
     ],
     controllers: [ReminderController],
     providers: [

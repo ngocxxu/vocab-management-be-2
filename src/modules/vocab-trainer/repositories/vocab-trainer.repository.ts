@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 import { buildPrismaWhere } from '../../shared/utils/query-builder.util';
 import { VocabTrainerQueryParamsInput } from '../models/vocab-trainer-query-params.input';
 
 @Injectable()
-export class VocabTrainerRepository {
-    public constructor(private readonly prismaService: PrismaService) {}
+export class VocabTrainerRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService) {
+        super(prismaService);
+    }
 
     public async findWithPagination(
         query: VocabTrainerQueryParamsInput,
@@ -34,8 +37,8 @@ export class VocabTrainerRepository {
         });
 
         const [totalItems, trainers] = await Promise.all([
-            this.prismaService.vocabTrainer.count({ where }),
-            this.prismaService.vocabTrainer.findMany({
+            this.prisma.vocabTrainer.count({ where }),
+            this.prisma.vocabTrainer.findMany({
                 where,
                 include: {
                     vocabAssignments: true,
@@ -61,7 +64,7 @@ export class VocabTrainerRepository {
             where.userId = userId;
         }
 
-        return this.prismaService.vocabTrainer.findFirst({
+        return this.prisma.vocabTrainer.findFirst({
             where,
             include: {
                 vocabAssignments: true,
@@ -81,7 +84,7 @@ export class VocabTrainerRepository {
             where.userId = userId;
         }
 
-        return this.prismaService.vocabTrainer.findFirst({
+        return this.prisma.vocabTrainer.findFirst({
             where,
             include: {
                 vocabAssignments: {
@@ -109,7 +112,7 @@ export class VocabTrainerRepository {
             where.userId = userId;
         }
 
-        return this.prismaService.vocabTrainer.findFirst({
+        return this.prisma.vocabTrainer.findFirst({
             where,
             include: {
                 vocabAssignments: {
@@ -127,7 +130,7 @@ export class VocabTrainerRepository {
     }
 
     public async create(data: Prisma.VocabTrainerCreateInput): Promise<VocabTrainer> {
-        return this.prismaService.vocabTrainer.create({
+        return this.prisma.vocabTrainer.create({
             data,
             include: {
                 vocabAssignments: true,
@@ -137,7 +140,7 @@ export class VocabTrainerRepository {
     }
 
     public async update(id: string, data: Prisma.VocabTrainerUpdateInput): Promise<VocabTrainer> {
-        return this.prismaService.vocabTrainer.update({
+        return this.prisma.vocabTrainer.update({
             where: { id },
             data,
             include: {
@@ -155,7 +158,7 @@ export class VocabTrainerRepository {
             where.userId = userId;
         }
 
-        return this.prismaService.vocabTrainer.delete({
+        return this.prisma.vocabTrainer.delete({
             where,
             include: {
                 vocabAssignments: true,
@@ -164,16 +167,151 @@ export class VocabTrainerRepository {
         });
     }
 
-    public async deleteResultsByTrainerId(trainerId: string): Promise<void> {
-        await this.prismaService.vocabTrainerResult.deleteMany({
+    public async deleteVocabTrainerResults(
+        trainerId: string,
+        tx?: Prisma.TransactionClient,
+    ): Promise<Prisma.BatchPayload> {
+        return this.client(tx).vocabTrainerResult.deleteMany({
             where: { vocabTrainerId: trainerId },
         });
+    }
+
+    public async deleteResultsByTrainerId(trainerId: string): Promise<void> {
+        await this.deleteVocabTrainerResults(trainerId);
+    }
+
+    public async createVocabTrainerResultsMany(
+        data: Prisma.VocabTrainerResultCreateManyInput[],
+        tx?: Prisma.TransactionClient,
+    ): Promise<{ count: number }> {
+        return this.client(tx).vocabTrainerResult.createMany({ data });
     }
 
     public async createResults(
         data: Prisma.VocabTrainerResultCreateManyInput[],
     ): Promise<void> {
-        await this.prismaService.vocabTrainerResult.createMany({ data });
+        await this.createVocabTrainerResultsMany(data);
+    }
+
+    public async createVocabTrainerResult(
+        data: Prisma.VocabTrainerResultUncheckedCreateInput,
+        tx?: Prisma.TransactionClient,
+    ): Promise<void> {
+        await this.client(tx).vocabTrainerResult.create({ data });
+    }
+
+    public async findVocabTrainerByIdMinimal(
+        id: string,
+        tx?: Prisma.TransactionClient,
+    ): Promise<VocabTrainer | null> {
+        return this.client(tx).vocabTrainer.findUnique({ where: { id } });
+    }
+
+    public async findLastExamSubmittedAt(
+        id: string,
+    ): Promise<{ lastExamSubmittedAt: Date | null } | null> {
+        return this.prisma.vocabTrainer.findUnique({
+            where: { id },
+            select: { lastExamSubmittedAt: true },
+        });
+    }
+
+    public async deleteVocabTrainerRow(
+        id: string,
+        tx?: Prisma.TransactionClient,
+    ): Promise<VocabTrainer> {
+        return this.client(tx).vocabTrainer.delete({
+            where: { id },
+            include: {
+                vocabAssignments: true,
+                results: true,
+            },
+        });
+    }
+
+    public async updateVocabTrainerWithIncludes(
+        id: string,
+        data: Prisma.VocabTrainerUpdateInput,
+        tx?: Prisma.TransactionClient,
+    ): Promise<VocabTrainer> {
+        return this.client(tx).vocabTrainer.update({
+            where: { id },
+            data,
+            include: {
+                vocabAssignments: true,
+                results: true,
+            },
+        });
+    }
+
+    public async updateVocabTrainerFields(
+        id: string,
+        data: Prisma.VocabTrainerUpdateInput,
+        tx?: Prisma.TransactionClient,
+    ): Promise<VocabTrainer> {
+        return this.client(tx).vocabTrainer.update({
+            where: { id },
+            data,
+        });
+    }
+
+    public async replaceVocabTrainerWordAssignments(
+        tx: Prisma.TransactionClient,
+        id: string,
+        trainerData: {
+            name?: string;
+            status?: TrainerStatus;
+            questionType?: QuestionType;
+            reminderTime?: number;
+            countTime?: number;
+            setCountTime?: number;
+            reminderDisabled?: boolean;
+            reminderRepeat?: number;
+            reminderLastRemind?: Date;
+        },
+        existing: VocabTrainer,
+        uniqueVocabIds: string[],
+    ): Promise<VocabTrainer | null> {
+        await tx.vocabTrainer.update({
+            where: { id },
+            data: {
+                name: trainerData.name,
+                status: trainerData.status,
+                questionType: trainerData.questionType ?? existing.questionType,
+                reminderTime: trainerData.reminderTime ?? existing.reminderTime,
+                countTime: trainerData.countTime ?? existing.countTime,
+                setCountTime: trainerData.setCountTime ?? existing.setCountTime,
+                reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
+                reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
+                reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+            },
+            include: {
+                vocabAssignments: true,
+                results: true,
+            },
+        });
+
+        await tx.vocabTrainerWord.deleteMany({
+            where: { vocabTrainerId: id },
+        });
+
+        if (uniqueVocabIds.length > 0) {
+            await tx.vocabTrainerWord.createMany({
+                data: uniqueVocabIds.map((vocabId) => ({
+                    vocabTrainerId: id,
+                    vocabId,
+                })),
+                skipDuplicates: true,
+            });
+        }
+
+        return tx.vocabTrainer.findUnique({
+            where: { id },
+            include: {
+                vocabAssignments: true,
+                results: true,
+            },
+        });
     }
 
     public async findByIds(ids: string[], userId?: string): Promise<VocabTrainer[]> {
@@ -184,7 +322,7 @@ export class VocabTrainerRepository {
             where.userId = userId;
         }
 
-        return this.prismaService.vocabTrainer.findMany({
+        return this.prisma.vocabTrainer.findMany({
             where,
             include: {
                 vocabAssignments: true,

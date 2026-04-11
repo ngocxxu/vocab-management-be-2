@@ -9,6 +9,7 @@ import { SSEModule } from '../sse/sse.module';
 import { NotificationController } from './controllers';
 import { NotificationFcmProcessor } from './processors/notification-fcm.processor';
 import { NotificationProcessor } from './processors/notification.processor';
+import { NotificationRepository } from './repositories';
 import { NotificationFcmService } from './services/notification-fcm.service';
 import { NotificationService } from './services/notification.service';
 
@@ -33,6 +34,7 @@ import { NotificationService } from './services/notification.service';
     ],
     controllers: [NotificationController],
     providers: [
+        NotificationRepository,
         NotificationService,
         NotificationProcessor,
         NotificationFcmService,

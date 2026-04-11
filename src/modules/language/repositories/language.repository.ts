@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Language, Prisma } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 import { RedisService } from '../../shared/services/redis.service';
 import { RedisPrefix } from '../../shared/utils/redis-key.util';
 
 @Injectable()
-export class LanguageRepository {
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+export class LanguageRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+        super(prismaService);
+    }
 
     public async findAll(): Promise<Language[]> {
         const cached = await this.redisService.jsonGet<Language[]>(
@@ -20,7 +20,7 @@ export class LanguageRepository {
             return cached;
         }
 
-        const languages = await this.prismaService.language.findMany({
+        const languages = await this.prisma.language.findMany({
             orderBy: {
                 name: 'asc',
             },
@@ -40,7 +40,7 @@ export class LanguageRepository {
             return cached;
         }
 
-        const language = await this.prismaService.language.findUnique({
+        const language = await this.prisma.language.findUnique({
             where: { id },
         });
 
@@ -56,13 +56,13 @@ export class LanguageRepository {
     }
 
     public async findByCode(code: string): Promise<Language | null> {
-        return this.prismaService.language.findUnique({
+        return this.prisma.language.findUnique({
             where: { code },
         });
     }
 
     public async create(data: Prisma.LanguageCreateInput): Promise<Language> {
-        const language = await this.prismaService.language.create({
+        const language = await this.prisma.language.create({
             data,
         });
 
@@ -72,7 +72,7 @@ export class LanguageRepository {
     }
 
     public async update(id: string, data: Prisma.LanguageUpdateInput): Promise<Language> {
-        const language = await this.prismaService.language.update({
+        const language = await this.prisma.language.update({
             where: { id },
             data,
         });
@@ -84,7 +84,7 @@ export class LanguageRepository {
     }
 
     public async delete(id: string): Promise<Language> {
-        const language = await this.prismaService.language.delete({
+        const language = await this.prisma.language.delete({
             where: { id },
         });
 

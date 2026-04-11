@@ -12,7 +12,6 @@ import {
 import { AiService } from '../../ai/services/ai.service';
 import { PrismaErrorHandler } from '../../shared/handlers';
 import { PaginationDto } from '../../shared/models';
-import { PrismaService } from '../../shared/services';
 import { getOrderBy, getPagination } from '../../shared/utils';
 import { NotificationService } from '../../notification/services';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
@@ -63,7 +62,6 @@ export class VocabTrainerService {
 
     public constructor(
         private readonly vocabTrainerRepository: VocabTrainerRepository,
-        private readonly prismaService: PrismaService,
         private readonly vocabTrainerReminderAfterExam: VocabTrainerReminderAfterExamService,
         private readonly aiService: AiService,
         private readonly notificationService: NotificationService,
@@ -424,14 +422,14 @@ export class VocabTrainerService {
                     recipientUserIds: [user.id],
                 });
 
-                await this.prismaService.$transaction(async (tx) => {
+                await this.vocabTrainerRepository.inTransaction(async (tx) => {
                     await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(
                         tx,
                         trainer.id,
                         user.id,
                         'trainer_completed_max_passes',
                     );
-                    await tx.vocabTrainer.delete({ where: { id: trainer.id } });
+                    await this.vocabTrainerRepository.deleteVocabTrainerRow(trainer.id, tx);
                 });
                 return new VocabTrainerDto(
                     trainer as unknown as VocabTrainer & {
@@ -440,7 +438,7 @@ export class VocabTrainerService {
                 );
             }
 
-            const result = await this.prismaService.$transaction(async (tx) => {
+            const result = await this.vocabTrainerRepository.inTransaction(async (tx) => {
                 await this.vocabTrainerReminderAfterExam.syncRemindersAfterExamSubmission(tx, {
                     trainerId: trainer.id,
                     userId: user.id,
@@ -453,9 +451,9 @@ export class VocabTrainerService {
                     reminderDisabled: trainer.reminderDisabled,
                 });
 
-                return tx.vocabTrainer.update({
-                    where: { id: trainer.id },
-                    data: {
+                return this.vocabTrainerRepository.updateVocabTrainerWithIncludes(
+                    trainer.id,
+                    {
                         name: trainer.name,
                         status: overallStatus,
                         countTime,
@@ -466,7 +464,8 @@ export class VocabTrainerService {
                         lastExamSubmittedAt: new Date(),
                         updatedAt: new Date(),
                     },
-                });
+                    tx,
+                );
             });
 
             await this.vocabTrainerReminderAfterExam.scheduleNotification(
@@ -776,49 +775,15 @@ export class VocabTrainerService {
             if (vocabAssignmentIds !== undefined) {
                 const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
 
-                return await this.prismaService.$transaction(async (tx) => {
-                    await tx.vocabTrainer.update({
-                        where: { id },
-                        data: {
-                            name: trainerData.name,
-                            status: trainerData.status,
-                            questionType: trainerData.questionType ?? existing.questionType,
-                            reminderTime: trainerData.reminderTime ?? existing.reminderTime,
-                            countTime: trainerData.countTime ?? existing.countTime,
-                            setCountTime: trainerData.setCountTime ?? existing.setCountTime,
-                            reminderDisabled:
-                                trainerData.reminderDisabled ?? existing.reminderDisabled,
-                            reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
-                            reminderLastRemind:
-                                trainerData.reminderLastRemind ?? existing.reminderLastRemind,
-                        },
-                        include: {
-                            vocabAssignments: true,
-                            results: true,
-                        },
-                    });
-
-                    await tx.vocabTrainerWord.deleteMany({
-                        where: { vocabTrainerId: id },
-                    });
-
-                    if (uniqueVocabIds.length > 0) {
-                        await tx.vocabTrainerWord.createMany({
-                            data: uniqueVocabIds.map((vocabId) => ({
-                                vocabTrainerId: id,
-                                vocabId,
-                            })),
-                            skipDuplicates: true,
-                        });
-                    }
-
-                    const trainerWithAssignments = await tx.vocabTrainer.findUnique({
-                        where: { id },
-                        include: {
-                            vocabAssignments: true,
-                            results: true,
-                        },
-                    });
+                return await this.vocabTrainerRepository.inTransaction(async (tx) => {
+                    const trainerWithAssignments =
+                        await this.vocabTrainerRepository.replaceVocabTrainerWordAssignments(
+                            tx,
+                            id,
+                            trainerData,
+                            existing,
+                            uniqueVocabIds,
+                        );
 
                     if (!trainerWithAssignments) {
                         throw new NotFoundException(

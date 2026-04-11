@@ -3,9 +3,9 @@ import { UserRole } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { AuthError, createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
-import { PrismaService } from '../../shared/services';
 import { jwtDecode } from '../../shared/utils/jwt.util';
 import { UserDto } from '../../user/models';
+import { UserRepository } from '../../user/repositories';
 import { OAuthResponseDto, SessionDto, SignUpInput } from '../models';
 import { SignInResponse } from '../utils';
 
@@ -21,7 +21,7 @@ export class AuthService {
         'Invalid refresh token': 'Invalid refresh token',
     };
 
-    public constructor(private readonly prismaService: PrismaService) {
+    public constructor(private readonly userRepository: UserRepository) {
         this.supabase = createClient(
             process.env.SUPABASE_URL ?? '',
             process.env.SUPABASE_KEY ?? '',
@@ -55,17 +55,15 @@ export class AuthService {
 
             // 2. Create user in local DB
             const supabaseUser = data.user;
-            const user = await this.prismaService.user.create({
-                data: {
-                    email: email ?? supabaseUser.email,
-                    supabaseUserId: supabaseUser.id,
-                    firstName: firstName && firstName.trim() !== '' ? firstName : '',
-                    lastName: lastName && lastName.trim() !== '' ? lastName : '',
-                    phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
-                    avatar: avatar && avatar.trim() !== '' ? avatar : null,
-                    role: role ?? UserRole.GUEST,
-                    isActive: true,
-                },
+            const user = await this.userRepository.create({
+                email: email ?? supabaseUser.email,
+                supabaseUserId: supabaseUser.id,
+                firstName: firstName && firstName.trim() !== '' ? firstName : '',
+                lastName: lastName && lastName.trim() !== '' ? lastName : '',
+                phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
+                avatar: avatar && avatar.trim() !== '' ? avatar : null,
+                role: role ?? UserRole.GUEST,
+                isActive: true,
             });
 
             if (!user) {
@@ -123,11 +121,9 @@ export class AuthService {
 
             const decodedToken = jwtDecode(data.session.access_token);
 
-            const user = await this.prismaService.user.findUnique({
-                where: {
-                    supabaseUserId: decodedToken?.sub,
-                },
-            });
+            const user = decodedToken?.sub
+                ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
+                : null;
 
             if (!user) {
                 throw new UnauthorizedException('User not found');
@@ -187,11 +183,9 @@ export class AuthService {
                 this.handleAuthError(error, 'verifyToken');
             }
 
-            const user = await this.prismaService.user.findUnique({
-                where: {
-                    supabaseUserId: data.user?.id,
-                },
-            });
+            const user = data.user?.id
+                ? await this.userRepository.findBySupabaseUserId(data.user.id)
+                : null;
 
             if (!user) {
                 throw new UnauthorizedException('User not found');
@@ -225,11 +219,9 @@ export class AuthService {
 
             const decodedToken = jwtDecode(data.session.access_token);
 
-            const user = await this.prismaService.user.findUnique({
-                where: {
-                    supabaseUserId: decodedToken?.sub,
-                },
-            });
+            const user = decodedToken?.sub
+                ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
+                : null;
 
             if (!user) {
                 throw new UnauthorizedException('User not found');
@@ -317,11 +309,9 @@ export class AuthService {
 
             const decodedToken = jwtDecode(data.session.access_token);
 
-            const user = await this.prismaService.user.findUnique({
-                where: {
-                    supabaseUserId: decodedToken?.sub,
-                },
-            });
+            const user = decodedToken?.sub
+                ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
+                : null;
 
             if (!user) {
                 throw new UnauthorizedException('User not found');
@@ -391,24 +381,18 @@ export class AuthService {
             const supabaseUser = userData.user;
             const extractedUserData = this.extractUserDataFromSupabase(supabaseUser);
 
-            let user = await this.prismaService.user.findUnique({
-                where: {
-                    supabaseUserId: supabaseUser.id,
-                },
-            });
+            let user = await this.userRepository.findBySupabaseUserId(supabaseUser.id);
 
             if (!user) {
-                user = await this.prismaService.user.create({
-                    data: {
-                        email: extractedUserData.email,
-                        supabaseUserId: supabaseUser.id,
-                        firstName: extractedUserData.firstName,
-                        lastName: extractedUserData.lastName,
-                        phone: extractedUserData.phone,
-                        avatar: extractedUserData.avatar,
-                        role: extractedUserData.role,
-                        isActive: true,
-                    },
+                user = await this.userRepository.create({
+                    email: extractedUserData.email,
+                    supabaseUserId: supabaseUser.id,
+                    firstName: extractedUserData.firstName,
+                    lastName: extractedUserData.lastName,
+                    phone: extractedUserData.phone,
+                    avatar: extractedUserData.avatar,
+                    role: extractedUserData.role,
+                    isActive: true,
                 });
             } else {
                 const needsUpdate =
@@ -418,14 +402,11 @@ export class AuthService {
                     (extractedUserData.phone && user.phone !== extractedUserData.phone);
 
                 if (needsUpdate) {
-                    user = await this.prismaService.user.update({
-                        where: { id: user.id },
-                        data: {
-                            firstName: extractedUserData.firstName,
-                            lastName: extractedUserData.lastName,
-                            avatar: extractedUserData.avatar,
-                            ...(extractedUserData.phone && { phone: extractedUserData.phone }),
-                        },
+                    user = await this.userRepository.update(user.id, {
+                        firstName: extractedUserData.firstName,
+                        lastName: extractedUserData.lastName,
+                        avatar: extractedUserData.avatar,
+                        ...(extractedUserData.phone && { phone: extractedUserData.phone }),
                     });
                 }
             }

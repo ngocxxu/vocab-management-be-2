@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LanguageFolder, Prisma } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 import { RedisService } from '../../shared/services/redis.service';
 import { buildPrismaWhere } from '../../shared/utils/query-builder.util';
@@ -7,11 +8,10 @@ import { RedisPrefix } from '../../shared/utils/redis-key.util';
 import { LanguageFolderParamsInput } from '../models/language-folder-params.input';
 
 @Injectable()
-export class LanguageFolderRepository {
-    public constructor(
-        private readonly prismaService: PrismaService,
-        private readonly redisService: RedisService,
-    ) {}
+export class LanguageFolderRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService, private readonly redisService: RedisService) {
+        super(prismaService);
+    }
 
     public async findByUserId(userId: string): Promise<LanguageFolder[]> {
         const cached = await this.redisService.jsonGet<LanguageFolder[]>(
@@ -22,7 +22,7 @@ export class LanguageFolderRepository {
             return cached;
         }
 
-        const folders = await this.prismaService.languageFolder.findMany({
+        const folders = await this.prisma.languageFolder.findMany({
             where: { userId },
             orderBy: {
                 name: 'asc',
@@ -62,8 +62,8 @@ export class LanguageFolderRepository {
         );
 
         const [totalItems, folders] = await Promise.all([
-            this.prismaService.languageFolder.count({ where }),
-            this.prismaService.languageFolder.findMany({
+            this.prisma.languageFolder.count({ where }),
+            this.prisma.languageFolder.findMany({
                 where,
                 include: {
                     sourceLanguage: true,
@@ -97,7 +97,7 @@ export class LanguageFolderRepository {
             where.userId = userId;
         }
 
-        const folder = await this.prismaService.languageFolder.findFirst({
+        const folder = await this.prisma.languageFolder.findFirst({
             where,
             include: {
                 sourceLanguage: true,
@@ -136,7 +136,7 @@ export class LanguageFolderRepository {
         targetLanguageCode: string;
         userId: string;
     }): Promise<LanguageFolder> {
-        const folder = await this.prismaService.languageFolder.create({
+        const folder = await this.prisma.languageFolder.create({
             data,
             include: {
                 sourceLanguage: true,
@@ -164,7 +164,7 @@ export class LanguageFolderRepository {
         id: string,
         data: Prisma.LanguageFolderUpdateInput,
     ): Promise<LanguageFolder> {
-        const folder = await this.prismaService.languageFolder.update({
+        const folder = await this.prisma.languageFolder.update({
             where: { id },
             data,
             include: {
@@ -193,7 +193,7 @@ export class LanguageFolderRepository {
             where.userId = userId;
         }
 
-        const folder = await this.prismaService.languageFolder.delete({
+        const folder = await this.prisma.languageFolder.delete({
             where,
             include: {
                 sourceLanguage: true,
@@ -218,5 +218,9 @@ export class LanguageFolderRepository {
 
     public async clearCacheById(id: string): Promise<void> {
         await this.redisService.del(RedisPrefix.LANGUAGE_FOLDER, `id:${id}`);
+    }
+
+    public async countByUserId(userId: string): Promise<number> {
+        return this.prisma.languageFolder.count({ where: { userId } });
     }
 }

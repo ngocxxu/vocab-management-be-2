@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../shared/services';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { ActedCheckStrategy } from './acted-check.strategy';
 
 export const VOCAB_TRAINER_ENTITY = 'vocab_trainer';
@@ -8,13 +8,10 @@ export const VOCAB_TRAINER_ENTITY = 'vocab_trainer';
 export class VocabTrainerActedCheckStrategy implements ActedCheckStrategy {
     public readonly entityType = VOCAB_TRAINER_ENTITY;
 
-    public constructor(private readonly prisma: PrismaService) {}
+    public constructor(private readonly vocabTrainerRepository: VocabTrainerRepository) {}
 
     public async hasActedSince(entityId: string, since: Date): Promise<boolean> {
-        const trainer = await this.prisma.vocabTrainer.findUnique({
-            where: { id: entityId },
-            select: { lastExamSubmittedAt: true },
-        });
+        const trainer = await this.vocabTrainerRepository.findLastExamSubmittedAt(entityId);
 
         if (!trainer) {
             return true;

@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { PrismaService } from '../../shared';
+import { LanguageFolderRepository } from '../../language-folder/repositories';
 import { RedisService } from '../../shared/services/redis.service';
+import { SubjectRepository } from '../../subject/repositories';
 import { RedisKeyManager } from '../../shared/utils/redis-key.util';
 
 const QUOTA_VOCAB_PER_DAY = 20;
@@ -14,7 +15,8 @@ export type CreationResource = 'vocab' | 'languageFolder' | 'subject';
 @Injectable()
 export class PlanQuotaService {
     public constructor(
-        private readonly prisma: PrismaService,
+        private readonly languageFolderRepository: LanguageFolderRepository,
+        private readonly subjectRepository: SubjectRepository,
         private readonly redisService: RedisService,
     ) {}
 
@@ -65,7 +67,7 @@ export class PlanQuotaService {
     }
 
     private async assertLanguageFolderQuota(userId: string): Promise<void> {
-        const count = await this.prisma.languageFolder.count({ where: { userId } });
+        const count = await this.languageFolderRepository.countByUserId(userId);
         if (count >= QUOTA_LANGUAGE_FOLDERS) {
             throw new ForbiddenException(
                 `Language folder limit reached (${QUOTA_LANGUAGE_FOLDERS}). Upgrade to Member for unlimited.`,
@@ -74,7 +76,7 @@ export class PlanQuotaService {
     }
 
     private async assertSubjectQuota(userId: string): Promise<void> {
-        const count = await this.prisma.subject.count({ where: { userId } });
+        const count = await this.subjectRepository.countByUserId(userId);
         if (count >= QUOTA_SUBJECTS) {
             throw new ForbiddenException(
                 `Subject limit reached (${QUOTA_SUBJECTS}). Upgrade to Member for unlimited.`,

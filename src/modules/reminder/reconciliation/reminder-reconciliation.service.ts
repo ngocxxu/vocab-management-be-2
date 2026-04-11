@@ -1,9 +1,9 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
+import { ReminderScheduleStatus } from '@prisma/client';
 import { Job, Queue } from 'bullmq';
 import { LoggerService } from '../../shared';
-import { PrismaService } from '../../shared/services';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { ReminderScheduleEmailJobData } from '../../email/utils/type';
 import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { REMINDER_CONFIG } from '../config/reminder.config';
@@ -17,8 +17,8 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
 
     public constructor(
         @InjectQueue(EReminderType.EMAIL_REMINDER) private readonly emailQueue: Queue,
-        private readonly prisma: PrismaService,
         private readonly reminderScheduleRepository: ReminderScheduleRepository,
+        private readonly vocabTrainerRepository: VocabTrainerRepository,
         private readonly logger: LoggerService,
     ) {}
 
@@ -67,11 +67,7 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
     }
 
     private async resetOrphanedQueued(): Promise<number> {
-        const rows = await this.prisma.reminderSchedule.findMany({
-            where: { status: ReminderScheduleStatus.QUEUED },
-            take: 50,
-            select: { id: true },
-        });
+        const rows = await this.reminderScheduleRepository.findQueuedScheduleIds(50);
         let count = 0;
         for (const row of rows) {
             const job = (await this.emailQueue.getJob(
@@ -97,21 +93,14 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
         const threshold = new Date(
             Date.now() - REMINDER_CONFIG.reconciliation.missingEscalationAfterMs,
         );
-        const candidates = await this.prisma.reminderSchedule.findMany({
-            where: {
-                reminderType: ReminderScheduleKind.INITIAL,
-                status: ReminderScheduleStatus.SENT,
-                sentAt: { lt: threshold },
-            },
-            take: 20,
-        });
+        const candidates = await this.reminderScheduleRepository.findInitialSentRemindersBefore(
+            threshold,
+            20,
+        );
         for (const initial of candidates) {
-            const childCount = await this.prisma.reminderSchedule.count({
-                where: {
-                    initialReminderId: initial.id,
-                    reminderType: ReminderScheduleKind.ESCALATION,
-                },
-            });
+            const childCount = await this.reminderScheduleRepository.countEscalationsForInitial(
+                initial.id,
+            );
             if (childCount > 0) {
                 continue;
             }
@@ -119,15 +108,14 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
                 continue;
             }
             if (initial.entityType === VOCAB_TRAINER_ENTITY && initial.entityId) {
-                const vt = await this.prisma.vocabTrainer.findUnique({
-                    where: { id: initial.entityId },
-                    select: { lastExamSubmittedAt: true },
-                });
+                const vt = await this.vocabTrainerRepository.findLastExamSubmittedAt(
+                    initial.entityId,
+                );
                 if (vt?.lastExamSubmittedAt && vt.lastExamSubmittedAt > initial.sentAt) {
                     continue;
                 }
             }
-            await this.prisma.$transaction(async (tx) => {
+            await this.reminderScheduleRepository.inTransaction(async (tx) => {
                 await this.reminderScheduleRepository.createEscalationsForInitial(
                     tx,
                     initial,

@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, TextTarget } from '@prisma/client';
 import { Job } from 'bullmq';
 import { AiService } from '../../ai/services/ai.service';
-import { LoggerService, PrismaService } from '../../shared';
+import { LoggerService } from '../../shared';
 import { EReminderType } from '../../reminder/utils';
 import { CreateTextTargetInput } from '../models/vocab.input';
 import { VocabRepository } from '../repositories/vocab.repository';
@@ -39,7 +39,6 @@ export class VocabTranslationProcessor {
     public constructor(
         private readonly aiService: AiService,
         private readonly vocabRepository: VocabRepository,
-        private readonly prismaService: PrismaService,
         private readonly logger: LoggerService,
     ) {}
 
@@ -98,9 +97,7 @@ export class VocabTranslationProcessor {
             return;
         }
 
-        await this.prismaService.textTarget.delete({
-            where: { id: emptyTextTarget.id },
-        });
+        await this.vocabRepository.deleteTextTargetById(emptyTextTarget.id);
     }
 
     private findEmptyTextTarget(textTargets: TextTarget[]): TextTarget | undefined {

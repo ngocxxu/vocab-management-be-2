@@ -2,7 +2,7 @@ import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { LoggerService } from '../../shared';
-import { PrismaService } from '../../shared/services';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { NotificationGateway } from '../../event/gateway/notification.gateway';
 import { EReminderType } from '../../reminder/utils';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
@@ -21,7 +21,7 @@ export class MultipleChoiceGenerationProcessor {
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
         private readonly notificationGateway: NotificationGateway,
-        private readonly prismaService: PrismaService,
+        private readonly vocabTrainerRepository: VocabTrainerRepository,
     ) {}
 
     @Process('generate-questions')
@@ -47,19 +47,16 @@ export class MultipleChoiceGenerationProcessor {
                 userId,
             );
 
-            await this.prismaService.vocabTrainer.update({
-                where: { id: vocabTrainerId },
-                data: {
-                    questionAnswers: questions.map((question) => ({
-                        correctAnswer: question.correctAnswer,
-                        type: question.type,
-                        content: question.content,
-                        options: question.options.map((option) => ({
-                            label: option.label,
-                            value: option.value,
-                        })),
+            await this.vocabTrainerRepository.updateVocabTrainerFields(vocabTrainerId, {
+                questionAnswers: questions.map((question) => ({
+                    correctAnswer: question.correctAnswer,
+                    type: question.type,
+                    content: question.content,
+                    options: question.options.map((option) => ({
+                        label: option.label,
+                        value: option.value,
                     })),
-                },
+                })),
             });
 
             this.notificationGateway.emitMultipleChoiceGenerationProgress(

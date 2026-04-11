@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 
 export type VocabMasteryWithVocab = VocabMastery & {
@@ -11,14 +12,16 @@ export type VocabMasteryWithVocab = VocabMastery & {
 };
 
 @Injectable()
-export class VocabMasteryRepository {
-    public constructor(private readonly prismaService: PrismaService) {}
+export class VocabMasteryRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService) {
+        super(prismaService);
+    }
 
     public async findByVocabIdAndUserId(
         vocabId: string,
         userId: string,
     ): Promise<VocabMastery | null> {
-        return this.prismaService.vocabMastery.findUnique({
+        return this.prisma.vocabMastery.findUnique({
             where: {
                 vocabId_userId: {
                     vocabId,
@@ -29,20 +32,20 @@ export class VocabMasteryRepository {
     }
 
     public async create(data: Prisma.VocabMasteryCreateInput): Promise<VocabMastery> {
-        return this.prismaService.vocabMastery.create({
+        return this.prisma.vocabMastery.create({
             data,
         });
     }
 
     public async update(id: string, data: Prisma.VocabMasteryUpdateInput): Promise<VocabMastery> {
-        return this.prismaService.vocabMastery.update({
+        return this.prisma.vocabMastery.update({
             where: { id },
             data,
         });
     }
 
     public async createHistory(data: Prisma.VocabMasteryHistoryCreateInput): Promise<void> {
-        await this.prismaService.vocabMasteryHistory.create({
+        await this.prisma.vocabMasteryHistory.create({
             data,
         });
     }
@@ -52,7 +55,7 @@ export class VocabMasteryRepository {
         _sum: { correctCount: number | null; incorrectCount: number | null };
         _avg: { masteryScore: number | null };
     }> {
-        return this.prismaService.vocabMastery.aggregate({
+        return this.prisma.vocabMastery.aggregate({
             where: { userId },
             _count: { id: true },
             _sum: {
@@ -73,7 +76,7 @@ export class VocabMasteryRepository {
             vocabCount: number;
         }>
     > {
-        return this.prismaService.$queryRaw<
+        return this.prisma.$queryRaw<
             Array<{
                 subjectId: string;
                 subjectName: string;
@@ -131,7 +134,7 @@ export class VocabMasteryRepository {
             ORDER BY DATE(vmh.created_at) ASC
         `;
 
-        return this.prismaService.$queryRawUnsafe<Array<{ date: string; averageMastery: number }>>(
+        return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number }>>(
             sql,
             ...params,
         );
@@ -142,7 +145,7 @@ export class VocabMasteryRepository {
         minIncorrect: number,
         limit: number,
     ): Promise<VocabMasteryWithVocab[]> {
-        return this.prismaService.vocabMastery.findMany({
+        return this.prisma.vocabMastery.findMany({
             where: {
                 userId,
                 incorrectCount: {
@@ -173,7 +176,7 @@ export class VocabMasteryRepository {
             count: number;
         }>
     > {
-        return this.prismaService.$queryRaw<
+        return this.prisma.$queryRaw<
             Array<{
                 scoreRange: string;
                 count: number;

@@ -1,26 +1,24 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
-import { PrismaService } from '../../shared';
 import { CreatePlanInput } from '../models/create-plan.input';
 import { PlanDto, PlanLimitsDto } from '../models/plan.dto';
 import { UpdatePlanInput } from '../models/update-plan.input';
+import { PlanRepository } from '../repositories';
 
 @Injectable()
 export class PlanService {
-    public constructor(private readonly prisma: PrismaService) {}
+    public constructor(private readonly planRepository: PlanRepository) {}
 
     public async create(input: CreatePlanInput): Promise<PlanDto> {
-        const plan = await this.prisma.plan.create({
-            data: {
-                role: input.role,
-                name: input.name,
-                price: input.price ?? undefined,
-                priceLabel: input.priceLabel,
-                limits: input.limits as object,
-                features: input.features ?? undefined,
-                stripePriceId: input.stripePriceId ?? undefined,
-                sortOrder: input.sortOrder ?? 0,
-            },
+        const plan = await this.planRepository.create({
+            role: input.role,
+            name: input.name,
+            price: input.price ?? undefined,
+            priceLabel: input.priceLabel,
+            limits: input.limits as object,
+            features: input.features ?? undefined,
+            stripePriceId: input.stripePriceId ?? undefined,
+            sortOrder: input.sortOrder ?? 0,
         });
         return this.toDto(plan);
     }
@@ -36,11 +34,8 @@ export class PlanService {
         if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
         if (input.isActive !== undefined) data.isActive = input.isActive;
 
-        const plan = await this.prisma.plan
-            .update({
-                where: { role },
-                data,
-            })
+        const plan = await this.planRepository
+            .updateByRole(role, data)
             .catch((err: { code?: string }) => {
                 if (err?.code === 'P2025') {
                     throw new NotFoundException(`Plan with role ${role} not found`);
@@ -51,11 +46,8 @@ export class PlanService {
     }
 
     public async remove(role: UserRole): Promise<PlanDto> {
-        const plan = await this.prisma.plan
-            .update({
-                where: { role },
-                data: { isActive: false },
-            })
+        const plan = await this.planRepository
+            .updateByRole(role, { isActive: false })
             .catch((err: { code?: string }) => {
                 if (err?.code === 'P2025') {
                     throw new NotFoundException(`Plan with role ${role} not found`);
@@ -66,18 +58,7 @@ export class PlanService {
     }
 
     public async findAll(role?: UserRole): Promise<PlanDto[]> {
-        const plans = await this.prisma.plan.findMany({
-            where: { isActive: true, ...(role !== undefined && { role }) },
-            orderBy: { sortOrder: 'asc' },
-            select: {
-                role: true,
-                name: true,
-                price: true,
-                priceLabel: true,
-                limits: true,
-                features: true,
-            },
-        });
+        const plans = await this.planRepository.findManyActive(role);
         return plans.map((p) => this.toDto(p));
     }
 

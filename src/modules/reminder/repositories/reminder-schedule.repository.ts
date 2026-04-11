@@ -6,6 +6,7 @@ import {
     ReminderScheduleKind,
     ReminderScheduleStatus,
 } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared/services';
 import { ESCALATION_CONFIG } from '../config/reminder.config';
 import { addUtcDays } from '../utils/reminder-date.util';
@@ -18,8 +19,10 @@ const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [
 ];
 
 @Injectable()
-export class ReminderScheduleRepository {
-    public constructor(private readonly prisma: PrismaService) {}
+export class ReminderScheduleRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService) {
+        super(prismaService);
+    }
 
     public async findById(id: string): Promise<ReminderSchedule | null> {
         return this.prisma.reminderSchedule.findUnique({ where: { id } });
@@ -27,7 +30,7 @@ export class ReminderScheduleRepository {
 
     public async claimDueBatch(batchSize: number, instanceId: string): Promise<ReminderSchedule[]> {
         const now = new Date();
-        return this.prisma.$transaction(async (tx) => {
+        return this.runInTransaction(async (tx) => {
             const picked = await tx.$queryRaw<Array<{ id: string }>>`
                 SELECT id FROM reminder_schedule
                 WHERE status = 'PENDING'::"ReminderScheduleStatus"
@@ -208,5 +211,85 @@ export class ReminderScheduleRepository {
             )
         `;
         return typeof result === 'number' ? result : 0;
+    }
+
+    public async findQueuedScheduleIds(take: number): Promise<Array<{ id: string }>> {
+        return this.prisma.reminderSchedule.findMany({
+            where: { status: ReminderScheduleStatus.QUEUED },
+            take,
+            select: { id: true },
+        });
+    }
+
+    public async findInitialSentRemindersBefore(
+        threshold: Date,
+        take: number,
+    ): Promise<ReminderSchedule[]> {
+        return this.prisma.reminderSchedule.findMany({
+            where: {
+                reminderType: ReminderScheduleKind.INITIAL,
+                status: ReminderScheduleStatus.SENT,
+                sentAt: { lt: threshold },
+            },
+            take,
+        });
+    }
+
+    public async countEscalationsForInitial(initialReminderId: string): Promise<number> {
+        return this.prisma.reminderSchedule.count({
+            where: {
+                initialReminderId,
+                reminderType: ReminderScheduleKind.ESCALATION,
+            },
+        });
+    }
+
+    public async markSentIfStillSending(
+        tx: Prisma.TransactionClient,
+        scheduleId: string,
+        sentAt: Date,
+    ): Promise<number> {
+        const updated = await tx.reminderSchedule.updateMany({
+            where: {
+                id: scheduleId,
+                status: ReminderScheduleStatus.SENDING,
+            },
+            data: {
+                status: ReminderScheduleStatus.SENT,
+                sentAt,
+                completedAt: sentAt,
+                attempt: { increment: 1 },
+            },
+        });
+        return updated.count;
+    }
+
+    public findByIdWithClient(
+        tx: Prisma.TransactionClient,
+        id: string,
+    ): Promise<ReminderSchedule | null> {
+        return tx.reminderSchedule.findUnique({ where: { id } });
+    }
+
+    public async resetSendingToPendingRetry(
+        scheduleId: string,
+        nextAttempt: number,
+        nextAttemptAt: Date,
+        lastErrorCode: string,
+        lastErrorMsg: string,
+    ): Promise<number> {
+        const result = await this.prisma.reminderSchedule.updateMany({
+            where: { id: scheduleId, status: ReminderScheduleStatus.SENDING },
+            data: {
+                status: ReminderScheduleStatus.PENDING,
+                attempt: nextAttempt,
+                nextAttemptAt,
+                lastErrorCode,
+                lastErrorMsg,
+                lockedBy: null,
+                lockedAt: null,
+            },
+        });
+        return result.count;
     }
 }

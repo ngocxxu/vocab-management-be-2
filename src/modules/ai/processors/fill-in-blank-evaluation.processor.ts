@@ -3,13 +3,14 @@ import { Injectable } from '@nestjs/common';
 import { PriorityLevel, NotificationAction, NotificationType, TrainerStatus } from '@prisma/client';
 import { Job } from 'bullmq';
 import { LoggerService } from '../../shared';
-import { PrismaService } from '../../shared/services';
+import { UserRepository } from '../../user/repositories';
 import { NotificationGateway } from '../../event/gateway/notification.gateway';
 import { NotificationService } from '../../notification/services';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
 import { EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import { EQuestionType, EReminderRepeat, VocabWithTextTargets } from '../../vocab-trainer/utils';
+import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
 
 export interface FillInBlankEvaluationJobData {
@@ -35,7 +36,8 @@ export class FillInBlankEvaluationProcessor {
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
         private readonly notificationGateway: NotificationGateway,
-        private readonly prismaService: PrismaService,
+        private readonly vocabTrainerRepository: VocabTrainerRepository,
+        private readonly userRepository: UserRepository,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly notificationService: NotificationService,
         private readonly vocabTrainerReminderAfterExam: VocabTrainerReminderAfterExamService,
@@ -77,13 +79,9 @@ export class FillInBlankEvaluationProcessor {
                 };
             });
 
-            await this.prismaService.vocabTrainerResult.deleteMany({
-                where: { vocabTrainerId },
-            });
+            await this.vocabTrainerRepository.deleteVocabTrainerResults(vocabTrainerId);
 
-            await this.prismaService.vocabTrainerResult.createMany({
-                data: createResults,
-            });
+            await this.vocabTrainerRepository.createVocabTrainerResultsMany(createResults);
 
             for (const resultItem of createResults) {
                 const vocabId = resultItem.vocabId;
@@ -99,9 +97,9 @@ export class FillInBlankEvaluationProcessor {
             const overallStatus =
                 scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
 
-            const trainer = await this.prismaService.vocabTrainer.findUnique({
-                where: { id: vocabTrainerId },
-            });
+            const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdMinimal(
+                vocabTrainerId,
+            );
 
             if (!trainer) {
                 throw new Error(`Trainer ${vocabTrainerId} not found`);
@@ -130,27 +128,23 @@ export class FillInBlankEvaluationProcessor {
                     recipientUserIds: [userId],
                 });
 
-                await this.prismaService.$transaction(async (tx) => {
+                await this.vocabTrainerRepository.inTransaction(async (tx) => {
                     await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(
                         tx,
                         vocabTrainerId,
                         userId,
                         'trainer_completed_max_passes',
                     );
-                    await tx.vocabTrainer.delete({
-                        where: { id: vocabTrainerId },
-                    });
+                    await this.vocabTrainerRepository.deleteVocabTrainerRow(vocabTrainerId, tx);
                 });
             } else {
-                const user = await this.prismaService.user.findUnique({
-                    where: { id: userId },
-                });
+                const user = await this.userRepository.findById(userId);
 
                 if (!user) {
                     throw new Error(`User ${userId} not found`);
                 }
 
-                const updated = await this.prismaService.$transaction(async (tx) => {
+                const updated = await this.vocabTrainerRepository.inTransaction(async (tx) => {
                     await this.vocabTrainerReminderAfterExam.syncRemindersAfterExamSubmission(tx, {
                         trainerId: trainer.id,
                         userId: user.id,
@@ -163,16 +157,17 @@ export class FillInBlankEvaluationProcessor {
                         reminderDisabled: trainer.reminderDisabled,
                     });
 
-                    return tx.vocabTrainer.update({
-                        where: { id: vocabTrainerId },
-                        data: {
+                    return this.vocabTrainerRepository.updateVocabTrainerWithIncludes(
+                        vocabTrainerId,
+                        {
                             status: overallStatus,
                             reminderRepeat: passCount,
                             reminderLastRemind: new Date(),
                             reminderDisabled: false,
                             lastExamSubmittedAt: new Date(),
                         },
-                    });
+                        tx,
+                    );
                 });
 
                 await this.vocabTrainerReminderAfterExam.scheduleNotification(

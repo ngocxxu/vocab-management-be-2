@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { Config, ConfigScope, Prisma } from '@prisma/client';
+import { BaseRepository } from '../../../database';
 import { PrismaService } from '../../shared';
 
 @Injectable()
-export class ConfigRepository {
-    public constructor(private readonly prismaService: PrismaService) {}
+export class ConfigRepository extends BaseRepository {
+    public constructor(prismaService: PrismaService) {
+        super(prismaService);
+    }
 
     public async findSystemConfig(key: string): Promise<Config | null> {
-        return this.prismaService.config.findFirst({
+        return this.prisma.config.findFirst({
             where: {
                 scope: ConfigScope.SYSTEM,
                 userId: null,
@@ -18,7 +21,7 @@ export class ConfigRepository {
     }
 
     public async findUserConfig(userId: string, key: string): Promise<Config | null> {
-        return this.prismaService.config.findFirst({
+        return this.prisma.config.findFirst({
             where: {
                 scope: ConfigScope.USER,
                 userId,
@@ -40,7 +43,7 @@ export class ConfigRepository {
     }
 
     public async findSystemConfigForUpdate(key: string): Promise<Config | null> {
-        return this.prismaService.config.findFirst({
+        return this.prisma.config.findFirst({
             where: {
                 scope: ConfigScope.SYSTEM,
                 userId: null,
@@ -50,7 +53,7 @@ export class ConfigRepository {
     }
 
     public async findUserConfigForUpdate(userId: string, key: string): Promise<Config | null> {
-        return this.prismaService.config.findFirst({
+        return this.prisma.config.findFirst({
             where: {
                 scope: ConfigScope.USER,
                 userId,
@@ -60,7 +63,7 @@ export class ConfigRepository {
     }
 
     public async createSystemConfig(key: string, value: Prisma.InputJsonValue): Promise<Config> {
-        return this.prismaService.config.create({
+        return this.prisma.config.create({
             data: {
                 scope: ConfigScope.SYSTEM,
                 userId: null,
@@ -72,7 +75,7 @@ export class ConfigRepository {
     }
 
     public async updateSystemConfig(id: string, value: Prisma.InputJsonValue): Promise<Config> {
-        return this.prismaService.config.update({
+        return this.prisma.config.update({
             where: { id },
             data: {
                 value,
@@ -82,7 +85,7 @@ export class ConfigRepository {
     }
 
     public async upsertSystemConfig(key: string, value: Prisma.InputJsonValue): Promise<Config> {
-        return this.prismaService.$transaction(async (tx) => {
+        return this.runInTransaction(async (tx) => {
             const existing = await tx.config.findFirst({
                 where: {
                     scope: ConfigScope.SYSTEM,
@@ -118,7 +121,7 @@ export class ConfigRepository {
         key: string,
         value: Prisma.InputJsonValue,
     ): Promise<Config> {
-        return this.prismaService.config.upsert({
+        return this.prisma.config.upsert({
             where: {
                 scope_userId_key: {
                     scope: ConfigScope.USER,
@@ -141,7 +144,7 @@ export class ConfigRepository {
     }
 
     public async deleteConfig(id: string): Promise<Config> {
-        return this.prismaService.config.delete({
+        return this.prisma.config.delete({
             where: { id },
         });
     }

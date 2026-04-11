@@ -2,7 +2,6 @@ import { Process, Processor } from '@nestjs/bull';
 import { ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
 import { Job } from 'bullmq';
 import { LoggerService } from '../../shared';
-import { PrismaService } from '../../shared/services';
 import { ActedCheckRegistry } from '../../reminder/strategies/acted-check.registry';
 import { REMINDER_CONFIG } from '../../reminder/config/reminder.config';
 import { ReminderScheduleRepository } from '../../reminder/repositories/reminder-schedule.repository';
@@ -16,7 +15,6 @@ export class EmailProcessor {
     public constructor(
         private readonly emailService: EmailService,
         private readonly logger: LoggerService,
-        private readonly prisma: PrismaService,
         private readonly reminderScheduleRepository: ReminderScheduleRepository,
         private readonly actedCheckRegistry: ActedCheckRegistry,
     ) {}
@@ -131,24 +129,20 @@ export class EmailProcessor {
         }
 
         const sentAt = new Date();
-        await this.prisma.$transaction(async (tx) => {
-            const updated = await tx.reminderSchedule.updateMany({
-                where: {
-                    id: fresh.id,
-                    status: ReminderScheduleStatus.SENDING,
-                },
-                data: {
-                    status: ReminderScheduleStatus.SENT,
-                    sentAt,
-                    completedAt: sentAt,
-                    attempt: { increment: 1 },
-                },
-            });
-            if (updated.count !== 1) {
+        await this.reminderScheduleRepository.inTransaction(async (tx) => {
+            const updatedCount = await this.reminderScheduleRepository.markSentIfStillSending(
+                tx,
+                fresh.id,
+                sentAt,
+            );
+            if (updatedCount !== 1) {
                 return;
             }
             if (fresh.reminderType === ReminderScheduleKind.INITIAL) {
-                const initial = await tx.reminderSchedule.findUnique({ where: { id: fresh.id } });
+                const initial = await this.reminderScheduleRepository.findByIdWithClient(
+                    tx,
+                    fresh.id,
+                );
                 if (initial) {
                     await this.reminderScheduleRepository.createEscalationsForInitial(
                         tx,
@@ -190,17 +184,12 @@ export class EmailProcessor {
 
         const backoff = computeBackoffMs(nextAttempt);
         const nextAt = new Date(Date.now() + backoff);
-        await this.prisma.reminderSchedule.updateMany({
-            where: { id: scheduleId, status: ReminderScheduleStatus.SENDING },
-            data: {
-                status: ReminderScheduleStatus.PENDING,
-                attempt: nextAttempt,
-                nextAttemptAt: nextAt,
-                lastErrorCode: code ?? 'retryable',
-                lastErrorMsg: msg,
-                lockedBy: null,
-                lockedAt: null,
-            },
-        });
+        await this.reminderScheduleRepository.resetSendingToPendingRetry(
+            scheduleId,
+            nextAttempt,
+            nextAt,
+            code ?? 'retryable',
+            msg,
+        );
     }
 }

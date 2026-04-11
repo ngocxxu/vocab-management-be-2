@@ -2,6 +2,8 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bull';
 import { Module, forwardRef } from '@nestjs/common';
+import { UserModule } from '../user/user.module';
+import { VocabTrainerModule } from '../vocab-trainer/vocab-trainer.module';
 import { ConfigModule } from '../config';
 import { EventsModule } from '../event/module';
 import { LanguageModule } from '../language/language.module';
@@ -33,8 +35,10 @@ import { AiTranslationService } from './services/ai-translation.service';
         LanguageModule,
         NotificationModule,
         ReminderModule,
+        UserModule,
         WordTypeModule,
         forwardRef(() => VocabModule),
+        forwardRef(() => VocabTrainerModule),
         BullModule.registerQueue({
             name: EReminderType.AUDIO_EVALUATION,
         }),
