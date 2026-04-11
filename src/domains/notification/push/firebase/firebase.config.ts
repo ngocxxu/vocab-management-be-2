@@ -27,10 +27,6 @@ export class FirebaseConfig implements OnModuleInit {
         return this.getApp().messaging();
     }
 
-    public async verifyIdToken(idToken: string): Promise<admin.auth.DecodedIdToken> {
-        return this.getApp().auth().verifyIdToken(idToken);
-    }
-
     private initializeFirebase(): void {
         try {
             // Check if Firebase is already initialized

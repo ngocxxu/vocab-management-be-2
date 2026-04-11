@@ -1,6 +1,7 @@
 import type { AuthUser } from '../interfaces/auth-user.interface';
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { User } from '@prisma/client';
 import { Request } from 'express';
 
 import { Roles } from '../decorators/roles.decorator';
@@ -15,13 +16,14 @@ export class RolesGuard implements CanActivate {
             return true;
         }
 
-        const request = context.switchToHttp().getRequest<Request & { authUser?: AuthUser }>();
+        const request = context.switchToHttp().getRequest<Request & { authUser?: AuthUser; currentUser?: User }>();
         const authUser = request.authUser;
         if (!authUser) {
             throw new UnauthorizedException('User not authenticated');
         }
 
-        const hasRole = requiredRoles.some((role) => authUser.roles.includes(role));
+        const effectiveRoles = authUser.roles.length > 0 ? authUser.roles : request.currentUser?.role ? [request.currentUser.role] : [];
+        const hasRole = requiredRoles.some((role) => effectiveRoles.includes(role));
         if (!hasRole) {
             throw new ForbiddenException(`Access denied. Required one of roles: ${requiredRoles.join(', ')}`);
         }

@@ -2,7 +2,7 @@ import { Controller, Delete, Get, HttpCode, HttpStatus, UseGuards } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../decorators/roles.decorator';
-import { RolesGuard } from '../guards/roles.guard';
+import { RolesGuard } from '../guards';
 import { CacheManagerService } from '../services/cache-manager.service';
 import { LoggerService } from '../services/logger.service';
 import { RedisService } from '../services/redis.service';

@@ -8,7 +8,7 @@ import { AuthTokenService } from '../services/auth-token.service';
 import { bindAuthUserToRequest } from '../utils/bind-request-user.util';
 
 @Injectable()
-export class FirebaseAuthGuard implements CanActivate {
+export class SupabaseAuthGuard implements CanActivate {
     public constructor(
         private readonly authTokenService: AuthTokenService,
         private readonly prisma: PrismaService,
@@ -20,7 +20,7 @@ export class FirebaseAuthGuard implements CanActivate {
         if (!token) {
             throw new UnauthorizedException('No authentication token provided');
         }
-        const authUser = await this.authTokenService.resolveAuthUser(token, 'firebase');
+        const authUser = await this.authTokenService.resolveAuthUser(token, 'supabase');
         await bindAuthUserToRequest(this.prisma, request, authUser);
         return true;
     }

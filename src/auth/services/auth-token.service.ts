@@ -1,11 +1,12 @@
 import type { AuthStrategyValue } from '../decorators/auth-strategy.decorator';
 import type { AuthUser } from '../interfaces/auth-user.interface';
-import { FirebaseConfig } from '@/domains/notification/push/firebase/firebase.config';
+import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Request } from 'express';
-import { JsonWebTokenError, JwtPayload, NotBeforeError, TokenExpiredError } from 'jsonwebtoken';
 import * as jwt from 'jsonwebtoken';
+import { JsonWebTokenError, JwtPayload, NotBeforeError, TokenExpiredError } from 'jsonwebtoken';
 
 function normalizeRoles(value: unknown): string[] {
     if (Array.isArray(value)) {
@@ -33,11 +34,21 @@ function mapJwtPayload(payload: JwtPayload): AuthUser {
     };
 }
 
+function mapSupabaseAuthUser(user: SupabaseUser): AuthUser {
+    const meta = { ...user.user_metadata, ...user.app_metadata } as Record<string, unknown>;
+    return {
+        id: user.id,
+        email: user.email ?? null,
+        roles: normalizeRoles(meta.roles),
+        provider: 'supabase',
+    };
+}
+
 @Injectable()
 export class AuthTokenService {
     public constructor(
         private readonly configService: ConfigService,
-        private readonly firebaseConfig: FirebaseConfig,
+        private readonly supabaseAuth: SupabaseAuthProvider,
     ) {}
 
     public extractBearerToken(request: Request): string | null {
@@ -53,8 +64,8 @@ export class AuthTokenService {
         if (strategy === 'jwt') {
             return this.verifyJwt(token);
         }
-        if (strategy === 'firebase') {
-            return this.verifyFirebase(token);
+        if (strategy === 'supabase') {
+            return this.verifySupabase(token);
         }
         return this.verifyCombined(token);
     }
@@ -85,19 +96,15 @@ export class AuthTokenService {
         }
     }
 
-    private async verifyFirebase(token: string): Promise<AuthUser> {
-        try {
-            const decoded = await this.firebaseConfig.verifyIdToken(token);
-            const raw = decoded as Record<string, unknown>;
-            return {
-                id: decoded.uid,
-                email: decoded.email ?? null,
-                roles: normalizeRoles(raw.roles),
-                provider: 'firebase',
-            };
-        } catch {
+    private async verifySupabase(token: string): Promise<AuthUser> {
+        const {
+            data: { user },
+            error,
+        } = await this.supabaseAuth.getAnonClient().auth.getUser(token);
+        if (error || !user) {
             throw new UnauthorizedException('Invalid or expired token');
         }
+        return mapSupabaseAuthUser(user);
     }
 
     private async verifyCombined(token: string): Promise<AuthUser> {
@@ -109,7 +116,7 @@ export class AuthTokenService {
                 issuer,
             });
             if (typeof payload === 'string') {
-                return this.verifyFirebase(token);
+                return this.verifySupabase(token);
             }
             return mapJwtPayload(payload);
         } catch (err) {
@@ -120,7 +127,7 @@ export class AuthTokenService {
                 throw new UnauthorizedException(err.message);
             }
             if (err instanceof JsonWebTokenError) {
-                return this.verifyFirebase(token);
+                return this.verifySupabase(token);
             }
             throw new UnauthorizedException('Invalid token');
         }

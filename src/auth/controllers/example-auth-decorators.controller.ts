@@ -17,7 +17,7 @@ export class ExampleAuthDecoratorsController {
 
     @Get('combined-default')
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Protected with default combined JWT then Firebase strategy' })
+    @ApiOperation({ summary: 'Protected with default combined JWT then Supabase access token strategy' })
     public getCombinedDefault(@CurrentUser() user: AuthUser): AuthUser {
         return user;
     }
@@ -30,11 +30,11 @@ export class ExampleAuthDecoratorsController {
         return user;
     }
 
-    @AuthStrategy('firebase')
-    @Get('firebase-only')
+    @AuthStrategy('supabase')
+    @Get('supabase-only')
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Firebase ID token only' })
-    public getFirebaseOnly(@CurrentUser() user: AuthUser): AuthUser {
+    @ApiOperation({ summary: 'Supabase access token only' })
+    public getSupabaseOnly(@CurrentUser() user: AuthUser): AuthUser {
         return user;
     }
 
