@@ -1,15 +1,13 @@
 import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { IResponse } from '../../shared';
+import { SupabaseAuthProvider } from '../../shared/providers';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
 import { UserDto, UserInput } from '../models';
 import { UserRepository } from '../repositories';
 
 @Injectable()
 export class UserService {
-    private readonly supabase: SupabaseClient;
-
     private readonly userErrorMapping = {
         P2002: 'User name already exists',
         P2025: {
@@ -21,17 +19,13 @@ export class UserService {
         },
     };
 
-    public constructor(private readonly userRepository: UserRepository) {
-        this.supabase = createClient(
-            process.env.SUPABASE_URL ?? '',
-            process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
-            {
-                auth: {
-                    autoRefreshToken: false,
-                    persistSession: false,
-                },
-            },
-        );
+    public constructor(
+        private readonly userRepository: UserRepository,
+        private readonly supabaseAuth: SupabaseAuthProvider,
+    ) {}
+
+    private get supabase() {
+        return this.supabaseAuth.getServiceRoleClient();
     }
 
     /**

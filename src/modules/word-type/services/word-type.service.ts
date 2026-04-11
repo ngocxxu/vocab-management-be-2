@@ -1,11 +1,13 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { IResponse } from '../../shared';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
+import { WordTypeMapper } from '../mappers';
 import { WordTypeDto, WordTypeInput } from '../models';
 import { WordTypeRepository } from '../repositories';
 
 @Injectable()
 export class WordTypeService {
+    private readonly wordTypeMapper = new WordTypeMapper();
     private readonly wordTypeErrorMapping = {
         P2002: 'Word type with this name already exists',
         P2025: {
@@ -30,7 +32,7 @@ export class WordTypeService {
             const wordTypes = await this.wordTypeRepository.findAll();
 
             return {
-                items: wordTypes.map((wordType) => new WordTypeDto(wordType)),
+                items: this.wordTypeMapper.toResponseList(wordTypes),
                 statusCode: HttpStatus.OK,
             };
         } catch (error: unknown) {
@@ -53,7 +55,7 @@ export class WordTypeService {
                 throw new NotFoundException(`Word type with ID ${id} not found`);
             }
 
-            return new WordTypeDto(wordType);
+            return this.wordTypeMapper.toResponse(wordType);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -72,14 +74,11 @@ export class WordTypeService {
      */
     public async create(createWordTypeData: WordTypeInput): Promise<WordTypeDto> {
         try {
-            const { name, description }: WordTypeInput = createWordTypeData;
+            const wordType = await this.wordTypeRepository.create(
+                this.wordTypeMapper.toCreateInput(createWordTypeData),
+            );
 
-            const wordType = await this.wordTypeRepository.create({
-                name,
-                description,
-            });
-
-            return new WordTypeDto(wordType);
+            return this.wordTypeMapper.toResponse(wordType);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.wordTypeErrorMapping);
         }
@@ -99,22 +98,18 @@ export class WordTypeService {
         updateWordTypeData: Partial<WordTypeInput>,
     ): Promise<WordTypeDto> {
         try {
-            const { name, description }: Partial<WordTypeInput> = updateWordTypeData;
-
             const existingWordType = await this.wordTypeRepository.findById(id);
 
             if (!existingWordType) {
                 throw new NotFoundException(`Word type with ID ${id} not found`);
             }
 
-            const updateData = {
-                ...(name !== undefined && { name }),
-                ...(description !== undefined && { description }),
-            };
+            const wordType = await this.wordTypeRepository.update(
+                id,
+                this.wordTypeMapper.buildUpdateInput(updateWordTypeData),
+            );
 
-            const wordType = await this.wordTypeRepository.update(id, updateData);
-
-            return new WordTypeDto(wordType);
+            return this.wordTypeMapper.toResponse(wordType);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -133,7 +128,7 @@ export class WordTypeService {
         try {
             const wordType = await this.wordTypeRepository.delete(id);
 
-            return new WordTypeDto(wordType);
+            return this.wordTypeMapper.toResponse(wordType);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.wordTypeErrorMapping);
         }

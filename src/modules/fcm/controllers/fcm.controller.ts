@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
-import { FirebaseService } from '../../../firebase';
+import { FirebaseProvider } from '../../../firebase';
 import { AuthGuard, IResponse, LoggerService } from '../../shared';
 import { CurrentUser } from '../../shared/decorators';
 import {
@@ -20,7 +20,7 @@ export class FcmController {
     public constructor(
         private readonly logger: LoggerService,
         private readonly fcmService: FcmService,
-        private readonly firebaseService: FirebaseService,
+        private readonly firebaseProvider: FirebaseProvider,
     ) {}
 
     @Post('register')
@@ -84,7 +84,7 @@ export class FcmController {
         const tokens = userTokens.items.map((token) => token.fcmToken);
 
         // Send notification to all user devices
-        const response = await this.firebaseService.sendToMultipleDevices(
+        const response = await this.firebaseProvider.sendToMultipleDevices(
             tokens,
             {
                 title: input.title,

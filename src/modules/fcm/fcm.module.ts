@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { FirebaseConfig, FirebaseService } from '../../firebase';
+import { FirebaseConfig, FirebaseProvider, FirebaseService } from '../../firebase';
 import { FcmController } from './controllers';
 import { UserFcmTokenRepository } from './repositories';
 import { FcmService } from './services';
@@ -7,7 +7,13 @@ import { FcmService } from './services';
 @Module({
     imports: [],
     controllers: [FcmController],
-    providers: [UserFcmTokenRepository, FcmService, FirebaseConfig, FirebaseService],
-    exports: [FcmService, FirebaseService],
+    providers: [
+        UserFcmTokenRepository,
+        FcmService,
+        FirebaseConfig,
+        FirebaseService,
+        FirebaseProvider,
+    ],
+    exports: [FcmService, FirebaseService, FirebaseProvider],
 })
 export class FcmModule {}

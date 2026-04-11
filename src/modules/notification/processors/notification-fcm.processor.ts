@@ -1,7 +1,7 @@
 import { OnQueueActive, OnQueueCompleted, OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { FirebaseService } from '../../../firebase';
+import { FirebaseProvider } from '../../../firebase';
 import { LoggerService } from '../../shared';
 import { FcmService } from '../../fcm/services';
 import { ENotificationFcmType, EReminderType } from '../../reminder/utils';
@@ -21,7 +21,7 @@ export class NotificationFcmProcessor {
     public constructor(
         private readonly logger: LoggerService,
         private readonly fcmService: FcmService,
-        private readonly firebaseService: FirebaseService,
+        private readonly firebaseProvider: FirebaseProvider,
     ) {}
 
     @Process(ENotificationFcmType.SEND_NOTIFICATION)
@@ -44,7 +44,7 @@ export class NotificationFcmProcessor {
             const fcmTokens = tokens.map((token) => token.fcmToken);
 
             // Send push notification
-            const response = await this.firebaseService.sendToMultipleDevices(
+            const response = await this.firebaseProvider.sendToMultipleDevices(
                 fcmTokens,
                 {
                     title,

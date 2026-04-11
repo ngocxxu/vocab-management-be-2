@@ -3,12 +3,14 @@ import { UserRole } from '@prisma/client';
 import { IResponse } from '../../shared';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
+import { SubjectMapper } from '../mappers';
 import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../models';
 import { CreateSubjectInput } from '../models/create-subject.input';
 import { SubjectRepository } from '../repositories';
 
 @Injectable()
 export class SubjectService {
+    private readonly subjectMapper = new SubjectMapper();
     private readonly subjectErrorMapping = {
         P2002: 'Subject with this name already exists',
         P2025: {
@@ -37,7 +39,7 @@ export class SubjectService {
             const subjects = await this.subjectRepository.findByUserId(userId);
 
             return {
-                items: subjects.map((subject) => new SubjectDto(subject)),
+                items: this.subjectMapper.toResponseList(subjects),
                 statusCode: HttpStatus.OK,
             };
         } catch (error: unknown) {
@@ -61,7 +63,7 @@ export class SubjectService {
                 throw new NotFoundException(`Subject with ID ${id} not found`);
             }
 
-            return new SubjectDto(subject);
+            return this.subjectMapper.toResponse(subject);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -99,7 +101,7 @@ export class SubjectService {
                 userId,
             });
 
-            return new SubjectDto(subject);
+            return this.subjectMapper.toResponse(subject);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.subjectErrorMapping);
         }
@@ -131,12 +133,12 @@ export class SubjectService {
                 throw new Error('Subject not found or unauthorized');
             }
 
-            const subject = await this.subjectRepository.update(id, {
-                name: updateSubjectData.name,
-                order: updateSubjectData.order,
-            });
+            const subject = await this.subjectRepository.update(
+                id,
+                this.subjectMapper.toUpdatePayload(updateSubjectData),
+            );
 
-            return new SubjectDto(subject);
+            return this.subjectMapper.toResponse(subject);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -170,7 +172,7 @@ export class SubjectService {
                 userId,
             );
 
-            return sortedSubjects.map((subject) => new SubjectDto(subject));
+            return this.subjectMapper.toResponseList(sortedSubjects);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'reorder', this.subjectErrorMapping);
             throw error;
@@ -197,7 +199,7 @@ export class SubjectService {
         try {
             const subject = await this.subjectRepository.delete(id, userId);
 
-            return new SubjectDto(subject);
+            return this.subjectMapper.toResponse(subject);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;

@@ -5,6 +5,7 @@ import { Module } from '@nestjs/common';
 
 import { EReminderType } from '../reminder/utils';
 import { ReminderModule } from '../reminder/reminder.module';
+import { MailProvider } from './providers';
 import { EmailProcessor } from './processors';
 import { EmailService } from './services';
 
@@ -19,7 +20,7 @@ import { EmailService } from './services';
         }),
         ReminderModule,
     ],
-    providers: [EmailService, EmailProcessor],
+    providers: [MailProvider, EmailService, EmailProcessor],
     exports: [],
 })
 export class EmailModule {}

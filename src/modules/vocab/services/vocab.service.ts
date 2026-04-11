@@ -17,6 +17,7 @@ import {
     VocabDto,
     VocabInput,
 } from '../models';
+import { VocabMapper } from '../mappers';
 import { VocabQueryParamsInput } from '../models/vocab-query-params.input';
 import { VocabTranslationJobData } from '../processors/vocab-translation.processor';
 import { CsvImportExistingVocab, VocabRepository } from '../repositories';
@@ -24,6 +25,8 @@ import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser
 
 @Injectable()
 export class VocabService {
+    private readonly vocabMapper = new VocabMapper();
+
     private readonly vocabErrorMapping = {
         P2002: 'Vocabulary with this text source and language combination already exists',
         P2025: {
@@ -82,9 +85,9 @@ export class VocabService {
                 throw new Error('Invalid vocabs data returned from repository');
             }
 
-            const items = vocabs.map((vocab) => new VocabDto({ ...vocab }));
+            const items = this.vocabMapper.toResponseList(vocabs);
 
-            return new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
+            return this.vocabMapper.toPaginated(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.vocabErrorMapping);
         }
@@ -117,7 +120,7 @@ export class VocabService {
 
             const vocabs = await this.vocabRepository.findRandom(count, userId, languageFolderId);
 
-            return vocabs.map((vocab) => new VocabDto({ ...vocab }));
+            return this.vocabMapper.toResponseList(vocabs);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -143,7 +146,7 @@ export class VocabService {
                 throw new NotFoundException(`Vocabulary with ID ${id} not found`);
             }
 
-            return new VocabDto(vocab);
+            return this.vocabMapper.toResponse(vocab);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -170,92 +173,29 @@ export class VocabService {
                 await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
             }
             const {
-                textSource,
                 sourceLanguageCode,
                 targetLanguageCode,
-                textTargets,
-                languageFolderId,
             }: VocabInput = createVocabData;
 
-            // Validate that source and target languages are different
             if (sourceLanguageCode === targetLanguageCode) {
                 throw new Error('Source and target languages must be different');
             }
 
-            const shouldQueueTranslation =
-                textSource && textTargets?.find((target) => !target.textTarget);
-            const emptyTextTarget = textTargets?.find(
-                (target) => !target.textTarget || target.textTarget.trim() === '',
-            );
+            const { prismaCreate, shouldQueueTranslation, queuePayload } =
+                this.vocabMapper.prepareCreate(createVocabData, userId);
 
-            // Get subjectIds from empty textTarget if available
-            const subjectIdsForTranslation = emptyTextTarget?.subjectIds?.length
-                ? emptyTextTarget.subjectIds
-                : createVocabData.subjectIds || [];
+            const vocab = await this.vocabRepository.create(prismaCreate);
 
-            const textTargetsToCreate =
-                shouldQueueTranslation && !textTargets?.length
-                    ? [
-                          {
-                              textTarget: '',
-                              grammar: '',
-                              explanationSource: '',
-                              explanationTarget: '',
-                              subjectIds: subjectIdsForTranslation,
-                          },
-                      ]
-                    : textTargets;
-
-            const vocab = await this.vocabRepository.create({
-                textSource,
-                sourceLanguage: { connect: { code: sourceLanguageCode } },
-                targetLanguage: { connect: { code: targetLanguageCode } },
-                languageFolder: { connect: { id: languageFolderId } },
-                user: { connect: { id: userId } },
-                textTargets: {
-                    create: textTargetsToCreate.map((target) => ({
-                        textTarget: target.textTarget,
-                        grammar: target.grammar,
-                        explanationSource: target.explanationSource,
-                        explanationTarget: target.explanationTarget,
-                        ...(target.subjectIds && {
-                            textTargetSubjects: {
-                                create: target.subjectIds.map((subjectId: string) => ({
-                                    subjectId,
-                                })),
-                            },
-                        }),
-
-                        ...(target.wordTypeId && {
-                            wordType: { connect: { id: target.wordTypeId } },
-                        }),
-
-                        ...(target.vocabExamples && {
-                            vocabExamples: {
-                                create: target.vocabExamples.map((example) => ({
-                                    source: example.source,
-                                    target: example.target,
-                                })),
-                            },
-                        }),
-                    })),
-                },
-            });
-
-            if (shouldQueueTranslation) {
+            if (shouldQueueTranslation && queuePayload) {
                 await this.vocabTranslationQueue.add('translate-vocab', {
                     vocabId: vocab.id,
-                    textSource,
-                    sourceLanguageCode,
-                    targetLanguageCode,
-                    subjectIds: subjectIdsForTranslation, // Sửa dòng này
-                    userId,
+                    ...queuePayload,
                 });
             }
 
             await this.vocabRepository.clearListCaches();
 
-            return new VocabDto(vocab);
+            return this.vocabMapper.toResponse(vocab);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.vocabErrorMapping);
         }
@@ -314,51 +254,14 @@ export class VocabService {
                 throw new Error('Source and target languages must be different');
             }
 
-            // If updating textTargets, we need to handle the nested updates
-            const textTargetsUpdate = updateVocabData.textTargets
-                ? {
-                      deleteMany: {}, // Remove all existing textTargets
-                      create: updateVocabData.textTargets.map((target) => ({
-                          textTarget: target.textTarget,
-                          grammar: target.grammar,
-                          explanationSource: target.explanationSource,
-                          explanationTarget: target.explanationTarget,
-                          ...(target.subjectIds && {
-                              textTargetSubjects: {
-                                  create: target.subjectIds.map((subjectId: string) => ({
-                                      subjectId,
-                                  })),
-                              },
-                          }),
-                          ...(target.wordTypeId && {
-                              wordType: { connect: { id: target.wordTypeId } },
-                          }),
-                          ...(target.vocabExamples && {
-                              vocabExamples: {
-                                  create: target.vocabExamples.map((example) => ({
-                                      source: example.source,
-                                      target: example.target,
-                                  })),
-                              },
-                          }),
-                      })),
-                  }
-                : undefined;
-
-            const vocab = await this.vocabRepository.update(id, {
-                ...(updateVocabData.textSource && { textSource: updateVocabData.textSource }),
-                ...(updateVocabData.sourceLanguageCode && {
-                    sourceLanguageCode: updateVocabData.sourceLanguageCode,
-                }),
-                ...(updateVocabData.targetLanguageCode && {
-                    targetLanguageCode: updateVocabData.targetLanguageCode,
-                }),
-                ...(textTargetsUpdate && { textTargets: textTargetsUpdate }),
-            });
+            const vocab = await this.vocabRepository.update(
+                id,
+                this.vocabMapper.buildUpdateInput(updateVocabData),
+            );
 
             await this.vocabRepository.clearListCaches();
 
-            return new VocabDto(vocab);
+            return this.vocabMapper.toResponse(vocab);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -381,7 +284,7 @@ export class VocabService {
 
             await this.vocabRepository.clearListCaches();
 
-            return new VocabDto(vocab);
+            return this.vocabMapper.toResponse(vocab);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.vocabErrorMapping);
         }

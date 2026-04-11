@@ -2,10 +2,10 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { PrismaErrorHandler } from '../handlers/error.handler';
+import { SupabaseAuthProvider } from '../providers';
 import { LoggerService } from '../services/logger.service';
 import { PrismaService } from '../services/prisma.service';
 import { CookieUtil } from '../utils/cookie.util';
@@ -13,17 +13,12 @@ import { RequestWithUser } from '../utils/type.util';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-    private readonly supabase: SupabaseClient;
     public constructor(
         private readonly reflector: Reflector,
         private readonly logger: LoggerService,
         private readonly prismaService: PrismaService,
-    ) {
-        this.supabase = createClient(
-            process.env.SUPABASE_URL ?? '',
-            process.env.SUPABASE_KEY ?? '',
-        );
-    }
+        private readonly supabaseAuth: SupabaseAuthProvider,
+    ) {}
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
         const request = context.switchToHttp().getRequest<RequestWithUser & Request>();
@@ -58,7 +53,7 @@ export class AuthGuard implements CanActivate {
             const {
                 data: { user },
                 error,
-            } = await this.supabase.auth.getUser(token);
+            } = await this.supabaseAuth.getAnonClient().auth.getUser(token);
 
             if (error || !user) {
                 throw new UnauthorizedException('Invalid or expired token');

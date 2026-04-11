@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { AuthError, createClient, SupabaseClient } from '@supabase/supabase-js';
+import { AuthError } from '@supabase/supabase-js';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
+import { SupabaseAuthProvider } from '../../shared/providers';
 import { jwtDecode } from '../../shared/utils/jwt.util';
 import { UserDto } from '../../user/models';
 import { UserRepository } from '../../user/repositories';
@@ -12,7 +13,6 @@ import { SignInResponse } from '../utils';
 @Injectable()
 export class AuthService {
     private readonly logger = new Logger(AuthService.name);
-    private readonly supabase: SupabaseClient;
 
     private readonly authErrorMapping = {
         'Invalid login credentials': 'Invalid email or password',
@@ -21,11 +21,17 @@ export class AuthService {
         'Invalid refresh token': 'Invalid refresh token',
     };
 
-    public constructor(private readonly userRepository: UserRepository) {
-        this.supabase = createClient(
-            process.env.SUPABASE_URL ?? '',
-            process.env.SUPABASE_KEY ?? '',
-        );
+    public constructor(
+        private readonly userRepository: UserRepository,
+        private readonly supabaseAuth: SupabaseAuthProvider,
+    ) {}
+
+    private get auth() {
+        return this.supabaseAuth.getAnonClient().auth;
+    }
+
+    private get authAdmin() {
+        return this.supabaseAuth.getServiceRoleClient().auth.admin;
     }
 
     /**
@@ -36,7 +42,7 @@ export class AuthService {
             const { email, password, firstName, lastName, phone, avatar, role } = input;
 
             // 1. Create user in Supabase
-            const { data, error } = await this.supabase.auth.signUp({
+            const { data, error } = await this.auth.signUp({
                 email,
                 password,
                 options: {
@@ -67,14 +73,14 @@ export class AuthService {
             });
 
             if (!user) {
-                await this.supabase.auth.admin.deleteUser(supabaseUser.id);
+                await this.authAdmin.deleteUser(supabaseUser.id);
                 throw new Error('User data is missing from Supabase response');
             }
 
             // 3. If session exists, return it. Otherwise, sign in to get session
             let session = data.session;
             if (!session) {
-                const signInResult = await this.supabase.auth.signInWithPassword({
+                const signInResult = await this.auth.signInWithPassword({
                     email,
                     password,
                 });
@@ -107,7 +113,7 @@ export class AuthService {
      */
     public async signIn(email: string, password: string): Promise<SignInResponse> {
         try {
-            const { data, error } = await this.supabase.auth.signInWithPassword({
+            const { data, error } = await this.auth.signInWithPassword({
                 email,
                 password,
             });
@@ -151,7 +157,7 @@ export class AuthService {
         redirectTo?: string,
     ): Promise<OAuthResponseDto> {
         try {
-            const { data, error } = await this.supabase.auth.signInWithOAuth({
+            const { data, error } = await this.auth.signInWithOAuth({
                 provider,
                 options: {
                     redirectTo: redirectTo ?? '',
@@ -177,7 +183,7 @@ export class AuthService {
      */
     public async verifyToken(accessToken: string): Promise<UserDto> {
         try {
-            const { data, error } = await this.supabase.auth.getUser(accessToken);
+            const { data, error } = await this.auth.getUser(accessToken);
 
             if (error) {
                 this.handleAuthError(error, 'verifyToken');
@@ -206,7 +212,7 @@ export class AuthService {
      */
     public async refreshSession(refreshToken: string): Promise<SignInResponse> {
         try {
-            const { data, error } = await this.supabase.auth.refreshSession({
+            const { data, error } = await this.auth.refreshSession({
                 refresh_token: refreshToken,
             });
 
@@ -246,7 +252,7 @@ export class AuthService {
      */
     public async signOut() {
         try {
-            const { error } = await this.supabase.auth.signOut();
+            const { error } = await this.auth.signOut();
 
             if (error) {
                 this.handleAuthError(error, 'signOut');
@@ -267,7 +273,7 @@ export class AuthService {
      */
     public async resetPassword(email: string) {
         try {
-            const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+            const { error } = await this.auth.resetPasswordForEmail(email, {
                 redirectTo: `${process.env.APP_URL}/auth/reset-password`,
             });
 
@@ -294,7 +300,7 @@ export class AuthService {
         type: 'signup' | 'recovery' | 'email_change',
     ): Promise<SessionDto> {
         try {
-            const { data, error } = await this.supabase.auth.verifyOtp({
+            const { data, error } = await this.auth.verifyOtp({
                 email,
                 token,
                 type,
@@ -332,7 +338,7 @@ export class AuthService {
      */
     public async resendConfirmation(email: string) {
         try {
-            const { error } = await this.supabase.auth.resend({
+            const { error } = await this.auth.resend({
                 type: 'signup',
                 email,
             });
@@ -357,17 +363,7 @@ export class AuthService {
      */
     public async syncOAuthUser(accessToken: string, refreshToken: string): Promise<SignInResponse> {
         try {
-            const userClient = createClient(
-                process.env.SUPABASE_URL ?? '',
-                process.env.SUPABASE_KEY ?? '',
-                {
-                    global: {
-                        headers: {
-                            Authorization: `Bearer ${accessToken}`,
-                        },
-                    },
-                },
-            );
+            const userClient = this.supabaseAuth.createClientWithAccessToken(accessToken);
 
             const { data: userData, error: userError } = await userClient.auth.getUser(accessToken);
 

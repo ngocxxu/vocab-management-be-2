@@ -1,11 +1,13 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { IResponse } from '../../shared';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
+import { LanguageMapper } from '../mappers';
 import { LanguageDto, LanguageInput } from '../models';
 import { LanguageRepository } from '../repositories';
 
 @Injectable()
 export class LanguageService {
+    private readonly languageMapper = new LanguageMapper();
     private readonly languageErrorMapping = {
         P2002: 'Language with this code already exists',
         P2025: {
@@ -30,7 +32,7 @@ export class LanguageService {
             const languages = await this.languageRepository.findAll();
 
             return {
-                items: languages.map((language) => new LanguageDto(language)),
+                items: this.languageMapper.toResponseList(languages),
                 statusCode: HttpStatus.OK,
             };
         } catch (error: unknown) {
@@ -53,7 +55,7 @@ export class LanguageService {
                 throw new NotFoundException(`Language with ID ${id} not found`);
             }
 
-            return new LanguageDto(language);
+            return this.languageMapper.toResponse(language);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -72,14 +74,11 @@ export class LanguageService {
      */
     public async create(createLanguageData: LanguageInput): Promise<LanguageDto> {
         try {
-            const { code, name }: LanguageInput = createLanguageData;
+            const language = await this.languageRepository.create(
+                this.languageMapper.toCreateInput(createLanguageData),
+            );
 
-            const language = await this.languageRepository.create({
-                code,
-                name,
-            });
-
-            return new LanguageDto(language);
+            return this.languageMapper.toResponse(language);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.languageErrorMapping);
         }
@@ -99,22 +98,18 @@ export class LanguageService {
         updateLanguageData: Partial<LanguageInput>,
     ): Promise<LanguageDto> {
         try {
-            const { code, name }: Partial<LanguageInput> = updateLanguageData;
-
             const existingLanguage = await this.languageRepository.findById(id);
 
             if (!existingLanguage) {
                 throw new NotFoundException(`Language with ID ${id} not found`);
             }
 
-            const updateData = {
-                ...(code !== undefined && { code }),
-                ...(name !== undefined && { name }),
-            };
+            const language = await this.languageRepository.update(
+                id,
+                this.languageMapper.buildUpdateInput(updateLanguageData),
+            );
 
-            const language = await this.languageRepository.update(id, updateData);
-
-            return new LanguageDto(language);
+            return this.languageMapper.toResponse(language);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -133,7 +128,7 @@ export class LanguageService {
         try {
             const language = await this.languageRepository.delete(id);
 
-            return new LanguageDto(language);
+            return this.languageMapper.toResponse(language);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.languageErrorMapping);
         }

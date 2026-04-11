@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { TerminusModule } from '@nestjs/terminus';
 import { CacheController, HealthController } from './controllers';
 import { LogInterceptor } from './interceptors';
+import { SupabaseAuthProvider, SupabaseStorageProvider } from './providers';
 import { CacheManagerService, LoggerService, PrismaService, RedisService } from './services';
 
 @Global()
@@ -13,6 +14,8 @@ import { CacheManagerService, LoggerService, PrismaService, RedisService } from 
         PrismaService,
         RedisService,
         CacheManagerService,
+        SupabaseStorageProvider,
+        SupabaseAuthProvider,
     ],
     exports: [
         LoggerService,
@@ -20,6 +23,8 @@ import { CacheManagerService, LoggerService, PrismaService, RedisService } from 
         PrismaService,
         RedisService,
         CacheManagerService,
+        SupabaseStorageProvider,
+        SupabaseAuthProvider,
     ],
     controllers: [HealthController, CacheController],
 })

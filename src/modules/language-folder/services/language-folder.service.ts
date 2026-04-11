@@ -3,12 +3,14 @@ import { Prisma, UserRole } from '@prisma/client';
 import { getOrderBy, getPagination, IResponse, PaginationDto } from '../../shared';
 import { PrismaErrorHandler } from '../../shared/handlers/error.handler';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
+import { LanguageFolderMapper } from '../mappers';
 import { LanguageFolderDto, LanguageFolderInput } from '../models';
 import { LanguageFolderParamsInput } from '../models/language-folder-params.input';
 import { LanguageFolderRepository } from '../repositories';
 
 @Injectable()
 export class LanguageFolderService {
+    private readonly languageFolderMapper = new LanguageFolderMapper();
     private readonly languageFolderErrorMapping = {
         P2002: 'Language folder with this name already exists for this user',
         P2025: {
@@ -37,7 +39,7 @@ export class LanguageFolderService {
             const folders = await this.languageFolderRepository.findByUserId(userId);
 
             return {
-                items: folders.map((folder) => new LanguageFolderDto(folder)),
+                items: this.languageFolderMapper.toResponseList(folders),
                 statusCode: HttpStatus.OK,
             };
         } catch (error: unknown) {
@@ -76,8 +78,8 @@ export class LanguageFolderService {
                 orderBy,
             );
 
-            const items = folders.map((folder) => new LanguageFolderDto(folder));
-            return new PaginationDto<LanguageFolderDto>(items, totalItems, page, pageSize);
+            const items = this.languageFolderMapper.toResponseList(folders);
+            return this.languageFolderMapper.toPaginated(items, totalItems, page, pageSize);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'find', this.languageFolderErrorMapping);
         }
@@ -99,7 +101,7 @@ export class LanguageFolderService {
                 throw new NotFoundException(`Language folder with ID ${id} not found`);
             }
 
-            return new LanguageFolderDto(folder);
+            return this.languageFolderMapper.toResponse(folder);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -126,22 +128,11 @@ export class LanguageFolderService {
             if (role !== undefined) {
                 await this.planQuotaService.assertCreationQuota(userId, role, 'languageFolder');
             }
-            const {
-                name,
-                folderColor,
-                sourceLanguageCode,
-                targetLanguageCode,
-            }: LanguageFolderInput = createFolderData;
+            const folder = await this.languageFolderRepository.create(
+                this.languageFolderMapper.toCreatePayload(createFolderData, userId),
+            );
 
-            const folder = await this.languageFolderRepository.create({
-                name,
-                folderColor,
-                sourceLanguageCode,
-                targetLanguageCode,
-                userId,
-            });
-
-            return new LanguageFolderDto(folder);
+            return this.languageFolderMapper.toResponse(folder);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'create', this.languageFolderErrorMapping);
         }
@@ -169,21 +160,12 @@ export class LanguageFolderService {
                 throw new Error('Language folder not found or unauthorized');
             }
 
-            const {
-                name,
-                folderColor,
-                sourceLanguageCode,
-                targetLanguageCode,
-            }: Partial<LanguageFolderInput> = updateFolderData;
+            const folder = await this.languageFolderRepository.update(
+                id,
+                this.languageFolderMapper.buildUpdateInput(updateFolderData),
+            );
 
-            const folder = await this.languageFolderRepository.update(id, {
-                ...(name !== undefined && { name }),
-                ...(folderColor !== undefined && { folderColor }),
-                ...(sourceLanguageCode !== undefined && { sourceLanguageCode }),
-                ...(targetLanguageCode !== undefined && { targetLanguageCode }),
-            });
-
-            return new LanguageFolderDto(folder);
+            return this.languageFolderMapper.toResponse(folder);
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
                 throw error;
@@ -204,7 +186,7 @@ export class LanguageFolderService {
         try {
             const folder = await this.languageFolderRepository.delete(id, userId);
 
-            return new LanguageFolderDto(folder);
+            return this.languageFolderMapper.toResponse(folder);
         } catch (error: unknown) {
             PrismaErrorHandler.handle(error, 'delete', this.languageFolderErrorMapping);
         }
