@@ -3,8 +3,8 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
-import { ApplicationModule } from './modules/app.module';
-import { SharedModule, LogInterceptor } from './modules/shared';
+import { ApplicationModule } from './app/application.module';
+import { SharedModule, LogInterceptor } from './shared';
 
 /**
  * These are API defaults that can be changed using environment variables,
