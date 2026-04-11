@@ -1,8 +1,8 @@
-import { Body, Controller, Get, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { FirebaseProvider } from '../../firebase';
-import { AuthGuard, IResponse, LoggerService } from '@/shared';
+import { IResponse, LoggerService } from '@/shared';
 import { CurrentUser } from '@/shared/decorators';
 import {
     FcmTokenDto,
@@ -15,7 +15,6 @@ import { FcmService } from '../services';
 @Controller('fcm')
 @ApiTags('fcm')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
 export class FcmController {
     public constructor(
         private readonly logger: LoggerService,

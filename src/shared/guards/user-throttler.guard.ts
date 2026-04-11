@@ -4,6 +4,7 @@ import { ThrottlerLimitDetail } from '@nestjs/throttler/dist/throttler.guard.int
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface RequestWithUser extends Record<string, unknown> {
+    authUser?: { id: string };
     user?: SupabaseUser | Promise<SupabaseUser>;
     ip?: string;
 }
@@ -25,6 +26,11 @@ function isString(value: unknown): value is string {
 export class UserThrottlerGuard extends ThrottlerGuard {
     protected async getTracker(req: Record<string, unknown>): Promise<string> {
         const request = req as RequestWithUser;
+        const authId = request.authUser?.id;
+        if (isString(authId)) {
+            return `user-${authId}`;
+        }
+
         const userValue = request.user;
 
         if (userValue) {

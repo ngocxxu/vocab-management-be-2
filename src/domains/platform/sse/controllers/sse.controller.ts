@@ -1,9 +1,8 @@
-import { Controller, Get, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User as UserEntity } from '@prisma/client';
 import { Request } from 'express';
 import { Response } from 'express';
-import { AuthGuard } from '@/shared';
 import { CurrentUser } from '@/shared/decorators/user.decorator';
 import { SSEService } from '../services/sse.service';
 
@@ -14,7 +13,6 @@ export class SSEController {
     public constructor(private readonly sseService: SSEService) {}
 
     @Get('events')
-    @UseGuards(AuthGuard)
     @ApiOperation({ summary: 'Establish SSE connection for events' })
     @ApiResponse({ status: HttpStatus.OK, description: 'SSE connection established' })
     public connect(

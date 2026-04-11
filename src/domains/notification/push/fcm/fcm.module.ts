@@ -14,6 +14,6 @@ import { FcmService } from './services';
         FirebaseService,
         FirebaseProvider,
     ],
-    exports: [FcmService, FirebaseService, FirebaseProvider],
+    exports: [FcmService, FirebaseService, FirebaseProvider, FirebaseConfig],
 })
 export class FcmModule {}

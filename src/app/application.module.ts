@@ -9,9 +9,11 @@ import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 
 import { CommonModule } from '@/common/common.module';
 
+import { AuthModule as AppAuthModule, GlobalAuthGuard } from '@/auth';
+
 import { envConfigLoaders, validationSchema } from '../config';
 import { AiModule } from '@/domains/ai';
-import { AuthModule } from '@/domains/identity/auth';
+import { AuthModule as IdentityAuthModule } from '@/domains/identity/auth';
 import { UserModule } from '@/domains/identity/user';
 import { CloudinaryModule } from '@/domains/media/cloudinary';
 import { SupabaseModule } from '@/domains/media/supabase';
@@ -29,7 +31,7 @@ import { WebhookModule } from '@/domains/platform/webhook';
 import { ReminderModule } from '@/domains/reminder';
 import { VocabTrainerModule } from '@/domains/vocab-trainer';
 import { VocabModule } from '@/domains/vocab';
-import { AuthGuard, SharedModule, UserThrottlerGuard } from '@/shared';
+import { SharedModule, UserThrottlerGuard } from '@/shared';
 
 @Module({
     imports: [
@@ -63,7 +65,8 @@ import { AuthGuard, SharedModule, UserThrottlerGuard } from '@/shared';
         }),
         SupabaseModule,
         SharedModule,
-        AuthModule,
+        AppAuthModule,
+        IdentityAuthModule,
         ConfigModule,
         CloudinaryModule,
         AiModule,
@@ -85,7 +88,7 @@ import { AuthGuard, SharedModule, UserThrottlerGuard } from '@/shared';
     providers: [
         {
             provide: APP_GUARD,
-            useClass: AuthGuard,
+            useClass: GlobalAuthGuard,
         },
         {
             provide: APP_GUARD,
