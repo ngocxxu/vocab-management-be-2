@@ -151,26 +151,18 @@ export class VocabController {
             );
         }
 
-        try {
-            const result = await this.aiService.translateVocab(
-                input.textSource,
-                input.sourceLanguageCode,
-                input.targetLanguageCode,
-                undefined,
-                user.id,
-            );
+        const result = await this.aiService.translateVocab(
+            input.textSource,
+            input.sourceLanguageCode,
+            input.targetLanguageCode,
+            undefined,
+            user.id,
+        );
 
-            this.logger.info(
-                `Generated text target for user ${user.id}, textSource: ${input.textSource}`,
-            );
-            return result;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(
-                `Failed to generate text target for user ${user.id}: ${errorMessage}`,
-            );
-            throw new BadRequestException(`Failed to generate text target: ${errorMessage}`);
-        }
+        this.logger.info(
+            `Generated text target for user ${user.id}, textSource: ${input.textSource}`,
+        );
+        return result;
     }
 
     @Put(':id')
@@ -228,79 +220,52 @@ export class VocabController {
         @CurrentUser() user: User,
     ): Promise<CsvImportResponseDto> {
         const startTime = Date.now();
-        try {
-            // Get the multipart data from Express/multer
-            const file = (request as RequestWithFile).file;
+        const file = (request as RequestWithFile).file;
 
-            if (!file) {
-                throw new BadRequestException('CSV file is required');
-            }
+        if (!file) {
+            throw new BadRequestException('CSV file is required');
+        }
 
-            this.logger.info(
-                `CSV import started for user ${user.id}, file: ${file.originalname}, size: ${file.size} bytes`,
-            );
+        this.logger.info(
+            `CSV import started for user ${user.id}, file: ${file.originalname}, size: ${file.size} bytes`,
+        );
 
-            // Validate file type
-            if (!file.originalname?.toLowerCase().endsWith('.csv')) {
-                throw new BadRequestException('File must be a CSV file');
-            }
+        if (!file.originalname?.toLowerCase().endsWith('.csv')) {
+            throw new BadRequestException('File must be a CSV file');
+        }
 
-            // Read file buffer
-            const buffer: Buffer = file.buffer;
+        const buffer: Buffer = file.buffer;
 
-            // Validate CSV headers
-            if (!CsvParserUtil.validateCsvHeaders(buffer)) {
-                throw new BadRequestException(
-                    'Invalid CSV format. Required headers: textSource, textTarget. ' +
-                        'Optional headers: wordType, grammar, explanationSource, explanationTarget, subjects, exampleSource, exampleTarget',
-                );
-            }
-
-            // Parse CSV
-            const parseStartTime = Date.now();
-            const { rows }: { rows: CsvRowData[] } = await CsvParserUtil.parseCsvBuffer(buffer);
-            const parseDuration = Date.now() - parseStartTime;
-            this.logger.info(`CSV parsed in ${parseDuration}ms, ${rows.length} rows found`);
-
-            if (rows.length === 0) {
-                throw new BadRequestException('CSV file is empty or contains no valid data');
-            }
-
-            // Import vocabs
-            const importStartTime = Date.now();
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            const result: CsvImportResponseDto = await this.vocabService.importFromCsv(
-                rows,
-                queryParams,
-                user.id,
-            );
-            const importDuration = Date.now() - importStartTime;
-            const totalDuration = Date.now() - startTime;
-
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            this.logger.info(
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                `CSV import for user ${user.id} in ${totalDuration}ms (import: ${importDuration}ms): ${result.created} created, ${result.updated} updated, ${result.failed} failed`,
-            );
-
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-            return result;
-        } catch (error: unknown) {
-            const duration = Date.now() - startTime;
-            if (error instanceof BadRequestException) {
-                this.logger.warn(
-                    `CSV import failed for user ${user.id} after ${duration}ms: ${error.message}`,
-                );
-                throw error;
-            }
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(
-                `CSV import failed for user ${user.id} after ${duration}ms: ${errorMessage}`,
-            );
+        if (!CsvParserUtil.validateCsvHeaders(buffer)) {
             throw new BadRequestException(
-                `Failed to import CSV: ${errorMessage}. If the file is large, this may take several minutes.`,
+                'Invalid CSV format. Required headers: textSource, textTarget. ' +
+                    'Optional headers: wordType, grammar, explanationSource, explanationTarget, subjects, exampleSource, exampleTarget',
             );
         }
+
+        const parseStartTime = Date.now();
+        const { rows }: { rows: CsvRowData[] } = await CsvParserUtil.parseCsvBuffer(buffer);
+        const parseDuration = Date.now() - parseStartTime;
+        this.logger.info(`CSV parsed in ${parseDuration}ms, ${rows.length} rows found`);
+
+        if (rows.length === 0) {
+            throw new BadRequestException('CSV file is empty or contains no valid data');
+        }
+
+        const importStartTime = Date.now();
+        const result: CsvImportResponseDto = await this.vocabService.importFromCsv(
+            rows,
+            queryParams,
+            user.id,
+        );
+        const importDuration = Date.now() - importStartTime;
+        const totalDuration = Date.now() - startTime;
+
+        this.logger.info(
+            `CSV import for user ${user.id} in ${totalDuration}ms (import: ${importDuration}ms): ${result.created} created, ${result.updated} updated, ${result.failed} failed`,
+        );
+
+        return result;
     }
 
     @Get('export/csv')
@@ -314,27 +279,19 @@ export class VocabController {
         @CurrentUser() user: User,
         @Res({ passthrough: true }) res: Response,
     ): Promise<StreamableFile> {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-            const csvBuffer: Buffer = await this.vocabService.exportToCsv(query, user.id);
+        const csvBuffer: Buffer = await this.vocabService.exportToCsv(query, user.id);
 
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `vocabs-export-${timestamp}.csv`;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `vocabs-export-${timestamp}.csv`;
 
-            res.set({
-                'Content-Type': 'text/csv',
-                'Content-Disposition': `attachment; filename="${filename}"`,
-            });
+        res.set({
+            'Content-Type': 'text/csv',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+        });
 
-            this.logger.info(`CSV export completed for user ${user.id}`);
+        this.logger.info(`CSV export completed for user ${user.id}`);
 
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-            return new StreamableFile(csvBuffer);
-        } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(`CSV export failed for user ${user.id}: ${errorMessage}`);
-            throw new BadRequestException(errorMessage);
-        }
+        return new StreamableFile(csvBuffer);
     }
 
     @Get('statistics/summary')

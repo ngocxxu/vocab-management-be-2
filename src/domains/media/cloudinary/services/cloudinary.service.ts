@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+
+import { FileUploadException } from '../../exceptions';
 import * as crypto from 'crypto';
 import {
     CloudinaryResourceType,
@@ -77,11 +79,11 @@ export class CloudinaryService {
         const normalized = folder.trim().replace(/^\/+|\/+$/g, '');
 
         if (!normalized) {
-            throw new BadRequestException('Folder cannot be empty');
+            throw new FileUploadException('Folder cannot be empty');
         }
 
         if (!/^[a-zA-Z0-9_\/-]+$/.test(normalized)) {
-            throw new BadRequestException(
+            throw new FileUploadException(
                 'Folder can only contain letters, numbers, underscores, hyphens, and forward slashes',
             );
         }
@@ -94,7 +96,7 @@ export class CloudinaryService {
         const maxSize = 100 * 1024 * 1024;
 
         if (maxFileSize < minSize || maxFileSize > maxSize) {
-            throw new BadRequestException(
+            throw new FileUploadException(
                 `Max file size must be between ${minSize} bytes (1MB) and ${maxSize} bytes (100MB)`,
             );
         }

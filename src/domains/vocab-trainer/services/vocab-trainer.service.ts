@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
     NotificationAction,
     NotificationType,
@@ -13,8 +13,7 @@ import { AiService } from '../../ai/services/ai.service';
 import { NotificationService } from '../../notification/services';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
 import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
-import { PrismaErrorHandler } from '@/shared/handlers';
-import { PaginationDto } from '@/shared/dto';
+import { LoggerService, PaginationDto } from '@/shared';
 import { getOrderBy, getPagination } from '@/shared/utils';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import { VocabTrainerMapper } from '../mappers';
@@ -28,6 +27,7 @@ import {
     VocabTrainerQueryParamsInput,
 } from '../dto';
 import { SubmitTranslationAudioResponseDto } from '../dto/submit-translation-audio-response.dto';
+import { VocabTrainerBadRequestException, VocabTrainerNotFoundException } from '../exceptions';
 import { VocabTrainerRepository } from '../repositories';
 import {
     EQuestionType,
@@ -46,20 +46,7 @@ export interface FlipCardQuestion {
 
 @Injectable()
 export class VocabTrainerService {
-    private readonly logger = new Logger(VocabTrainerService.name);
     private readonly vocabTrainerMapper = new VocabTrainerMapper();
-    private readonly errorMapping = {
-        P2002: 'VocabTrainer with this name already exists',
-        P2025: {
-            update: 'VocabTrainer not found',
-            delete: 'VocabTrainer not found',
-            findOne: 'VocabTrainer not found',
-            create: 'Related record not found',
-            find: 'VocabTrainer not found',
-            findOneAndExam: 'Exam of vocab trainer not found',
-            submitExam: 'Exam of vocab trainer not found',
-        },
-    };
 
     public constructor(
         private readonly vocabTrainerRepository: VocabTrainerRepository,
@@ -67,6 +54,7 @@ export class VocabTrainerService {
         private readonly aiService: AiService,
         private readonly notificationService: NotificationService,
         private readonly vocabMasteryService: VocabMasteryService,
+        private readonly logger: LoggerService,
     ) {}
 
     /**
@@ -76,72 +64,49 @@ export class VocabTrainerService {
         query: VocabTrainerQueryParamsInput,
         userId?: string,
     ): Promise<PaginationDto<VocabTrainerDto>> {
-        try {
-            const { page, pageSize, skip, take } = getPagination({
-                page: query.page,
-                pageSize: query.pageSize,
-                defaultPage: PaginationDto.DEFAULT_PAGE,
-                defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
-            });
+        const { page, pageSize, skip, take } = getPagination({
+            page: query.page,
+            pageSize: query.pageSize,
+            defaultPage: PaginationDto.DEFAULT_PAGE,
+            defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
+        });
 
-            const orderBy = getOrderBy(
-                query.sortBy,
-                query.sortOrder,
-                'createdAt',
-            ) as Prisma.VocabTrainerOrderByWithRelationInput;
+        const orderBy = getOrderBy(
+            query.sortBy,
+            query.sortOrder,
+            'createdAt',
+        ) as Prisma.VocabTrainerOrderByWithRelationInput;
 
-            const { totalItems, trainers } = await this.vocabTrainerRepository.findWithPagination(
-                query,
-                userId,
-                skip,
-                take,
-                orderBy,
-            );
-            const items = this.vocabTrainerMapper.toResponseList(trainers);
-            return this.vocabTrainerMapper.toPaginated(items, totalItems, page, pageSize);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'find', this.errorMapping);
-        }
+        const { totalItems, trainers } = await this.vocabTrainerRepository.findWithPagination(
+            query,
+            userId,
+            skip,
+            take,
+            orderBy,
+        );
+        const items = this.vocabTrainerMapper.toResponseList(trainers);
+        return this.vocabTrainerMapper.toPaginated(items, totalItems, page, pageSize);
     }
 
     /**
      * Find a single vocab trainer by ID
      */
     public async findOne(id: string, userId?: string): Promise<VocabTrainerDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const trainer = await this.vocabTrainerRepository.findById(id, userId);
-            if (!trainer) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-            }
-            return this.vocabTrainerMapper.toResponse(trainer);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'findOne', this.errorMapping);
+        const trainer = await this.vocabTrainerRepository.findById(id, userId);
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
         }
+        return this.vocabTrainerMapper.toResponse(trainer);
     }
 
     /**
      * Find a single vocab trainer by ID and exam
      */
     public async findOneAndExam(id: string, userId?: string): Promise<VocabTrainerDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const trainer = await this.vocabTrainerRepository.findByIdWithVocabs(id, userId);
-            if (!trainer) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-            }
+        const trainer = await this.vocabTrainerRepository.findByIdWithVocabs(id, userId);
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
+        }
 
             // -----------------------------Create multiple choice questions-------------------------------
             if (trainer.questionType === QuestionType.MULTIPLE_CHOICE) {
@@ -300,12 +265,6 @@ export class VocabTrainerService {
                 trainerDto.jobId = (trainer as VocabTrainer & { jobId?: string }).jobId;
             }
             return trainerDto;
-        } catch (error: unknown) {
-            if (error instanceof Prisma.PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error, 'findOneAndExam', this.errorMapping);
-            }
-            throw error;
-        }
     }
 
     public async submitMultipleChoice(
@@ -313,25 +272,17 @@ export class VocabTrainerService {
         input: SubmitMultipleChoiceInput,
         user: User,
     ): Promise<VocabTrainerDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (user.id) {
-                where.userId = user.id;
-            }
-
-            const trainer = (await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
-                id,
-                user.id,
-            )) as unknown as VocabTrainerWithTypedAnswers & {
-                vocabAssignments?: Array<{
-                    vocab: VocabWithTextTargets;
-                }>;
-            };
-            if (!trainer) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-            }
+        const trainer = (await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
+            id,
+            user.id,
+        )) as unknown as VocabTrainerWithTypedAnswers & {
+            vocabAssignments?: Array<{
+                vocab: VocabWithTextTargets;
+            }>;
+        };
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
+        }
 
             const { countTime, wordTestSelects } = input;
 
@@ -477,12 +428,9 @@ export class VocabTrainerService {
                 examUrl,
             );
 
-            return this.vocabTrainerMapper.toResponse(
-                result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
-            );
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
-        }
+        return this.vocabTrainerMapper.toResponse(
+            result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
+        );
     }
 
     public async submitFillInBlank(
@@ -490,24 +438,16 @@ export class VocabTrainerService {
         input: SubmitFillInBlankInput,
         user: User,
     ): Promise<VocabTrainerDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (user.id) {
-                where.userId = user.id;
-            }
+        const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
+            id,
+            user.id,
+        );
 
-            const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
-                id,
-                user.id,
-            );
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
+        }
 
-            if (!trainer) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-            }
-
-            const { countTime, wordTestInputs } = input;
+        const { countTime, wordTestInputs } = input;
 
             const trainerWithVocabs = trainer as VocabTrainer & {
                 vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
@@ -582,12 +522,9 @@ export class VocabTrainerService {
                 updatedAt: new Date(),
             });
 
-            return this.vocabTrainerMapper.toResponse(
-                trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
-            );
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'submitFillInBlank', this.errorMapping);
-        }
+        return this.vocabTrainerMapper.toResponse(
+            trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
+        );
     }
 
     public async submitTranslationAudio(
@@ -595,60 +532,52 @@ export class VocabTrainerService {
         input: SubmitTranslationAudioInput,
         user: User,
     ): Promise<SubmitTranslationAudioResponseDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (user.id) {
-                where.userId = user.id;
+        const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
+            id,
+            user.id,
+        );
+
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+
+        if (trainer.questionType !== QuestionType.TRANSLATION_AUDIO) {
+            throw new VocabTrainerBadRequestException('Question type is not TRANSLATION_AUDIO');
+        }
+
+        const { fileId, targetStyle, targetAudience, countTime } = input;
+
+        if (fileId) {
+            try {
+                await this.aiService.downloadAudioFromCloudinary(fileId);
+            } catch (error) {
+                this.logger.error(`Failed to download audio from Cloudinary: ${error}`);
+                throw new VocabTrainerBadRequestException(
+                    `Invalid fileId: ${error instanceof Error ? error.message : String(error)}`,
+                );
             }
+        }
 
-            const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(
-                id,
-                user.id,
-            );
-
-            if (!trainer) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-            }
-
-            if (trainer.questionType !== QuestionType.TRANSLATION_AUDIO) {
-                throw new BadRequestException('Question type is not TRANSLATION_AUDIO');
-            }
-
-            const { fileId, targetStyle, targetAudience, countTime } = input;
-
-            if (fileId) {
-                try {
-                    await this.aiService.downloadAudioFromCloudinary(fileId);
-                } catch (error) {
-                    this.logger.error(`Failed to download audio from Cloudinary: ${error}`);
-                    throw new BadRequestException(
-                        `Invalid fileId: ${error instanceof Error ? error.message : String(error)}`,
-                    );
-                }
-            }
-
-            if (!trainer.questionAnswers || !Array.isArray(trainer.questionAnswers)) {
-                throw new BadRequestException('Dialogue not found in questionAnswers');
-            }
+        if (!trainer.questionAnswers || !Array.isArray(trainer.questionAnswers)) {
+            throw new VocabTrainerBadRequestException('Dialogue not found in questionAnswers');
+        }
 
             const targetDialogue = trainer.questionAnswers as Array<{
                 speaker: string;
                 text: string;
             }>;
 
-            if (targetDialogue.length === 0) {
-                throw new BadRequestException('Dialogue is empty');
-            }
+        if (targetDialogue.length === 0) {
+            throw new VocabTrainerBadRequestException('Dialogue is empty');
+        }
 
-            const trainerWithVocabs = trainer as unknown as VocabTrainer & {
-                vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
-            };
-            const firstVocab = trainerWithVocabs.vocabAssignments[0]?.vocab;
-            if (!firstVocab) {
-                throw new BadRequestException('No vocab assignments found');
-            }
+        const trainerWithVocabs = trainer as unknown as VocabTrainer & {
+            vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
+        };
+        const firstVocab = trainerWithVocabs.vocabAssignments[0]?.vocab;
+        if (!firstVocab) {
+            throw new VocabTrainerBadRequestException('No vocab assignments found');
+        }
 
             const sourceLanguageCode = firstVocab.sourceLanguageCode;
             const targetLanguageCode = firstVocab.targetLanguageCode;
@@ -678,49 +607,37 @@ export class VocabTrainerService {
                 updatedAt: new Date(),
             });
 
-            const result = await this.vocabTrainerRepository.findById(trainer.id);
+        const result = await this.vocabTrainerRepository.findById(trainer.id);
 
-            if (!result) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found after update`);
-            }
-
-            return {
-                trainer: this.vocabTrainerMapper.toResponse(
-                    result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
-                ),
-                jobId,
-            };
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'submitExam', this.errorMapping);
+        if (!result) {
+            throw new VocabTrainerNotFoundException(id);
         }
+
+        return {
+            trainer: this.vocabTrainerMapper.toResponse(
+                result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
+            ),
+            jobId,
+        };
     }
 
     /**
      * Create a new vocab trainer
      */
     public async create(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
-        try {
-            const trainer = await this.vocabTrainerRepository.create(
-                this.vocabTrainerMapper.toCreateInput(input, userId),
-            );
+        const trainer = await this.vocabTrainerRepository.create(
+            this.vocabTrainerMapper.toCreateInput(input, userId),
+        );
 
-            // Fetch the trainer again to include the new assignments
-            const trainerWithAssignments = await this.vocabTrainerRepository.findById(trainer.id);
+        const trainerWithAssignments = await this.vocabTrainerRepository.findById(trainer.id);
 
-            if (!trainerWithAssignments) {
-                throw new NotFoundException(
-                    `VocabTrainer with ID ${trainer.id} not found after creation`,
-                );
-            }
-
-            return this.vocabTrainerMapper.toResponse(
-                trainerWithAssignments as unknown as ConstructorParameters<
-                    typeof VocabTrainerDto
-                >[0],
-            );
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'create', this.errorMapping);
+        if (!trainerWithAssignments) {
+            throw new VocabTrainerNotFoundException(trainer.id);
         }
+
+        return this.vocabTrainerMapper.toResponse(
+            trainerWithAssignments as unknown as ConstructorParameters<typeof VocabTrainerDto>[0],
+        );
     }
 
     /**
@@ -731,86 +648,51 @@ export class VocabTrainerService {
         input: UpdateVocabTrainerInput,
         userId?: string,
     ): Promise<VocabTrainerDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const existing = await this.vocabTrainerRepository.findById(id, userId);
-            if (!existing) {
-                throw new NotFoundException(`VocabTrainer with ID ${id} not found`);
-            }
-
-            const { vocabAssignmentIds, ...trainerData } = input;
-
-            if (vocabAssignmentIds !== undefined) {
-                const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
-
-                return await this.vocabTrainerRepository.inTransaction(async (tx) => {
-                    const trainerWithAssignments =
-                        await this.vocabTrainerRepository.replaceVocabTrainerWordAssignments(
-                            tx,
-                            id,
-                            this.vocabTrainerMapper.toScalarPatch(trainerData, existing),
-                            existing,
-                            uniqueVocabIds,
-                        );
-
-                    if (!trainerWithAssignments) {
-                        throw new NotFoundException(
-                            `VocabTrainer with ID ${id} not found after update`,
-                        );
-                    }
-
-                    return this.vocabTrainerMapper.toResponse(trainerWithAssignments);
-                });
-            }
-
-            const trainer = await this.vocabTrainerRepository.update(
-                id,
-                this.vocabTrainerMapper.buildUpdateInput(trainerData, existing),
-            );
-
-            return this.vocabTrainerMapper.toResponse(trainer);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'update', this.errorMapping);
+        const existing = await this.vocabTrainerRepository.findById(id, userId);
+        if (!existing) {
+            throw new VocabTrainerNotFoundException(id);
         }
+
+        const { vocabAssignmentIds, ...trainerData } = input;
+
+        if (vocabAssignmentIds !== undefined) {
+            const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
+
+            return await this.vocabTrainerRepository.inTransaction(async (tx) => {
+                const trainerWithAssignments =
+                    await this.vocabTrainerRepository.replaceVocabTrainerWordAssignments(
+                        tx,
+                        id,
+                        this.vocabTrainerMapper.toScalarPatch(trainerData, existing),
+                        existing,
+                        uniqueVocabIds,
+                    );
+
+                if (!trainerWithAssignments) {
+                    throw new VocabTrainerNotFoundException(id);
+                }
+
+                return this.vocabTrainerMapper.toResponse(trainerWithAssignments);
+            });
+        }
+
+        const trainer = await this.vocabTrainerRepository.update(
+            id,
+            this.vocabTrainerMapper.buildUpdateInput(trainerData, existing),
+        );
+
+        return this.vocabTrainerMapper.toResponse(trainer);
     }
 
     /**
      * Delete a vocab trainer
      */
     public async delete(id: string, userId?: string): Promise<VocabTrainerDto> {
-        try {
-            const where: Prisma.VocabTrainerWhereUniqueInput & Prisma.VocabTrainerWhereInput = {
-                id,
-            };
-            if (userId) {
-                where.userId = userId;
-            }
-
-            const trainer = await this.vocabTrainerRepository.delete(id, userId);
-            return this.vocabTrainerMapper.toResponse(trainer);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'delete', this.errorMapping);
-        }
+        const trainer = await this.vocabTrainerRepository.delete(id, userId);
+        return this.vocabTrainerMapper.toResponse(trainer);
     }
 
     public async deleteBulk(ids: string[], userId?: string): Promise<VocabTrainerDto[]> {
-        try {
-            const trainerDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
-
-            if (trainerDtos.length !== ids.length) {
-                throw new Error('Failed to delete all vocab trainers');
-            }
-
-            return trainerDtos;
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'deleteBulk', this.errorMapping);
-            throw error;
-        }
+        return Promise.all(ids.map(async (id) => this.delete(id, userId)));
     }
 }

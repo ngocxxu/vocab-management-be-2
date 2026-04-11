@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { PlanNotFoundException } from '../exceptions';
 import { PlanMapper } from '../mappers';
 import { CreatePlanInput } from '../dto/create-plan.input';
 import { PlanDto } from '../dto/plan.dto';
@@ -18,26 +19,23 @@ export class PlanService {
     }
 
     public async update(role: UserRole, input: UpdatePlanInput): Promise<PlanDto> {
-        const plan = await this.planRepository
-            .updateByRole(role, this.planMapper.toUpdateInput(input))
-            .catch((err: { code?: string }) => {
-                if (err?.code === 'P2025') {
-                    throw new NotFoundException(`Plan with role ${role} not found`);
-                }
-                throw err;
-            });
+        const existing = await this.planRepository.findByRole(role);
+        if (!existing) {
+            throw new PlanNotFoundException(role);
+        }
+        const plan = await this.planRepository.updateByRole(
+            role,
+            this.planMapper.toUpdateInput(input),
+        );
         return this.planMapper.toDto(plan);
     }
 
     public async remove(role: UserRole): Promise<PlanDto> {
-        const plan = await this.planRepository
-            .updateByRole(role, { isActive: false })
-            .catch((err: { code?: string }) => {
-                if (err?.code === 'P2025') {
-                    throw new NotFoundException(`Plan with role ${role} not found`);
-                }
-                throw err;
-            });
+        const existing = await this.planRepository.findByRole(role);
+        if (!existing) {
+            throw new PlanNotFoundException(role);
+        }
+        const plan = await this.planRepository.updateByRole(role, { isActive: false });
         return this.planMapper.toDto(plan);
     }
 

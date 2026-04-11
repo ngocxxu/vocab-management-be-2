@@ -1,11 +1,11 @@
 import { InjectQueue } from '@nestjs/bull';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { Queue } from 'bullmq';
-import { PrismaErrorHandler } from '@/shared/handlers/error.handler';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { LoggerService } from '@/shared/services/logger.service';
 import { getOrderBy, getPagination } from '@/shared/utils/pagination.util';
+import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
 import { EReminderType } from '../../reminder/utils';
 import {
@@ -20,27 +20,13 @@ import {
 import { VocabMapper } from '../mappers';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabTranslationJobData } from '../processors/vocab-translation.processor';
+import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
 import { CsvImportExistingVocab, VocabRepository } from '../repositories';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
 @Injectable()
 export class VocabService {
     private readonly vocabMapper = new VocabMapper();
-
-    private readonly vocabErrorMapping = {
-        P2002: 'Vocabulary with this text source and language combination already exists',
-        P2025: {
-            update: 'Vocabulary not found',
-            delete: 'Vocabulary not found',
-            findOne: 'Vocabulary not found',
-            create: 'One or more related entities not found (language, word type, or subject)',
-            find: 'Vocabulary not found',
-            createBulk: 'One or more related entities not found (language, word type, or subject)',
-            deleteBulk: 'One or more related entities not found (language, word type, or subject)',
-            findRandom: 'One or more related entities not found (language, word type, or subject)',
-        },
-        P2003: 'Invalid language ID, word type ID, or subject ID provided',
-    };
 
     public constructor(
         private readonly vocabRepository: VocabRepository,
@@ -59,38 +45,34 @@ export class VocabService {
         query: VocabQueryParamsInput,
         userId: string,
     ): Promise<PaginationDto<VocabDto>> {
-        try {
-            const { page, pageSize, skip, take } = getPagination({
-                page: query.page,
-                pageSize: query.pageSize,
-                defaultPage: PaginationDto.DEFAULT_PAGE,
-                defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
-            });
+        const { page, pageSize, skip, take } = getPagination({
+            page: query.page,
+            pageSize: query.pageSize,
+            defaultPage: PaginationDto.DEFAULT_PAGE,
+            defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
+        });
 
-            const orderBy = getOrderBy(
-                query.sortBy,
-                query.sortOrder,
-                'createdAt',
-            ) as Prisma.VocabOrderByWithRelationInput;
+        const orderBy = getOrderBy(
+            query.sortBy,
+            query.sortOrder,
+            'createdAt',
+        ) as Prisma.VocabOrderByWithRelationInput;
 
-            const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(
-                query,
-                userId,
-                skip,
-                take,
-                orderBy,
-            );
+        const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(
+            query,
+            userId,
+            skip,
+            take,
+            orderBy,
+        );
 
-            if (!vocabs || !Array.isArray(vocabs)) {
-                throw new Error('Invalid vocabs data returned from repository');
-            }
-
-            const items = this.vocabMapper.toResponseList(vocabs);
-
-            return this.vocabMapper.toPaginated(items, totalItems, page, pageSize);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'find', this.vocabErrorMapping);
+        if (!vocabs || !Array.isArray(vocabs)) {
+            throw new VocabBadRequestException('Invalid vocabs data returned from repository');
         }
+
+        const items = this.vocabMapper.toResponseList(vocabs);
+
+        return this.vocabMapper.toPaginated(items, totalItems, page, pageSize);
     }
 
     /**
@@ -105,29 +87,19 @@ export class VocabService {
         userId: string,
         languageFolderId?: string,
     ): Promise<VocabDto[]> {
-        try {
-            if (languageFolderId) {
-                const folder = await this.vocabRepository.findLanguageFolderById(
-                    languageFolderId,
-                    userId,
-                );
-                if (!folder) {
-                    throw new NotFoundException(
-                        `Language folder with ID '${languageFolderId}' not found`,
-                    );
-                }
+        if (languageFolderId) {
+            const folder = await this.vocabRepository.findLanguageFolderById(
+                languageFolderId,
+                userId,
+            );
+            if (!folder) {
+                throw new LanguageFolderNotFoundException(languageFolderId);
             }
-
-            const vocabs = await this.vocabRepository.findRandom(count, userId, languageFolderId);
-
-            return this.vocabMapper.toResponseList(vocabs);
-        } catch (error: unknown) {
-            if (error instanceof NotFoundException) {
-                throw error;
-            }
-            PrismaErrorHandler.handle(error, 'findRandom', this.vocabErrorMapping);
-            throw error;
         }
+
+        const vocabs = await this.vocabRepository.findRandom(count, userId, languageFolderId);
+
+        return this.vocabMapper.toResponseList(vocabs);
     }
 
     /**
@@ -139,21 +111,13 @@ export class VocabService {
      * @throws PrismaError when database operation fails
      */
     public async findOne(id: string, userId?: string): Promise<VocabDto> {
-        try {
-            const vocab = await this.vocabRepository.findById(id, userId);
+        const vocab = await this.vocabRepository.findById(id, userId);
 
-            if (!vocab) {
-                throw new NotFoundException(`Vocabulary with ID ${id} not found`);
-            }
-
-            return this.vocabMapper.toResponse(vocab);
-        } catch (error: unknown) {
-            if (error instanceof NotFoundException) {
-                throw error;
-            }
-            PrismaErrorHandler.handle(error, 'findOne', this.vocabErrorMapping);
-            throw error;
+        if (!vocab) {
+            throw new VocabNotFoundException(id);
         }
+
+        return this.vocabMapper.toResponse(vocab);
     }
 
     /**
@@ -168,59 +132,48 @@ export class VocabService {
         userId: string,
         role?: UserRole,
     ): Promise<VocabDto> {
-        try {
-            if (role !== undefined) {
-                await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
-            }
-            const {
-                sourceLanguageCode,
-                targetLanguageCode,
-            }: VocabInput = createVocabData;
-
-            if (sourceLanguageCode === targetLanguageCode) {
-                throw new Error('Source and target languages must be different');
-            }
-
-            const { prismaCreate, shouldQueueTranslation, queuePayload } =
-                this.vocabMapper.prepareCreate(createVocabData, userId);
-
-            const vocab = await this.vocabRepository.create(prismaCreate);
-
-            if (shouldQueueTranslation && queuePayload) {
-                await this.vocabTranslationQueue.add('translate-vocab', {
-                    vocabId: vocab.id,
-                    ...queuePayload,
-                });
-            }
-
-            await this.vocabRepository.clearListCaches();
-
-            return this.vocabMapper.toResponse(vocab);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'create', this.vocabErrorMapping);
+        if (role !== undefined) {
+            await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
+        const {
+            sourceLanguageCode,
+            targetLanguageCode,
+        }: VocabInput = createVocabData;
+
+        if (sourceLanguageCode === targetLanguageCode) {
+            throw new VocabBadRequestException('Source and target languages must be different');
+        }
+
+        const { prismaCreate, shouldQueueTranslation, queuePayload } =
+            this.vocabMapper.prepareCreate(createVocabData, userId);
+
+        const vocab = await this.vocabRepository.create(prismaCreate);
+
+        if (shouldQueueTranslation && queuePayload) {
+            await this.vocabTranslationQueue.add('translate-vocab', {
+                vocabId: vocab.id,
+                ...queuePayload,
+            });
+        }
+
+        await this.vocabRepository.clearListCaches();
+
+        return this.vocabMapper.toResponse(vocab);
     }
 
     public async createBulk(createVocabData: VocabInput[], userId: string): Promise<VocabDto[]> {
-        try {
-            const vocabDtos = await Promise.all(
-                createVocabData.map(async (data) => this.create(data, userId)),
-            );
+        const vocabDtos = await Promise.all(
+            createVocabData.map(async (data) => this.create(data, userId)),
+        );
 
-            if (vocabDtos.length !== createVocabData.length) {
-                throw new Error('Failed to create all vocabularies');
-            }
-
-            await this.clearVocabCache();
-            await this.clearVocabListCaches();
-
-            return vocabDtos;
-        } catch (error: unknown) {
-            await this.clearVocabCache();
-            await this.clearVocabListCaches();
-            PrismaErrorHandler.handle(error, 'createBulk', this.vocabErrorMapping);
-            throw error;
+        if (vocabDtos.length !== createVocabData.length) {
+            throw new VocabBadRequestException('Failed to create all vocabularies');
         }
+
+        await this.clearVocabCache();
+        await this.clearVocabListCaches();
+
+        return vocabDtos;
     }
 
     /**
@@ -237,37 +190,24 @@ export class VocabService {
         updateVocabData: Partial<VocabInput>,
         userId: string,
     ): Promise<VocabDto> {
-        try {
-            // First, verify the vocab exists and belongs to the user
-            const existingVocab = await this.vocabRepository.findById(id, userId);
+        await this.findOne(id, userId);
 
-            if (!existingVocab) {
-                throw new Error('Vocab not found or unauthorized');
-            }
-
-            // Validate that source and target languages are different if both are provided
-            if (
-                updateVocabData.sourceLanguageCode &&
-                updateVocabData.targetLanguageCode &&
-                updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode
-            ) {
-                throw new Error('Source and target languages must be different');
-            }
-
-            const vocab = await this.vocabRepository.update(
-                id,
-                this.vocabMapper.buildUpdateInput(updateVocabData),
-            );
-
-            await this.vocabRepository.clearListCaches();
-
-            return this.vocabMapper.toResponse(vocab);
-        } catch (error: unknown) {
-            if (error instanceof NotFoundException) {
-                throw error;
-            }
-            PrismaErrorHandler.handle(error, 'update', this.vocabErrorMapping);
+        if (
+            updateVocabData.sourceLanguageCode &&
+            updateVocabData.targetLanguageCode &&
+            updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode
+        ) {
+            throw new VocabBadRequestException('Source and target languages must be different');
         }
+
+        const vocab = await this.vocabRepository.update(
+            id,
+            this.vocabMapper.buildUpdateInput(updateVocabData),
+        );
+
+        await this.vocabRepository.clearListCaches();
+
+        return this.vocabMapper.toResponse(vocab);
     }
 
     /**
@@ -279,41 +219,31 @@ export class VocabService {
      * @throws PrismaError when database operation fails or vocabulary not found
      */
     public async delete(id: string, userId?: string): Promise<VocabDto> {
-        try {
-            const vocab = await this.vocabRepository.delete(id, userId);
+        await this.findOne(id, userId);
+        const vocab = await this.vocabRepository.delete(id, userId);
 
-            await this.vocabRepository.clearListCaches();
+        await this.vocabRepository.clearListCaches();
 
-            return this.vocabMapper.toResponse(vocab);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'delete', this.vocabErrorMapping);
-        }
+        return this.vocabMapper.toResponse(vocab);
     }
 
     public async deleteBulk(input: BulkDeleteInput, userId?: string): Promise<VocabDto[]> {
         const { ids } = input;
 
         if (!ids.length) {
-            throw new Error('Ids are required');
+            throw new VocabBadRequestException('Ids are required');
         }
 
-        try {
-            const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
+        const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
 
-            if (vocabDtos.length !== ids.length) {
-                throw new Error('Failed to delete all vocabularies');
-            }
-
-            await this.clearVocabCache();
-            await this.clearVocabListCaches();
-
-            return vocabDtos;
-        } catch (error: unknown) {
-            await this.clearVocabCache();
-            await this.clearVocabListCaches();
-            PrismaErrorHandler.handle(error, 'deleteBulk', this.vocabErrorMapping);
-            throw error;
+        if (vocabDtos.length !== ids.length) {
+            throw new VocabBadRequestException('Failed to delete all vocabularies');
         }
+
+        await this.clearVocabCache();
+        await this.clearVocabListCaches();
+
+        return vocabDtos;
     }
 
     /**
@@ -359,9 +289,8 @@ export class VocabService {
         let created = 0;
         let updated = 0;
 
-        // Validate that source and target languages are different
         if (sourceLanguageCode === targetLanguageCode) {
-            throw new Error('Source and target languages must be different');
+            throw new VocabBadRequestException('Source and target languages must be different');
         }
 
         const languageFolder = await this.vocabRepository.findLanguageFolderById(
@@ -369,7 +298,7 @@ export class VocabService {
             userId,
         );
         if (!languageFolder) {
-            throw new Error(`Language folder with ID '${languageFolderId}' not found`);
+            throw new LanguageFolderNotFoundException(languageFolderId);
         }
 
         // Pre-validate word types and subjects (collect errors instead of throwing)
@@ -528,71 +457,71 @@ export class VocabService {
 
             await Promise.all(
                 batch.map(async ([textSource, textTargetRows]) => {
-                    try {
-                        const { created: batchCreated, updated: batchUpdated } =
-                            await this.vocabRepository.executeCsvImportGroupTransaction(
-                                {
-                                    textSource,
-                                    textTargetRows,
-                                    userId,
-                                    sourceLanguageCode,
-                                    targetLanguageCode,
-                                    languageFolderId,
-                                    wordTypeMap,
-                                    subjectMap,
-                                    existingVocabMap,
-                                },
-                                { maxWait: 10000, timeout: 30000 },
-                            );
-                        created += batchCreated;
-                        updated += batchUpdated;
-                    } catch (error: unknown) {
-                        // Check if it's a duplicate error (P2002)
-                        if (error instanceof Error && error.message.includes('P2002')) {
-                            // Handle duplicate vocabulary error
-                            const firstRow =
-                                textTargetRows.length > 0 ? textTargetRows[0] : undefined;
-                            if (firstRow) {
-                                errors.push({
-                                    row:
-                                        rows.findIndex((r: CsvRowData) => {
-                                            const typedR = assertCsvRowData(r);
-                                            return typedR.textSource.toLowerCase() === textSource;
-                                        }) + 1,
-                                    error: `Vocabulary '${textSource}' already exists with the same language combination`,
-                                    data: firstRow as CsvRowDto,
-                                });
-                            }
-                        } else {
-                            // Handle other errors
-                            const errorMessage = this.getErrorMessage(error);
-                            const firstRow =
-                                textTargetRows.length > 0 ? textTargetRows[0] : undefined;
-                            if (firstRow) {
-                                // Log detailed error for debugging
-                                this.logger.error(
-                                    `CSV Import Error Details: ${JSON.stringify({
-                                        textSource,
-                                        error: errorMessage,
-                                        firstRow,
-                                        userId,
-                                        languageFolderId,
-                                        sourceLanguageCode,
-                                        targetLanguageCode,
-                                    })}`,
-                                );
+                    const outcome = await this.vocabRepository
+                        .executeCsvImportGroupTransaction(
+                            {
+                                textSource,
+                                textTargetRows,
+                                userId,
+                                sourceLanguageCode,
+                                targetLanguageCode,
+                                languageFolderId,
+                                wordTypeMap,
+                                subjectMap,
+                                existingVocabMap,
+                            },
+                            { maxWait: 10000, timeout: 30000 },
+                        )
+                        .then((r) => ({ ok: true as const, ...r }))
+                        .catch((error: unknown) => ({ ok: false as const, error }));
 
-                                errors.push({
-                                    row:
-                                        rows.findIndex((r: CsvRowData) => {
-                                            const typedR = assertCsvRowData(r);
-                                            return typedR.textSource.toLowerCase() === textSource;
-                                        }) + 1,
-                                    error: errorMessage,
-                                    data: firstRow as CsvRowDto,
-                                });
-                            }
+                    if (outcome.ok) {
+                        created += outcome.created;
+                        updated += outcome.updated;
+                        return;
+                    }
+
+                    const { error } = outcome;
+                    if (error instanceof Error && error.message.includes('P2002')) {
+                        const firstRow = textTargetRows.length > 0 ? textTargetRows[0] : undefined;
+                        if (firstRow) {
+                            errors.push({
+                                row:
+                                    rows.findIndex((r: CsvRowData) => {
+                                        const typedR = assertCsvRowData(r);
+                                        return typedR.textSource.toLowerCase() === textSource;
+                                    }) + 1,
+                                error: `Vocabulary '${textSource}' already exists with the same language combination`,
+                                data: firstRow as CsvRowDto,
+                            });
                         }
+                        return;
+                    }
+
+                    const errorMessage = this.getErrorMessage(error);
+                    const firstRow = textTargetRows.length > 0 ? textTargetRows[0] : undefined;
+                    if (firstRow) {
+                        this.logger.error(
+                            `CSV Import Error Details: ${JSON.stringify({
+                                textSource,
+                                error: errorMessage,
+                                firstRow,
+                                userId,
+                                languageFolderId,
+                                sourceLanguageCode,
+                                targetLanguageCode,
+                            })}`,
+                        );
+
+                        errors.push({
+                            row:
+                                rows.findIndex((r: CsvRowData) => {
+                                    const typedR = assertCsvRowData(r);
+                                    return typedR.textSource.toLowerCase() === textSource;
+                                }) + 1,
+                            error: errorMessage,
+                            data: firstRow as CsvRowDto,
+                        });
                     }
                 }),
             );
@@ -612,15 +541,11 @@ export class VocabService {
      * @returns Promise<Buffer> CSV file buffer
      */
     public async exportToCsv(query: VocabQueryParamsInput, userId: string): Promise<Buffer> {
-        try {
-            const queryWithHighLimit = { ...query, pageSize: 10000 };
-            const paginatedResult = await this.find(queryWithHighLimit, userId);
-            const vocabs = paginatedResult.items;
+        const queryWithHighLimit = { ...query, pageSize: 10000 };
+        const paginatedResult = await this.find(queryWithHighLimit, userId);
+        const vocabs = paginatedResult.items;
 
-            return CsvParserUtil.generateCsvBuffer(vocabs);
-        } catch (error: unknown) {
-            PrismaErrorHandler.handle(error, 'exportToCsv', this.vocabErrorMapping);
-        }
+        return CsvParserUtil.generateCsvBuffer(vocabs);
     }
 
     /**

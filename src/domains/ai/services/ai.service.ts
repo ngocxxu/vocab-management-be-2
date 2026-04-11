@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CreateTextTargetInput } from '../../vocab/dto/vocab.input';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
+import { AiGenerationException } from '../exceptions';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
 import {
@@ -179,9 +180,10 @@ export class AiService {
                 dialogue: Array<{ speaker: string; text: string }>;
                 vocabWordsUsed: string[];
             }>(text);
-        } catch (error) {
+        } catch (error: unknown) {
             this.logger.error(`Error generating dialogue (attempt ${retryCount + 1}):`, error);
-            throw error;
+            const detail = error instanceof Error ? error.message : String(error);
+            throw new AiGenerationException(detail);
         }
     }
 }

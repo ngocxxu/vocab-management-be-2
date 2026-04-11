@@ -11,11 +11,10 @@ import { CacheManagerService } from '../services/cache-manager.service';
 @ApiTags('cache')
 @ApiBearerAuth()
 export class CacheController {
-    private readonly logger = new LoggerService();
-
     public constructor(
         private readonly cacheManagerService: CacheManagerService,
         private readonly redisService: RedisService,
+        private readonly logger: LoggerService,
     ) {}
 
     @Get('stats')

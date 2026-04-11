@@ -1,64 +1,39 @@
-import { INestApplication, Logger } from '@nestjs/common';
+/// <reference path="./types/express.d.ts" />
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { nanoid } from 'nanoid';
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+
 import { ApplicationModule } from './app/application.module';
+import { buildHttpErrorBody } from './common/http/error-response.util';
+import { HttpExceptionFilter, PrismaExceptionFilter } from './common/filters';
+import { WinstonLogger } from './common/logger/winston.logger';
 import { SharedModule, LogInterceptor } from './shared';
 
-/**
- * These are API defaults that can be changed using environment variables,
- * it is not required to change them (see the `.env.example` file)
- */
 const API_DEFAULT_PORT = 3002;
 const API_DEFAULT_PREFIX = '/api/v1/';
 
-/**
- * The defaults below are dedicated to Swagger configuration, change them
- * following your needs (change at least the title & description).
- */
 const SWAGGER_TITLE = 'Passenger API';
 const SWAGGER_DESCRIPTION = 'API used for passenger management';
 
-const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-const DEFAULT_REQUEST_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const DEFAULT_REQUEST_TIMEOUT = 5 * 60 * 1000;
 
-/**
- * Parse integer from environment variable with default value
- */
 function parseIntEnv(key: string, defaultValue: number): number {
     return parseInt(process.env[key] || defaultValue.toString(), 10);
 }
 
-/**
- * Create standardized error response
- */
-function createErrorResponse(statusCode: number, message: string, error: string) {
-    return {
-        statusCode,
-        message,
-        error,
-    };
-}
-
-/**
- * Get file size in MB for display
- */
 function getFileSizeInMB(bytes: number): number {
     return Math.round(bytes / 1024 / 1024);
 }
 
-/**
- * Get CORS configuration based on environment
- */
 function getCorsOptions() {
     const isDevelopment = process.env.NODE_ENV !== 'production';
     const allowedOrigins = process.env.API_CORS_ORIGINS?.split(',') || [];
 
-    const commonHeaders = [
-        'Content-Type',
-        'X-Requested-With',
-    ];
+    const commonHeaders = ['Content-Type', 'X-Requested-With'];
 
     if (isDevelopment) {
         return {
@@ -77,28 +52,7 @@ function getCorsOptions() {
     };
 }
 
-/**
- * Register a Swagger module in the NestJS application.
- * This method mutates the given `app` to register a new module dedicated to
- * Swagger API documentation. Any request performed on `SWAGGER_PREFIX` will
- * receive a documentation page as response.
- */
 function createSwagger(app: INestApplication) {
-    // TODO: Basic auth make error when login on nextjs frontend
-    // const isDevelopment = process.env.NODE_ENV !== 'production';
-    // const username = process.env.SWAGGER_USER;
-    // const password = process.env.SWAGGER_PASSWORD;
-
-    // if (username && password && !isDevelopment) {
-    //     // Use basic auth for swagger
-    //     app.use(
-    //         basicAuth({
-    //             users: { [username]: password },
-    //             challenge: true,
-    //         }),
-    //     );
-    // }
-
     const options = new DocumentBuilder()
         .setTitle(SWAGGER_TITLE)
         .setDescription(SWAGGER_DESCRIPTION)
@@ -109,17 +63,16 @@ function createSwagger(app: INestApplication) {
     SwaggerModule.setup(process.env.SWAGGER_PREFIX || '/', app, document);
 }
 
-/**
- * Build & bootstrap the NestJS API.
- * This method is the starting point of the API; it registers the application
- * module and registers essential components such as the logger and request
- * parsing middleware.
- */
-/**
- * Configure multer file upload middleware with error handling
- */
-function createMulterMiddleware(maxFileSize: number) {
-    const logger = new Logger('Multer');
+function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
+    const header = req.headers['x-request-id'];
+    const fromHeader =
+        typeof header === 'string' ? header : Array.isArray(header) ? header[0] : undefined;
+    const trimmed = fromHeader?.trim();
+    req.requestId = trimmed && trimmed.length > 0 ? trimmed : `req_${Date.now()}_${nanoid(7)}`;
+    next();
+}
+
+function createMulterMiddleware(maxFileSize: number, winstonLogger: WinstonLogger) {
     const upload = multer({
         storage: multer.memoryStorage(),
         limits: {
@@ -134,26 +87,31 @@ function createMulterMiddleware(maxFileSize: number) {
             if (err) {
                 if (err instanceof multer.MulterError) {
                     if (err.code === 'LIMIT_FILE_SIZE') {
-                        logger.warn(`File size limit exceeded: ${req.method} ${req.path}`);
-                        return res
-                            .status(413)
-                            .json(
-                                createErrorResponse(
-                                    413,
-                                    'File too large',
-                                    `File size exceeds the maximum allowed limit of ${maxFileSize} bytes (${getFileSizeInMB(
-                                        maxFileSize,
-                                    )}MB)`,
-                                ),
-                            );
+                        winstonLogger.logWarn(`File size limit exceeded: ${req.method} ${req.path}`, {
+                            statusCode: 413,
+                            method: req.method,
+                            path: req.originalUrl,
+                            requestId: req.requestId,
+                        });
+                        const detail = `File size exceeds the maximum allowed limit of ${maxFileSize} bytes (${getFileSizeInMB(
+                            maxFileSize,
+                        )}MB)`;
+                        return res.status(413).json(buildHttpErrorBody(413, detail, req));
                     }
-                    logger.error(`Multer error: ${err.code} - ${err.message}`);
-                    return res
-                        .status(400)
-                        .json(createErrorResponse(400, 'File upload error', err.message));
+                    winstonLogger.logError(`Multer error: ${err.code} - ${err.message}`, undefined, {
+                        statusCode: 400,
+                        method: req.method,
+                        path: req.originalUrl,
+                        requestId: req.requestId,
+                    });
+                    return res.status(400).json(buildHttpErrorBody(400, err.message, req));
                 }
                 const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-                logger.error(`File upload error: ${errorMessage}`);
+                winstonLogger.logError(`File upload error: ${errorMessage}`, undefined, {
+                    method: req.method,
+                    path: req.originalUrl,
+                    requestId: req.requestId,
+                });
                 return next(err);
             }
             next();
@@ -161,17 +119,18 @@ function createMulterMiddleware(maxFileSize: number) {
     };
 }
 
-/**
- * Configure request timeout middleware
- */
-function createTimeoutMiddleware(timeoutMs: number) {
-    const logger = new Logger('RequestTimeout');
+function createTimeoutMiddleware(timeoutMs: number, winstonLogger: WinstonLogger) {
     return (req: Request, res: Response, next: NextFunction): void => {
         req.setTimeout(timeoutMs, () => {
-            logger.warn(`Request timeout after ${timeoutMs}ms: ${req.method} ${req.path}`);
+            winstonLogger.logWarn(`Request timeout after ${timeoutMs}ms: ${req.method} ${req.path}`, {
+                statusCode: 408,
+                method: req.method,
+                path: req.originalUrl,
+                requestId: req.requestId,
+            });
             if (!res.headersSent) {
                 res.status(408).json(
-                    createErrorResponse(408, 'Request timeout', 'Request took too long to process'),
+                    buildHttpErrorBody(408, 'Request took too long to process', req),
                 );
             }
         });
@@ -181,25 +140,39 @@ function createTimeoutMiddleware(timeoutMs: number) {
 
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create(ApplicationModule, {
-        logger: ['error', 'warn', 'log'],
+        bufferLogs: true,
+        logger: false,
     });
 
-    // Enable CORS early to handle preflight requests properly
+    const winstonLogger = app.get(WinstonLogger);
+    app.useLogger(winstonLogger);
+
+    app.useGlobalPipes(
+        new ValidationPipe({
+            whitelist: true,
+            forbidNonWhitelisted: true,
+            transform: true,
+        }),
+    );
+
+    app.useGlobalFilters(
+        new PrismaExceptionFilter(winstonLogger),
+        new HttpExceptionFilter(winstonLogger),
+    );
+
     app.enableCors(getCorsOptions());
+
+    app.use(requestIdMiddleware);
 
     const maxFileSize = parseIntEnv('MAX_FILE_SIZE', DEFAULT_MAX_FILE_SIZE);
     const requestTimeout = parseIntEnv('REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT);
 
-    // Configure multer for file uploads with size limits
-    app.use(createMulterMiddleware(maxFileSize));
+    app.use(createMulterMiddleware(maxFileSize, winstonLogger));
 
-    // Configure server timeouts for long-running requests
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     const expressApp = app.getHttpAdapter().getInstance();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-    expressApp.use(createTimeoutMiddleware(requestTimeout));
-
-    // @todo Enable Helmet for better API security headers
+    expressApp.use(createTimeoutMiddleware(requestTimeout, winstonLogger));
 
     app.setGlobalPrefix(process.env.API_PREFIX || API_DEFAULT_PREFIX);
 
@@ -214,22 +187,13 @@ async function bootstrap(): Promise<void> {
     const host = '0.0.0.0';
     await app.listen(port, host);
 
-    // eslint-disable-next-line no-console
-    console.info(`Application is running on: http://${host}:${port}`);
+    winstonLogger.log(`Application is running on: http://${host}:${port}`);
 }
 
-/**
- * It is now time to turn the lights on!
- * Any major error that can not be handled by NestJS will be caught in the code
- * below. The default behavior is to display the error on stdout and quit.
- *
- * @todo It is often advised to enhance the code below with an exception-catching
- *       service for better error handling in production environments.
- */
-bootstrap().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
-
-    const defaultExitCode = 1;
-    process.exit(defaultExitCode);
+bootstrap().catch((err: unknown) => {
+    const fatal = new WinstonLogger();
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    fatal.logError(message, stack, { phase: 'bootstrap' });
+    process.exit(1);
 });

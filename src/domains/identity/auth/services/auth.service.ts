@@ -1,19 +1,22 @@
-import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { AuthError } from '@supabase/supabase-js';
-import { PrismaErrorHandler } from '@/shared/handlers/error.handler';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
+import { LoggerService } from '@/shared/services/logger.service';
 import { jwtDecode } from '@/shared/utils/jwt.util';
 import { UserDto } from '../../user/dto';
 import { UserRepository } from '../../user/repositories';
+import {
+    AuthBadRequestException,
+    AuthSupabaseMessageException,
+    AuthUnauthorizedException,
+    InvalidCredentialsException,
+} from '../exceptions';
 import { OAuthResponseDto, SessionDto, SignUpInput } from '../dto';
 import { SignInResponse } from '../utils';
 
 @Injectable()
 export class AuthService {
-    private readonly logger = new Logger(AuthService.name);
-
     private readonly authErrorMapping = {
         'Invalid login credentials': 'Invalid email or password',
         'Email not confirmed': 'Please confirm your email before signing in',
@@ -24,6 +27,7 @@ export class AuthService {
     public constructor(
         private readonly userRepository: UserRepository,
         private readonly supabaseAuth: SupabaseAuthProvider,
+        private readonly logger: LoggerService,
     ) {}
 
     private get auth() {
@@ -34,406 +38,288 @@ export class AuthService {
         return this.supabaseAuth.getServiceRoleClient().auth.admin;
     }
 
-    /**
-     * Register user with email and password
-     */
     public async signUp(input: SignUpInput): Promise<SignInResponse> {
-        try {
-            const { email, password, firstName, lastName, phone, avatar, role } = input;
+        const { email, password, firstName, lastName, phone, avatar, role } = input;
 
-            // 1. Create user in Supabase
-            const { data, error } = await this.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        role: role ?? UserRole.GUEST,
-                    },
+        const { data, error } = await this.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    role: role ?? UserRole.GUEST,
                 },
-            });
+            },
+        });
 
-            if (error) {
-                this.handleAuthError(error, 'signUp');
-            }
-            if (!data.user) {
-                throw new Error('User data is missing from Supabase response');
-            }
-
-            // 2. Create user in local DB
-            const supabaseUser = data.user;
-            const user = await this.userRepository.create({
-                email: email ?? supabaseUser.email,
-                supabaseUserId: supabaseUser.id,
-                firstName: firstName && firstName.trim() !== '' ? firstName : '',
-                lastName: lastName && lastName.trim() !== '' ? lastName : '',
-                phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
-                avatar: avatar && avatar.trim() !== '' ? avatar : null,
-                role: role ?? UserRole.GUEST,
-                isActive: true,
-            });
-
-            if (!user) {
-                await this.authAdmin.deleteUser(supabaseUser.id);
-                throw new Error('User data is missing from Supabase response');
-            }
-
-            // 3. If session exists, return it. Otherwise, sign in to get session
-            let session = data.session;
-            if (!session) {
-                const signInResult = await this.auth.signInWithPassword({
-                    email,
-                    password,
-                });
-
-                if (signInResult.error) {
-                    this.handleAuthError(signInResult.error, 'signUp');
-                }
-                if (!signInResult.data.session) {
-                    throw new UnauthorizedException('No session data returned after signup');
-                }
-                session = signInResult.data.session;
-            }
-
-            return {
-                session: new SessionDto(session, new UserDto(user)),
-                accessToken: session.access_token,
-                refreshToken: session.refresh_token,
-            };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('SignUp failed:', error);
-            throw new BadRequestException('Registration failed');
+        if (error) {
+            this.raiseAuthError(error, 'signUp');
         }
-    }
+        if (!data.user) {
+            throw new AuthUnauthorizedException('supabase_user_missing');
+        }
 
-    /**
-     * Sign in user with email and password
-     */
-    public async signIn(email: string, password: string): Promise<SignInResponse> {
-        try {
-            const { data, error } = await this.auth.signInWithPassword({
+        const supabaseUser = data.user;
+        const user = await this.userRepository.create({
+            email: email ?? supabaseUser.email,
+            supabaseUserId: supabaseUser.id,
+            firstName: firstName && firstName.trim() !== '' ? firstName : '',
+            lastName: lastName && lastName.trim() !== '' ? lastName : '',
+            phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
+            avatar: avatar && avatar.trim() !== '' ? avatar : null,
+            role: role ?? UserRole.GUEST,
+            isActive: true,
+        });
+
+        if (!user) {
+            await this.authAdmin.deleteUser(supabaseUser.id);
+            throw new AuthBadRequestException('registration_failed');
+        }
+
+        let session = data.session;
+        if (!session) {
+            const signInResult = await this.auth.signInWithPassword({
                 email,
                 password,
             });
 
-            if (error) {
-                this.handleAuthError(error, 'signIn');
+            if (signInResult.error) {
+                this.raiseAuthError(signInResult.error, 'signUp');
             }
-            if (!data.session) {
-                throw new UnauthorizedException('No session data returned');
+            if (!signInResult.data.session) {
+                throw new AuthUnauthorizedException('no_session_after_signup');
             }
-
-            const decodedToken = jwtDecode(data.session.access_token);
-
-            const user = decodedToken?.sub
-                ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
-                : null;
-
-            if (!user) {
-                throw new UnauthorizedException('User not found');
-            }
-
-            return {
-                session: new SessionDto(data.session, new UserDto(user)),
-                accessToken: data.session.access_token,
-                refreshToken: data.session.refresh_token,
-            };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('SignIn failed:', error);
-            throw new UnauthorizedException('Authentication failed');
+            session = signInResult.data.session;
         }
+
+        return {
+            session: new SessionDto(session, new UserDto(user)),
+            accessToken: session.access_token,
+            refreshToken: session.refresh_token,
+        };
     }
 
-    /**
-     * Sign in with OAuth provider
-     */
+    public async signIn(email: string, password: string): Promise<SignInResponse> {
+        const { data, error } = await this.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+        if (error) {
+            this.raiseAuthError(error, 'signIn');
+        }
+        if (!data.session) {
+            throw new AuthUnauthorizedException('no_session');
+        }
+
+        const decodedToken = jwtDecode(data.session.access_token);
+
+        const user = decodedToken?.sub
+            ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
+            : null;
+
+        if (!user) {
+            throw new AuthUnauthorizedException('user_not_found');
+        }
+
+        return {
+            session: new SessionDto(data.session, new UserDto(user)),
+            accessToken: data.session.access_token,
+            refreshToken: data.session.refresh_token,
+        };
+    }
+
     public async signInWithOAuth(
         provider: 'google' | 'github' | 'facebook' | 'apple',
         redirectTo?: string,
     ): Promise<OAuthResponseDto> {
-        try {
-            const { data, error } = await this.auth.signInWithOAuth({
-                provider,
-                options: {
-                    redirectTo: redirectTo ?? '',
-                },
-            });
+        const { data, error } = await this.auth.signInWithOAuth({
+            provider,
+            options: {
+                redirectTo: redirectTo ?? '',
+            },
+        });
 
-            if (error) {
-                this.handleAuthError(error, 'signInWithOAuth');
-            }
-
-            return new OAuthResponseDto(data);
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('OAuth SignIn failed:', error);
-            throw new BadRequestException('OAuth authentication failed');
+        if (error) {
+            this.raiseAuthError(error, 'signInWithOAuth');
         }
+
+        return new OAuthResponseDto(data);
     }
 
-    /**
-     * Verify and get user information from access token
-     */
     public async verifyToken(accessToken: string): Promise<UserDto> {
-        try {
-            const { data, error } = await this.auth.getUser(accessToken);
+        const { data, error } = await this.auth.getUser(accessToken);
 
-            if (error) {
-                this.handleAuthError(error, 'verifyToken');
-            }
-
-            const user = data.user?.id
-                ? await this.userRepository.findBySupabaseUserId(data.user.id)
-                : null;
-
-            if (!user) {
-                throw new UnauthorizedException('User not found');
-            }
-
-            return new UserDto(user);
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('VerifyToken failed:', error);
-            throw new UnauthorizedException('Invalid access token');
+        if (error) {
+            this.raiseAuthError(error, 'verifyToken');
         }
+
+        const user = data.user?.id
+            ? await this.userRepository.findBySupabaseUserId(data.user.id)
+            : null;
+
+        if (!user) {
+            throw new AuthUnauthorizedException('user_not_found');
+        }
+
+        return new UserDto(user);
     }
 
-    /**
-     * Refresh user session
-     */
     public async refreshSession(refreshToken: string): Promise<SignInResponse> {
-        try {
-            const { data, error } = await this.auth.refreshSession({
-                refresh_token: refreshToken,
-            });
+        const { data, error } = await this.auth.refreshSession({
+            refresh_token: refreshToken,
+        });
 
-            if (error) {
-                this.handleAuthError(error, 'refreshSession');
-            }
-            if (!data.session) {
-                throw new UnauthorizedException('No session data returned');
-            }
-
-            const decodedToken = jwtDecode(data.session.access_token);
-
-            const user = decodedToken?.sub
-                ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
-                : null;
-
-            if (!user) {
-                throw new UnauthorizedException('User not found');
-            }
-
-            return {
-                session: new SessionDto(data.session, new UserDto(user)),
-                accessToken: data.session.access_token,
-                refreshToken: data.session.refresh_token,
-            };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('RefreshSession failed:', error);
-            throw new UnauthorizedException('Session refresh failed');
+        if (error) {
+            this.raiseAuthError(error, 'refreshSession');
         }
+        if (!data.session) {
+            throw new AuthUnauthorizedException('no_session');
+        }
+
+        const decodedToken = jwtDecode(data.session.access_token);
+
+        const user = decodedToken?.sub
+            ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
+            : null;
+
+        if (!user) {
+            throw new AuthUnauthorizedException('user_not_found');
+        }
+
+        return {
+            session: new SessionDto(data.session, new UserDto(user)),
+            accessToken: data.session.access_token,
+            refreshToken: data.session.refresh_token,
+        };
     }
 
-    /**
-     * Sign out current user
-     */
     public async signOut() {
-        try {
-            const { error } = await this.auth.signOut();
+        const { error } = await this.auth.signOut();
 
-            if (error) {
-                this.handleAuthError(error, 'signOut');
-            }
-
-            return { message: 'User signed out successfully' };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('SignOut failed:', error);
-            throw new BadRequestException('Sign out failed');
+        if (error) {
+            this.raiseAuthError(error, 'signOut');
         }
+
+        return { message: 'User signed out successfully' };
     }
 
-    /**
-     * Send password reset email
-     */
     public async resetPassword(email: string) {
-        try {
-            const { error } = await this.auth.resetPasswordForEmail(email, {
-                redirectTo: `${process.env.APP_URL}/auth/reset-password`,
-            });
+        const { error } = await this.auth.resetPasswordForEmail(email, {
+            redirectTo: `${process.env.APP_URL}/auth/reset-password`,
+        });
 
-            if (error) {
-                this.handleAuthError(error, 'resetPassword');
-            }
-
-            return { message: 'Password reset email sent successfully' };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('ResetPassword failed:', error);
-            throw new BadRequestException('Password reset failed');
+        if (error) {
+            this.raiseAuthError(error, 'resetPassword');
         }
+
+        return { message: 'Password reset email sent successfully' };
     }
 
-    /**
-     * Verify OTP token
-     */
     public async verifyOtp(
         email: string,
         token: string,
         type: 'signup' | 'recovery' | 'email_change',
     ): Promise<SessionDto> {
-        try {
-            const { data, error } = await this.auth.verifyOtp({
-                email,
-                token,
-                type,
-            });
+        const { data, error } = await this.auth.verifyOtp({
+            email,
+            token,
+            type,
+        });
 
-            if (error) {
-                this.handleAuthError(error, 'verifyOtp');
-            }
-            if (!data.session) {
-                throw new UnauthorizedException('No session data returned');
-            }
-
-            const decodedToken = jwtDecode(data.session.access_token);
-
-            const user = decodedToken?.sub
-                ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
-                : null;
-
-            if (!user) {
-                throw new UnauthorizedException('User not found');
-            }
-
-            return new SessionDto(data.session, new UserDto(user));
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('VerifyOtp failed:', error);
-            throw new BadRequestException('OTP verification failed');
+        if (error) {
+            this.raiseAuthError(error, 'verifyOtp');
         }
+        if (!data.session) {
+            throw new AuthUnauthorizedException('no_session');
+        }
+
+        const decodedToken = jwtDecode(data.session.access_token);
+
+        const user = decodedToken?.sub
+            ? await this.userRepository.findBySupabaseUserId(decodedToken.sub)
+            : null;
+
+        if (!user) {
+            throw new AuthUnauthorizedException('user_not_found');
+        }
+
+        return new SessionDto(data.session, new UserDto(user));
     }
 
-    /**
-     * Resend confirmation email
-     */
     public async resendConfirmation(email: string) {
-        try {
-            const { error } = await this.auth.resend({
-                type: 'signup',
-                email,
-            });
+        const { error } = await this.auth.resend({
+            type: 'signup',
+            email,
+        });
 
-            if (error) {
-                this.handleAuthError(error, 'resendConfirmation');
-            }
-
-            return { message: 'Confirmation email resent successfully' };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('ResendConfirmation failed:', error);
-            throw new BadRequestException('Resend confirmation failed');
+        if (error) {
+            this.raiseAuthError(error, 'resendConfirmation');
         }
+
+        return { message: 'Confirmation email resent successfully' };
     }
 
-    /**
-     * Sync OAuth user from Supabase to local DB
-     * Generic method that works for all OAuth providers (google, github, facebook, apple)
-     */
     public async syncOAuthUser(accessToken: string, refreshToken: string): Promise<SignInResponse> {
-        try {
-            const userClient = this.supabaseAuth.createClientWithAccessToken(accessToken);
+        const userClient = this.supabaseAuth.createClientWithAccessToken(accessToken);
 
-            const { data: userData, error: userError } = await userClient.auth.getUser(accessToken);
+        const { data: userData, error: userError } = await userClient.auth.getUser(accessToken);
 
-            if (userError) {
-                this.handleAuthError(userError, 'syncOAuthUser');
-            }
-            if (!userData.user) {
-                throw new UnauthorizedException('User data is missing from Supabase response');
-            }
+        if (userError) {
+            this.raiseAuthError(userError, 'syncOAuthUser');
+        }
+        if (!userData.user) {
+            throw new AuthUnauthorizedException('supabase_user_missing');
+        }
 
-            const supabaseUser = userData.user;
-            const extractedUserData = this.extractUserDataFromSupabase(supabaseUser);
+        const supabaseUser = userData.user;
+        const extractedUserData = this.extractUserDataFromSupabase(supabaseUser);
 
-            let user = await this.userRepository.findBySupabaseUserId(supabaseUser.id);
+        let user = await this.userRepository.findBySupabaseUserId(supabaseUser.id);
 
-            if (!user) {
-                user = await this.userRepository.create({
-                    email: extractedUserData.email,
-                    supabaseUserId: supabaseUser.id,
+        if (!user) {
+            user = await this.userRepository.create({
+                email: extractedUserData.email,
+                supabaseUserId: supabaseUser.id,
+                firstName: extractedUserData.firstName,
+                lastName: extractedUserData.lastName,
+                phone: extractedUserData.phone,
+                avatar: extractedUserData.avatar,
+                role: extractedUserData.role,
+                isActive: true,
+            });
+        } else {
+            const needsUpdate =
+                user.firstName !== extractedUserData.firstName ||
+                user.lastName !== extractedUserData.lastName ||
+                user.avatar !== extractedUserData.avatar ||
+                (extractedUserData.phone && user.phone !== extractedUserData.phone);
+
+            if (needsUpdate) {
+                user = await this.userRepository.update(user.id, {
                     firstName: extractedUserData.firstName,
                     lastName: extractedUserData.lastName,
-                    phone: extractedUserData.phone,
                     avatar: extractedUserData.avatar,
-                    role: extractedUserData.role,
-                    isActive: true,
+                    ...(extractedUserData.phone && { phone: extractedUserData.phone }),
                 });
-            } else {
-                const needsUpdate =
-                    user.firstName !== extractedUserData.firstName ||
-                    user.lastName !== extractedUserData.lastName ||
-                    user.avatar !== extractedUserData.avatar ||
-                    (extractedUserData.phone && user.phone !== extractedUserData.phone);
-
-                if (needsUpdate) {
-                    user = await this.userRepository.update(user.id, {
-                        firstName: extractedUserData.firstName,
-                        lastName: extractedUserData.lastName,
-                        avatar: extractedUserData.avatar,
-                        ...(extractedUserData.phone && { phone: extractedUserData.phone }),
-                    });
-                }
             }
-
-            const { data: sessionData, error: sessionError } = await userClient.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-            });
-
-            if (sessionError || !sessionData.session) {
-                throw new UnauthorizedException('Failed to get session');
-            }
-
-            return {
-                session: new SessionDto(sessionData.session, new UserDto(user)),
-                accessToken: sessionData.session.access_token,
-                refreshToken: sessionData.session.refresh_token,
-            };
-        } catch (error) {
-            if (error instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(error);
-            }
-            this.logger.error('SyncOAuthUser failed:', error);
-            throw new BadRequestException('OAuth user sync failed');
         }
+
+        const { data: sessionData, error: sessionError } = await userClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+        });
+
+        if (sessionError || !sessionData.session) {
+            throw new AuthUnauthorizedException('failed_get_session');
+        }
+
+        return {
+            session: new SessionDto(sessionData.session, new UserDto(user)),
+            accessToken: sessionData.session.access_token,
+            refreshToken: sessionData.session.refresh_token,
+        };
     }
 
-    /**
-     * Extract normalized user data from Supabase user object
-     * Works for all OAuth providers (google, github, facebook, apple)
-     */
     private extractUserDataFromSupabase(supabaseUser: {
         id: string;
         email?: string;
@@ -489,16 +375,17 @@ export class AuthService {
         };
     }
 
-    /**
-     * Handle authentication errors
-     */
-    private handleAuthError(error: unknown, operation: string): void {
+    private raiseAuthError(error: unknown, operation: string): never {
         if (error instanceof AuthError) {
+            if (error.message === 'Invalid login credentials') {
+                throw new InvalidCredentialsException();
+            }
             const message =
                 this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] ||
                 error.message;
-            throw new UnauthorizedException(message);
+            throw new AuthSupabaseMessageException(message);
         }
-        throw new UnauthorizedException(`Authentication ${operation} failed`);
+        this.logger.error(`Authentication ${operation} failed: ${String(error)}`);
+        throw new AuthSupabaseMessageException(`Authentication ${operation} failed`);
     }
 }

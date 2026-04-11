@@ -1,10 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { PrismaErrorHandler } from '../handlers/error.handler';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '../services/logger.service';
 import { PrismaService } from '../services/prisma.service';
@@ -48,33 +46,24 @@ export class AuthGuard implements CanActivate {
             throw new UnauthorizedException('No authentication token provided');
         }
 
-        try {
-            // Verify token with Supabase
-            const {
-                data: { user },
-                error,
-            } = await this.supabaseAuth.getAnonClient().auth.getUser(token);
+        const {
+            data: { user },
+            error,
+        } = await this.supabaseAuth.getAnonClient().auth.getUser(token);
 
-            if (error || !user) {
-                throw new UnauthorizedException('Invalid or expired token');
-            }
-
-            const currentUser = await this.prismaService.user.findUnique({
-                where: {
-                    supabaseUserId: user.id ?? '',
-                },
-            });
-
-            request.user = user;
-            request.currentUser = currentUser as User;
-            return true;
-        } catch (err) {
-            if (err instanceof PrismaClientKnownRequestError) {
-                PrismaErrorHandler.handle(err);
-            }
-            this.logger.error('Token verification failed');
-            throw new UnauthorizedException('Token verification failed');
+        if (error || !user) {
+            throw new UnauthorizedException('Invalid or expired token');
         }
+
+        const currentUser = await this.prismaService.user.findUnique({
+            where: {
+                supabaseUserId: user.id ?? '',
+            },
+        });
+
+        request.user = user;
+        request.currentUser = currentUser as User;
+        return true;
     }
 
     private extractTokenFromHeader(header: string | undefined): string | null {

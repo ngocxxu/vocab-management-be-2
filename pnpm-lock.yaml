@@ -98,6 +98,9 @@ importers:
       multer:
         specifier: ^2.0.2
         version: 2.0.2
+      nanoid:
+        specifier: ^3.3.7
+        version: 3.3.7
       nestjs-throttler-storage-redis:
         specifier: ^0.5.1
         version: 0.5.1(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.18)(@nestjs/throttler@6.5.0(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.1.14))(ioredis@5.6.1)(reflect-metadata@0.1.14)
@@ -2887,6 +2890,11 @@ packages:
   mylas@2.1.14:
     resolution: {integrity: sha512-BzQguy9W9NJgoVn2mRWzbFrFWWztGCcng2QI9+41frfk+Athwgx3qhqhvStz7ExeUUu7Kzw427sNzHpEZNINog==}
     engines: {node: '>=16.0.0'}
+
+  nanoid@3.3.7:
+    resolution: {integrity: sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
 
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
@@ -7267,6 +7275,8 @@ snapshots:
       xtend: 4.0.2
 
   mylas@2.1.14: {}
+
+  nanoid@3.3.7: {}
 
   natural-compare@1.4.0: {}
 

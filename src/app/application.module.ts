@@ -7,6 +7,8 @@ import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nest
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 
+import { CommonModule } from '@/common/common.module';
+
 import { envConfigLoaders, validationSchema } from '../config';
 import { AiModule } from '@/domains/ai';
 import { AuthModule } from '@/domains/identity/auth';
@@ -31,6 +33,7 @@ import { AuthGuard, SharedModule, UserThrottlerGuard } from '@/shared';
 
 @Module({
     imports: [
+        CommonModule,
         NestConfigModule.forRoot({
             isGlobal: true,
             load: envConfigLoaders,

@@ -13,6 +13,12 @@ export class PlanRepository extends BaseRepository {
         return this.prisma.plan.create({ data });
     }
 
+    public async findByRole(role: UserRole): Promise<Plan | null> {
+        return this.prisma.plan.findUnique({
+            where: { role },
+        });
+    }
+
     public async updateByRole(
         role: UserRole,
         data: Prisma.PlanUpdateInput,
