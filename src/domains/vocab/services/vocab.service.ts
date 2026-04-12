@@ -8,7 +8,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
-import { BulkDeleteInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabDto, VocabInput } from '../dto';
+import { BulkDeleteInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabConflictBySubjectQuery, VocabDto, VocabInput } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
@@ -176,19 +176,32 @@ export class VocabService {
         return vocabDtos;
     }
 
-    public async findConflictsBySubject(subjectId: string, userId: string, limit: number = 10): Promise<{ count: number; vocabs: VocabDto[] }> {
-        // Count total vocabs using this subject
-        const count = await this.vocabRepository.countVocabsBySubjectId(subjectId, userId);
+    public async findConflictsBySubject(query: VocabConflictBySubjectQuery, userId: string): Promise<PaginationDto<VocabDto>> {
+        const { subjectId, page: queryPage, pageSize: queryPageSize, sortBy, sortOrder } = query;
 
-        if (count === 0) {
-            return { count: 0, vocabs: [] };
+        // Get pagination params
+        const { page, pageSize, skip, take } = getPagination({
+            page: queryPage,
+            pageSize: queryPageSize,
+            defaultPage: PaginationDto.DEFAULT_PAGE,
+            defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
+        });
+
+        // Get order by
+        const orderBy = getOrderBy(sortBy, sortOrder, 'createdAt') as Prisma.VocabOrderByWithRelationInput;
+
+        // Count total vocabs using this subject
+        const totalItems = await this.vocabRepository.countVocabsBySubjectId(subjectId, userId);
+
+        if (totalItems === 0) {
+            return this.vocabMapper.toPaginated([], 0, page, pageSize);
         }
 
-        // Get sample vocabs
-        const vocabs = await this.vocabRepository.findVocabsBySubjectId(subjectId, userId, limit);
+        // Get paginated vocabs
+        const vocabs = await this.vocabRepository.findVocabsBySubjectId(subjectId, userId, skip, take, orderBy);
         const vocabDtos = vocabs.map((vocab) => this.vocabMapper.toResponse(vocab));
 
-        return { count, vocabs: vocabDtos };
+        return this.vocabMapper.toPaginated(vocabDtos, totalItems, page, pageSize);
     }
 
     /**

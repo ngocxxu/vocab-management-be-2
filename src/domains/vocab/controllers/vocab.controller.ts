@@ -118,19 +118,13 @@ export class VocabController {
     @Get('conflict/by-subject')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
-    @ApiOperation({ summary: 'Get vocabs using a specific subject' })
+    @ApiOperation({ summary: 'Get vocabs using a specific subject (paginated)' })
     @ApiResponse({
         status: HttpStatus.OK,
-        schema: {
-            type: 'object',
-            properties: {
-                count: { type: 'number' },
-                vocabs: { type: 'array', items: { $ref: '#/components/schemas/VocabDto' } },
-            },
-        },
+        description: 'Paginated list of vocabs using the subject',
     })
-    public async getConflictsBySubject(@Query() query: VocabConflictBySubjectQuery, @CurrentUser() user: User): Promise<{ count: number; vocabs: VocabDto[] }> {
-        return this.vocabService.findConflictsBySubject(query.subjectId, user.id);
+    public async getConflictsBySubject(@Query() query: VocabConflictBySubjectQuery, @CurrentUser() user: User): Promise<PaginationDto<VocabDto>> {
+        return this.vocabService.findConflictsBySubject(query, user.id);
     }
 
     @Post('generate/text-target')

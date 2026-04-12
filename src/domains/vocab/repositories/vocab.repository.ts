@@ -461,7 +461,7 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    public async findVocabsBySubjectId(subjectId: string, userId: string, limit: number = 10): Promise<Vocab[]> {
+    public async findVocabsBySubjectId(subjectId: string, userId: string, skip: number, take: number, orderBy: Prisma.VocabOrderByWithRelationInput): Promise<Vocab[]> {
         return this.prisma.vocab.findMany({
             where: {
                 userId,
@@ -490,7 +490,9 @@ export class VocabRepository extends BaseRepository {
                     take: 1,
                 },
             },
-            take: limit,
+            skip,
+            take,
+            orderBy,
         });
     }
 
