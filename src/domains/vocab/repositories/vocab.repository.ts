@@ -446,6 +446,54 @@ export class VocabRepository extends BaseRepository {
         }
     }
 
+    public async countVocabsBySubjectId(subjectId: string, userId: string): Promise<number> {
+        return this.prisma.vocab.count({
+            where: {
+                userId,
+                textTargets: {
+                    some: {
+                        textTargetSubjects: {
+                            some: { subjectId },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    public async findVocabsBySubjectId(subjectId: string, userId: string, limit: number = 10): Promise<Vocab[]> {
+        return this.prisma.vocab.findMany({
+            where: {
+                userId,
+                textTargets: {
+                    some: {
+                        textTargetSubjects: {
+                            some: { subjectId },
+                        },
+                    },
+                },
+            },
+            include: {
+                sourceLanguage: true,
+                targetLanguage: true,
+                languageFolder: true,
+                textTargets: {
+                    include: {
+                        wordType: true,
+                        vocabExamples: true,
+                        textTargetSubjects: { include: { subject: true } },
+                    },
+                },
+                vocabMasteries: {
+                    where: { userId },
+                    select: { masteryScore: true },
+                    take: 1,
+                },
+            },
+            take: limit,
+        });
+    }
+
     private async applyCsvBatchInTransaction(tx: Prisma.TransactionClient, params: CsvImportGroupParams): Promise<{ created: number; updated: number }> {
         const { textSource, textTargetRows, userId, sourceLanguageCode, targetLanguageCode, languageFolderId, wordTypeMap, subjectMap, existingVocabMap } = params;
 

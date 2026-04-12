@@ -4,7 +4,7 @@ import { UserRole } from '@prisma/client';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
 import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
-import { SubjectBadRequestException, SubjectNotFoundException } from '../exceptions';
+import { SubjectBadRequestException, SubjectInUseException, SubjectNotFoundException } from '../exceptions';
 import { SubjectMapper } from '../mappers';
 import { SubjectRepository } from '../repositories';
 
@@ -102,10 +102,24 @@ export class SubjectService {
         await this.subjectRepository.clearUserCache(userId);
     }
 
-    public async delete(id: string, userId?: string): Promise<SubjectDto> {
-        await this.findOne(id, userId);
-        const subject = await this.subjectRepository.delete(id, userId);
+    public async delete(id: string, userId: string): Promise<SubjectDto> {
+        // 1. Verify ownership
+        const subject = await this.findOne(id, userId);
 
-        return this.subjectMapper.toResponse(subject);
+        // 2. Check if any vocabs use this subject
+        const affectedVocabCount = await this.subjectRepository.countVocabsBySubjectId(id, userId);
+
+        if (affectedVocabCount > 0) {
+            // Get sample vocabs for error message
+            const sampleVocabs = await this.subjectRepository.findSampleVocabsBySubjectId(id, userId, 3);
+            const sampleIds = sampleVocabs.map((v) => v.id);
+
+            throw new SubjectInUseException(id, subject.name, affectedVocabCount, sampleIds);
+        }
+
+        // 3. Delete in transaction (atomic + SERIALIZABLE isolation)
+        const deletedSubject = await this.subjectRepository.deleteInTransaction(id, userId);
+
+        return this.subjectMapper.toResponse(deletedSubject);
     }
 }

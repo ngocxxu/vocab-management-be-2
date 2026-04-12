@@ -4,6 +4,7 @@ import { RedisService } from '@/shared/services/redis.service';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, Subject } from '@prisma/client';
+import { SubjectInUseException } from '../exceptions';
 
 @Injectable()
 export class SubjectRepository extends BaseRepository {
@@ -210,5 +211,82 @@ export class SubjectRepository extends BaseRepository {
         } catch (error) {
             this.logger.warn(`Failed to clear subject cache: ${error}`);
         }
+    }
+
+    // Count the number of vocabs using this subject
+    public async countVocabsBySubjectId(subjectId: string, userId: string): Promise<number> {
+        return this.prisma.vocab.count({
+            where: {
+                userId,
+                textTargets: {
+                    some: {
+                        textTargetSubjects: {
+                            some: { subjectId },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    // Get sample vocabs to display in error message
+    public async findSampleVocabsBySubjectId(subjectId: string, userId: string, limit: number = 3): Promise<Array<{ id: string; textSource: string }>> {
+        return this.prisma.vocab.findMany({
+            where: {
+                userId,
+                textTargets: {
+                    some: {
+                        textTargetSubjects: {
+                            some: { subjectId },
+                        },
+                    },
+                },
+            },
+            select: { id: true, textSource: true },
+            take: limit,
+        });
+    }
+
+    // Delete subject in transaction with Serializable isolation
+    public async deleteInTransaction(id: string, userId?: string): Promise<Subject> {
+        return this.runInTransaction(
+            async (tx) => {
+                // Re-check inside transaction to prevent race condition
+                const count = await tx.vocab.count({
+                    where: {
+                        userId,
+                        textTargets: {
+                            some: {
+                                textTargetSubjects: {
+                                    some: { subjectId: id },
+                                },
+                            },
+                        },
+                    },
+                });
+
+                if (count > 0) {
+                    throw new SubjectInUseException(id, 'Unknown', count);
+                }
+
+                // Build WHERE clause for the subject
+                const where: { id: string; userId?: string } = { id };
+                if (userId) {
+                    where.userId = userId;
+                }
+
+                // Delete subject
+                const subject = await tx.subject.delete({ where });
+
+                // Clear Redis caches
+                await this.redisService.del(RedisPrefix.SUBJECT, `id:${id}`);
+                if (subject.userId) {
+                    await this.redisService.del(RedisPrefix.SUBJECT, `userId:${subject.userId}`);
+                }
+
+                return subject;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
     }
 }

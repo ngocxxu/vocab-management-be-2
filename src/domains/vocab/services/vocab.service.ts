@@ -1,3 +1,4 @@
+import { SubjectRepository } from '@/domains/catalog/subject/repositories/subject.repository';
 import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
@@ -8,6 +9,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
 import { BulkDeleteInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabDto, VocabInput } from '../dto';
+import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
 import { VocabMapper } from '../mappers';
@@ -20,6 +22,7 @@ export class VocabService {
 
     public constructor(
         private readonly vocabRepository: VocabRepository,
+        private readonly subjectRepository: SubjectRepository,
         private readonly logger: LoggerService,
         private readonly planQuotaService: PlanQuotaService,
         private readonly vocabTranslationProducer: VocabTranslationProducer,
@@ -100,6 +103,25 @@ export class VocabService {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
+
+        // Validate subject ownership
+        if (createVocabData.textTargets?.length > 0) {
+            const subjectIds = new Set<string>();
+
+            createVocabData.textTargets.forEach((target) => {
+                target.subjectIds?.forEach((id) => subjectIds.add(id));
+            });
+
+            if (subjectIds.size > 0) {
+                // Inject SubjectRepository into VocabService constructor
+                const validSubjects = await this.subjectRepository.findByIds(Array.from(subjectIds), userId);
+
+                if (validSubjects.length !== subjectIds.size) {
+                    throw new VocabBadRequestException('One or more subjects do not belong to you');
+                }
+            }
+        }
+
         const { sourceLanguageCode, targetLanguageCode }: VocabInput = createVocabData;
 
         if (sourceLanguageCode === targetLanguageCode) {
@@ -133,6 +155,40 @@ export class VocabService {
         await this.clearVocabListCaches();
 
         return vocabDtos;
+    }
+
+    public async updateBulk(input: BulkUpdateInput, userId: string): Promise<VocabDto[]> {
+        const { updates } = input;
+
+        if (!updates.length) {
+            throw new VocabBadRequestException('Updates are required');
+        }
+
+        const vocabDtos = await Promise.all(updates.map(async (update) => this.update(update.id, update.data, userId)));
+
+        if (vocabDtos.length !== updates.length) {
+            throw new VocabBadRequestException('Failed to update all vocabularies');
+        }
+
+        await this.clearVocabCache();
+        await this.clearVocabListCaches();
+
+        return vocabDtos;
+    }
+
+    public async findConflictsBySubject(subjectId: string, userId: string, limit: number = 10): Promise<{ count: number; vocabs: VocabDto[] }> {
+        // Count total vocabs using this subject
+        const count = await this.vocabRepository.countVocabsBySubjectId(subjectId, userId);
+
+        if (count === 0) {
+            return { count: 0, vocabs: [] };
+        }
+
+        // Get sample vocabs
+        const vocabs = await this.vocabRepository.findVocabsBySubjectId(subjectId, userId, limit);
+        const vocabDtos = vocabs.map((vocab) => this.vocabMapper.toResponse(vocab));
+
+        return { count, vocabs: vocabDtos };
     }
 
     /**

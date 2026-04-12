@@ -19,7 +19,9 @@ import {
     TopProblematicVocabDto,
     MasteryDistributionDto,
     CreateTextTargetInput,
+    VocabConflictBySubjectQuery,
 } from '../dto';
+import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabService, VocabMasteryService } from '../services';
 import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
@@ -102,6 +104,33 @@ export class VocabController {
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
     public async createBulk(@Body() input: VocabInput[], @CurrentUser() user: User): Promise<VocabDto[]> {
         return this.vocabService.createBulk(input, user.id);
+    }
+
+    @Post('bulk/update')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @ApiOperation({ summary: 'Update multiple vocabs' })
+    @ApiResponse({ status: HttpStatus.OK, type: [VocabDto] })
+    public async updateBulk(@Body() input: BulkUpdateInput, @CurrentUser() user: User): Promise<VocabDto[]> {
+        return this.vocabService.updateBulk(input, user.id);
+    }
+
+    @Get('conflict/by-subject')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Get vocabs using a specific subject' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        schema: {
+            type: 'object',
+            properties: {
+                count: { type: 'number' },
+                vocabs: { type: 'array', items: { $ref: '#/components/schemas/VocabDto' } },
+            },
+        },
+    })
+    public async getConflictsBySubject(@Query() query: VocabConflictBySubjectQuery, @CurrentUser() user: User): Promise<{ count: number; vocabs: VocabDto[] }> {
+        return this.vocabService.findConflictsBySubject(query.subjectId, user.id);
     }
 
     @Post('generate/text-target')

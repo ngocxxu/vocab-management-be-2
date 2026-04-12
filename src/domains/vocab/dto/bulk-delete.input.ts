@@ -10,5 +10,5 @@ export class BulkDeleteInput {
     })
     @IsArray()
     @IsString({ each: true })
-    public readonly ids: string[];
+    public readonly ids!: string[];
 }
