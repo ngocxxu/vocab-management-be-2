@@ -11,6 +11,7 @@ import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service
 import { BulkDeleteInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabConflictBySubjectQuery, VocabDto, VocabInput } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
+import { VocabUpdateInput } from '../dto/vocab-update.input';
 import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
 import { VocabMapper } from '../mappers';
 import { CsvImportExistingVocab, VocabRepository } from '../repositories';
@@ -213,7 +214,7 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async update(id: string, updateVocabData: Partial<VocabInput>, userId: string): Promise<VocabDto> {
+    public async update(id: string, updateVocabData: Partial<VocabUpdateInput>, userId: string): Promise<VocabDto> {
         await this.findOne(id, userId);
 
         if (updateVocabData.sourceLanguageCode && updateVocabData.targetLanguageCode && updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode) {

@@ -1,6 +1,7 @@
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { Prisma } from '@prisma/client';
 import { VocabDto } from '../dto';
+import { VocabUpdateInput, UpdateTextTargetInput } from '../dto/vocab-update.input';
 import { CreateTextTargetInput, VocabInput } from '../dto/vocab.input';
 
 type VocabEntity = ConstructorParameters<typeof VocabDto>[0];
@@ -66,7 +67,7 @@ export class VocabMapper {
         return { prismaCreate, shouldQueueTranslation, queuePayload };
     }
 
-    public buildUpdateInput(updateVocabData: Partial<VocabInput>): Prisma.VocabUpdateInput {
+    public buildUpdateInput(updateVocabData: Partial<VocabUpdateInput>): Prisma.VocabUpdateInput {
         return {
             ...(updateVocabData.textSource && { textSource: updateVocabData.textSource }),
             ...(updateVocabData.sourceLanguageCode && {
@@ -78,7 +79,7 @@ export class VocabMapper {
             ...(updateVocabData.textTargets && {
                 textTargets: {
                     deleteMany: {},
-                    create: updateVocabData.textTargets.map((t) => this.mapTextTargetCreate(t)),
+                    create: updateVocabData.textTargets.map((t) => this.mapTextTargetForUpdate(t)),
                 },
             }),
         };
@@ -116,6 +117,33 @@ export class VocabMapper {
                         source: e.source,
                         target: e.target,
                     })),
+                },
+            }),
+        };
+    }
+
+    private mapTextTargetForUpdate(target: UpdateTextTargetInput): Prisma.TextTargetCreateWithoutVocabInput {
+        return {
+            textTarget: target.textTarget || '',
+            grammar: target.grammar || '',
+            explanationSource: target.explanationSource || '',
+            explanationTarget: target.explanationTarget || '',
+            ...(target.subjectIds?.length && {
+                textTargetSubjects: {
+                    create: target.subjectIds.map((subjectId: string) => ({ subjectId })),
+                },
+            }),
+            ...(target.wordTypeId && {
+                wordType: { connect: { id: target.wordTypeId } },
+            }),
+            ...(target.vocabExamples?.length && {
+                vocabExamples: {
+                    create: target.vocabExamples
+                        .filter((e): e is { source: string; target: string } => Boolean(e.source) && Boolean(e.target))
+                        .map((e) => ({
+                            source: e.source,
+                            target: e.target,
+                        })),
                 },
             }),
         };

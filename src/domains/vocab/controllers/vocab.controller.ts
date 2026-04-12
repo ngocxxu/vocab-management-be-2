@@ -23,6 +23,7 @@ import {
 } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
+import { VocabUpdateInput } from '../dto/vocab-update.input';
 import { VocabService, VocabMasteryService } from '../services';
 import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
@@ -154,8 +155,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Update vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
-    public async update(@Param('id') id: string, @Body() updateVocabData: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
+    public async update(@Param('id') id: string, @Body() updateVocabData: VocabUpdateInput, @CurrentUser() user: User): Promise<VocabDto> {
         const vocab = await this.vocabService.update(id, updateVocabData, user.id);
         this.logger.info(`Updated vocab with ID ${id}`);
         return vocab;

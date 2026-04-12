@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsString, ValidateNested } from 'class-validator';
-import { VocabInput } from './vocab.input';
+import { VocabUpdateInput } from './vocab-update.input';
 
 export class BulkUpdateItemInput {
     @ApiProperty({
@@ -13,11 +13,11 @@ export class BulkUpdateItemInput {
 
     @ApiProperty({
         description: 'Updated vocabulary data',
-        type: VocabInput,
+        type: VocabUpdateInput,
     })
     @ValidateNested()
-    @Type(() => VocabInput)
-    public readonly data!: VocabInput;
+    @Type(() => VocabUpdateInput)
+    public readonly data!: VocabUpdateInput;
 }
 
 export class BulkUpdateInput {
