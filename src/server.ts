@@ -140,7 +140,7 @@ async function bootstrap(): Promise<void> {
 
     app.useGlobalPipes(
         new ValidationPipe({
-            whitelist: true,
+            // whitelist: true, // TODO: Enable this once all endpoints are updated to properly use DTOs and validation decorators
             forbidNonWhitelisted: true,
             transform: true,
         }),
