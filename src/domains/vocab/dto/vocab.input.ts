@@ -7,12 +7,10 @@ import { VocabDto } from './vocab.dto';
 export class CreateVocabExampleInput {
     @ApiProperty({ description: 'Source example text', example: 'Hello, how are you?' })
     @IsString()
-    @IsNotEmpty()
     public source: string;
 
     @ApiProperty({ description: 'Target example text', example: 'Xin chào, bạn khỏe không?' })
     @IsString()
-    @IsNotEmpty()
     public target: string;
 }
 
@@ -68,17 +66,14 @@ export class CreateTextTargetInput {
 
     @ApiProperty({ description: 'Grammar information', example: 'interjection' })
     @IsString()
-    @IsNotEmpty()
     public grammar: string;
 
     @ApiProperty({ description: 'Explanation in source language' })
     @IsString()
-    @IsNotEmpty()
     public explanationSource: string;
 
     @ApiProperty({ description: 'Explanation in target language' })
     @IsString()
-    @IsNotEmpty()
     public explanationTarget: string;
 
     @ApiProperty({

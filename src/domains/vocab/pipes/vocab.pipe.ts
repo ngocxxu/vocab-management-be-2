@@ -49,18 +49,15 @@ export class VocabPipe extends JoiValidationPipe {
                             'any.required': 'Text target is required',
                         }),
 
-                        grammar: Joi.string().optional().max(100).trim().min(1).messages({
-                            'string.min': 'Grammar cannot be empty if provided',
+                        grammar: Joi.string().optional().max(100).trim().allow('').messages({
                             'string.max': 'Grammar cannot exceed 100 characters',
                         }),
 
-                        explanationSource: Joi.string().optional().max(1000).trim().min(1).messages({
-                            'string.min': 'Source explanation cannot be empty if provided',
+                        explanationSource: Joi.string().optional().max(1000).trim().allow('').messages({
                             'string.max': 'Source explanation cannot exceed 1000 characters',
                         }),
 
-                        explanationTarget: Joi.string().optional().max(1000).trim().min(1).messages({
-                            'string.min': 'Target explanation cannot be empty if provided',
+                        explanationTarget: Joi.string().optional().max(1000).trim().allow('').messages({
                             'string.max': 'Target explanation cannot exceed 1000 characters',
                         }),
 
@@ -84,15 +81,11 @@ export class VocabPipe extends JoiValidationPipe {
                         vocabExamples: Joi.array()
                             .items(
                                 Joi.object({
-                                    source: Joi.string().required().max(1000).trim().min(1).messages({
-                                        'string.empty': 'Example source is required',
-                                        'string.min': 'Example source cannot be empty',
+                                    source: Joi.string().required().max(1000).trim().allow('').messages({
                                         'string.max': 'Example source cannot exceed 1000 characters',
                                         'any.required': 'Example source is required',
                                     }),
-                                    target: Joi.string().required().max(1000).trim().min(1).messages({
-                                        'string.empty': 'Example target is required',
-                                        'string.min': 'Example target cannot be empty',
+                                    target: Joi.string().required().max(1000).trim().allow('').messages({
                                         'string.max': 'Example target cannot exceed 1000 characters',
                                         'any.required': 'Example target is required',
                                     }),
