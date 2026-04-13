@@ -8,8 +8,8 @@ export class LanguageFolderPipe implements PipeTransform<LanguageFolderInput, La
         return {
             name: value.name?.trim() || value.name,
             folderColor: value.folderColor?.trim() || value.folderColor,
-            sourceLanguageCode: value.sourceLanguageCode?.trim().toLowerCase() || value.sourceLanguageCode,
-            targetLanguageCode: value.targetLanguageCode?.trim().toLowerCase() || value.targetLanguageCode,
+            sourceLanguageCode: value.sourceLanguageCode?.trim() || value.sourceLanguageCode,
+            targetLanguageCode: value.targetLanguageCode?.trim() || value.targetLanguageCode,
         };
     }
 }
