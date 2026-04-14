@@ -1,6 +1,9 @@
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { Prisma } from '@prisma/client';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
+import { LanguageFolderWithStatsDto } from '../dto/language-folder-with-stats.dto';
+import { computeFolderStatus } from '../types/folder-status';
+import { type FolderWithStatsRaw } from '../types/folder-with-stats.raw';
 
 type LanguageFolderEntity = ConstructorParameters<typeof LanguageFolderDto>[0];
 
@@ -43,6 +46,14 @@ export class LanguageFolderMapper {
 
     public toResponseList(entities: LanguageFolderEntity[]): LanguageFolderDto[] {
         return entities.map((e) => this.toResponse(e));
+    }
+
+    public toStatsResponse(row: FolderWithStatsRaw): LanguageFolderWithStatsDto {
+        return new LanguageFolderWithStatsDto(row, computeFolderStatus(row.vocabCount, row.averageMastery));
+    }
+
+    public toStatsResponseList(rows: FolderWithStatsRaw[]): LanguageFolderWithStatsDto[] {
+        return rows.map((r) => this.toStatsResponse(r));
     }
 
     public toPaginated(items: LanguageFolderDto[], totalItems: number, page: number, pageSize: number): PaginationDto<LanguageFolderDto> {

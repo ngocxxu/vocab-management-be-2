@@ -425,7 +425,7 @@ model VocabMastery {
   history VocabMasteryHistory[]
 
   @@unique([vocabId, userId])
-  @@index([vocabId])
+  @@index([vocabId, userId])
   @@index([userId])
   @@index([userId, incorrectCount])
   @@index([userId, masteryScore])
@@ -524,17 +524,17 @@ model VocabMasteryHistory {
 }
 
 model JobFailure {
-  id            String   @id @default(cuid()) @map("id")
-  queueName     String   @map("queue_name")
-  jobId         String   @map("job_id")
-  jobName       String   @map("job_name")
-  payload       Json     @map("payload")
-  error         String   @map("error")
-  stackTrace    String?  @map("stack_trace")
-  attemptsMade  Int      @map("attempts_made")
-  maxAttempts   Int      @map("max_attempts")
-  failedAt      DateTime @map("failed_at")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id           String   @id @default(cuid()) @map("id")
+  queueName    String   @map("queue_name")
+  jobId        String   @map("job_id")
+  jobName      String   @map("job_name")
+  payload      Json     @map("payload")
+  error        String   @map("error")
+  stackTrace   String?  @map("stack_trace")
+  attemptsMade Int      @map("attempts_made")
+  maxAttempts  Int      @map("max_attempts")
+  failedAt     DateTime @map("failed_at")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@unique([queueName, jobId])
   @@index([queueName, failedAt])

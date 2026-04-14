@@ -1,10 +1,11 @@
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
-import { Roles, CurrentUser } from '@/shared/decorators';
+import { CurrentUser, Roles } from '@/shared/decorators';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
 import { LanguageFolderParamsInput } from '../dto/language-folder-params.input';
+import { LanguageFolderWithStatsDto } from '../dto/language-folder-with-stats.dto';
 import { LanguageFolderPipe } from '../pipes';
 import { LanguageFolderService } from '../services';
 
@@ -28,9 +29,9 @@ export class LanguageFolderController {
 
     @Get('my')
     @ApiOperation({ summary: 'Find all language folders for the current user' })
-    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageFolderDto })
-    public async findMyFolders(@CurrentUser() user: User): Promise<IResponse<LanguageFolderDto[]>> {
-        return this.languageFolderService.findByUserId(user.id);
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: LanguageFolderWithStatsDto })
+    public async findMyFolders(@CurrentUser() user: User): Promise<IResponse<LanguageFolderWithStatsDto[]>> {
+        return this.languageFolderService.findStatsByUserId(user.id);
     }
 
     @Get(':id')

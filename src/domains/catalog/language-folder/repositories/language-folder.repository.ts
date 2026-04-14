@@ -6,6 +6,7 @@ import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
 import { LanguageFolder, Prisma } from '@prisma/client';
 import { LanguageFolderParamsInput } from '../dto/language-folder-params.input';
+import { type FolderWithStatsRaw } from '../types/folder-with-stats.raw';
 
 @Injectable()
 export class LanguageFolderRepository extends BaseRepository {
@@ -36,6 +37,47 @@ export class LanguageFolderRepository extends BaseRepository {
         await this.redisService.jsonSet(RedisPrefix.LANGUAGE_FOLDER, `user:${userId}`, folders);
 
         return folders;
+    }
+
+    public async findWithStatsByUserId(userId: string): Promise<FolderWithStatsRaw[]> {
+        return this.prisma.$queryRaw<FolderWithStatsRaw[]>`
+            SELECT
+                lf.id                           AS "id",
+                lf.name                         AS "name",
+                lf.folder_color                 AS "folderColor",
+                lf.created_at                   AS "createdAt",
+                lf.updated_at                   AS "updatedAt",
+                lf.user_id                      AS "userId",
+                lf.source_language_code         AS "sourceLanguageCode",
+                lf.target_language_code         AS "targetLanguageCode",
+                sl.name                         AS "sourceLanguageName",
+                tl.name                         AS "targetLanguageName",
+                COUNT(DISTINCT v.id)::int       AS "vocabCount",
+                CASE
+                    WHEN COUNT(DISTINCT v.id) = 0 THEN NULL
+                    ELSE COALESCE(AVG(vm.mastery_score), 0.0)
+                END::float                      AS "averageMastery"
+            FROM language_folder lf
+            LEFT JOIN language sl ON sl.code = lf.source_language_code
+            LEFT JOIN language tl ON tl.code = lf.target_language_code
+            LEFT JOIN vocab v ON v.language_folder_id = lf.id
+            LEFT JOIN vocab_mastery vm
+                ON vm.vocab_id = v.id
+               AND vm.user_id = ${userId}
+            WHERE lf.user_id = ${userId}
+            GROUP BY
+                lf.id,
+                lf.name,
+                lf.folder_color,
+                lf.created_at,
+                lf.updated_at,
+                lf.user_id,
+                lf.source_language_code,
+                lf.target_language_code,
+                sl.name,
+                tl.name
+            ORDER BY lf.name ASC
+        `;
     }
 
     public async findWithPagination(

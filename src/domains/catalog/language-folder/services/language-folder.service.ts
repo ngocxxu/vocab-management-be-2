@@ -4,9 +4,10 @@ import { Prisma, UserRole } from '@prisma/client';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
 import { LanguageFolderParamsInput } from '../dto/language-folder-params.input';
+import { LanguageFolderWithStatsDto } from '../dto/language-folder-with-stats.dto';
 import { LanguageFolderBadRequestException, LanguageFolderNotFoundException } from '../exceptions';
 import { LanguageFolderMapper } from '../mappers';
-import { LanguageFolderRepository } from '../repositories';
+import { LanguageFolderRepository } from '../repositories/language-folder.repository';
 
 @Injectable()
 export class LanguageFolderService {
@@ -22,6 +23,16 @@ export class LanguageFolderService {
 
         return {
             items: this.languageFolderMapper.toResponseList(folders),
+            statusCode: HttpStatus.OK,
+        };
+    }
+
+    public async findStatsByUserId(userId: string): Promise<IResponse<LanguageFolderWithStatsDto[]>> {
+        const rows = await this.languageFolderRepository.findWithStatsByUserId(userId);
+        const items: LanguageFolderWithStatsDto[] = this.languageFolderMapper.toStatsResponseList(rows);
+
+        return {
+            items,
             statusCode: HttpStatus.OK,
         };
     }
