@@ -9,8 +9,8 @@ export const REMINDER_CONFIG = {
         enabledTemplates: ['exam_reminder'] as const,
     },
     poller: {
-        intervalMs: 5_000,
-        batchSize: 50,
+        intervalMs: 10_000,
+        batchSize: 30,
         lockTimeoutMs: 180_000,
     },
     retry: {
