@@ -96,7 +96,7 @@ export class FillInBlankEvaluationProcessor {
                 await this.notificationService.create({
                     type: NotificationType.VOCAB_TRAINER,
                     action: NotificationAction.CREATE,
-                    priority: PriorityLevel.HIGH,
+                    priority: PriorityLevel.LOW,
                     data: {
                         trainerName: trainer.name,
                         message: 'Your test has been completed after 6 passes',
