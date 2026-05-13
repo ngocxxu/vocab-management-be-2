@@ -1,10 +1,10 @@
 # Stage 1: Build stage
-FROM node:20-alpine as builder
+FROM node:20-alpine AS builder
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
-ENV NODE_ENV build
+ENV NODE_ENV=build
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
@@ -29,9 +29,9 @@ RUN pnpm prisma generate \
 FROM node:20-alpine
 
 # Install pnpm in production
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
