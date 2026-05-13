@@ -1,6 +1,7 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { RedisService } from '@/shared/services/redis.service';
+import { getOrderBy } from '@/shared/utils/pagination.util';
 import { buildPrismaWhere, coerceQueryStringArray } from '@/shared/utils/query-builder.util';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
@@ -44,15 +45,12 @@ export class VocabRepository extends BaseRepository {
         super(prismaService);
     }
 
-    public async findWithPagination(
-        query: VocabQueryParamsInput,
-        userId: string,
-        skip: number,
-        take: number,
-        orderBy: Prisma.VocabOrderByWithRelationInput,
-    ): Promise<{ totalItems: number; vocabs: Vocab[] }> {
+    public async findWithPagination(query: VocabQueryParamsInput, userId: string, skip: number, take: number): Promise<{ totalItems: number; vocabs: Vocab[] }> {
+        const effectiveQuery = this.applyPresetFilter(query);
+        const orderBy = getOrderBy(effectiveQuery.sortBy, effectiveQuery.sortOrder, 'createdAt') as Prisma.VocabOrderByWithRelationInput;
+
         // 1. Caching Layer
-        const cacheKey = `list:${JSON.stringify({ ...query, userId })}`;
+        const cacheKey = `list:${JSON.stringify({ ...effectiveQuery, userId })}`;
         const cached = await this.redisService.jsonGet<{
             totalItems: number;
             vocabs: Vocab[];
@@ -62,24 +60,11 @@ export class VocabRepository extends BaseRepository {
         if (cached) await this.redisService.del(RedisPrefix.VOCAB, cacheKey);
 
         // 2. Build WHERE Condition
-        const where = buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
-            stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId', 'languageFolderId'],
-            customMap: (input, w) => {
-                if (userId) (w as Prisma.VocabWhereInput).userId = userId;
-                const subjectIds = coerceQueryStringArray(input.subjectIds);
-                if (subjectIds.length) {
-                    (w as Prisma.VocabWhereInput).textTargets = {
-                        some: {
-                            textTargetSubjects: { some: { subjectId: { in: subjectIds } } },
-                        },
-                    };
-                }
-            },
-        });
+        const where = this.buildVocabWhere(effectiveQuery, userId);
 
         // 3. Execution Strategy
         let result: { totalItems: number; vocabs: Vocab[] };
-        const isMasterySort = query.sortBy === 'masteryScore';
+        const isMasterySort = effectiveQuery.sortBy === 'masteryScore';
 
         if (isMasterySort) {
             const candidates = await this.prisma.vocab.findMany({
@@ -95,7 +80,7 @@ export class VocabRepository extends BaseRepository {
             });
 
             // Sort in Memory
-            const sortFactor = query.sortOrder === 'asc' ? 1 : -1;
+            const sortFactor = effectiveQuery.sortOrder === 'asc' ? 1 : -1;
             candidates.sort((a, b) => {
                 const scoreA = a.vocabMasteries[0]?.masteryScore ?? 0;
                 const scoreB = b.vocabMasteries[0]?.masteryScore ?? 0;
@@ -612,6 +597,73 @@ export class VocabRepository extends BaseRepository {
                 throw error;
             }
         }
+    }
+
+    private applyPresetFilter(query: VocabQueryParamsInput): VocabQueryParamsInput {
+        switch (query.filter) {
+            case 'recent':
+                return query.sortBy ? query : { ...query, sortBy: 'createdAt', sortOrder: 'desc' };
+            case 'difficult':
+                return query.sortBy ? query : { ...query, sortBy: 'masteryScore', sortOrder: 'asc' };
+            case 'unstarted':
+                return query;
+            default:
+                return query;
+        }
+    }
+
+    private buildVocabWhere(query: VocabQueryParamsInput, userId: string): Prisma.VocabWhereInput {
+        return buildPrismaWhere<VocabQueryParamsInput, Prisma.VocabWhereInput>(query, {
+            stringFields: ['textSource', 'sourceLanguageCode', 'targetLanguageCode', 'userId', 'languageFolderId'],
+            customMap: (input, where) => {
+                where.userId = userId;
+                this.applySubjectFilter(input, where);
+                this.applyPresetWhereFilter(input, userId, where);
+            },
+        });
+    }
+
+    private applySubjectFilter(query: VocabQueryParamsInput, where: Partial<Prisma.VocabWhereInput>): void {
+        const subjectIds = coerceQueryStringArray(query.subjectIds);
+
+        if (!subjectIds.length) {
+            return;
+        }
+
+        where.textTargets = {
+            some: {
+                textTargetSubjects: { some: { subjectId: { in: subjectIds } } },
+            },
+        };
+    }
+
+    private applyPresetWhereFilter(query: VocabQueryParamsInput, userId: string, where: Partial<Prisma.VocabWhereInput>): void {
+        switch (query.filter) {
+            case 'recent':
+                where.createdAt = {
+                    gte: this.getRecentCreatedAtThreshold(),
+                };
+                return;
+            case 'difficult':
+                where.vocabMasteries = {
+                    some: {
+                        userId,
+                        masteryScore: { gt: 0 },
+                    },
+                };
+                return;
+            case 'unstarted':
+                where.OR = [{ vocabMasteries: { none: { userId } } }, { vocabMasteries: { some: { userId, masteryScore: 0 } } }];
+                return;
+            default:
+                return;
+        }
+    }
+
+    private getRecentCreatedAtThreshold(): Date {
+        const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+        return new Date(Date.now() - millisecondsPerDay);
     }
 
     private getVocabIncludes(userId: string): Prisma.VocabInclude {

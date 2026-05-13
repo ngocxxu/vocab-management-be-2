@@ -42,9 +42,7 @@ export class VocabService {
             defaultPageSize: PaginationDto.DEFAULT_PAGE_SIZE,
         });
 
-        const orderBy = getOrderBy(query.sortBy, query.sortOrder, 'createdAt') as Prisma.VocabOrderByWithRelationInput;
-
-        const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(query, userId, skip, take, orderBy);
+        const { totalItems, vocabs } = await this.vocabRepository.findWithPagination(query, userId, skip, take);
 
         if (!vocabs || !Array.isArray(vocabs)) {
             throw new VocabBadRequestException('Invalid vocabs data returned from repository');

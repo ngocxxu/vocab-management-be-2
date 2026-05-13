@@ -1,9 +1,23 @@
 import { QueryParamsInput } from '@/shared/dto/query-params.input';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
+
+export const VOCAB_FILTERS = ['recent', 'difficult', 'unstarted'] as const;
+
+export type VocabFilter = (typeof VOCAB_FILTERS)[number];
 
 export class VocabQueryParamsInput extends QueryParamsInput {
+    @ApiProperty({
+        description: 'Preset vocabulary filter: recent = created within 1 day, difficult = lowest mastery excluding unstarted, unstarted = no mastery or mastery score 0.',
+        enum: VOCAB_FILTERS,
+        required: false,
+        example: 'unstarted',
+    })
+    @IsOptional()
+    @IsIn(VOCAB_FILTERS)
+    public readonly filter?: VocabFilter;
+
     @ApiProperty({ description: 'Source text of the vocabulary', example: 'Xin chào', required: false })
     @IsOptional()
     @IsString()

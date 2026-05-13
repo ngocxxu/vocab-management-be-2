@@ -22,7 +22,7 @@ import {
     VocabConflictBySubjectQuery,
 } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
-import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
+import { VOCAB_FILTERS, VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
 import { VocabService, VocabMasteryService } from '../services';
 import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
@@ -57,7 +57,13 @@ export class VocabController {
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all vocabs' })
-    @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    @ApiQuery({
+        name: 'filter',
+        required: false,
+        enum: VOCAB_FILTERS,
+        description: 'Preset vocabulary filter: recent filters vocabs created within 1 day, difficult excludes unstarted vocabs, unstarted returns only unstarted vocabs.',
+    })
+    @ApiResponse({ status: HttpStatus.OK, type: PaginationDto })
     public async find(@Query() query: VocabQueryParamsInput, @CurrentUser() user: User): Promise<PaginationDto<VocabDto>> {
         return this.vocabService.find(query, user.id);
     }
