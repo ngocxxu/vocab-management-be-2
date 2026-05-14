@@ -25,14 +25,16 @@ import { SharedModule, UserThrottlerGuard } from '@/shared';
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 import { envConfigLoaders, validationSchema } from '../config';
 
 @Module({
     imports: [
         CommonModule,
+        SentryModule.forRoot(),
         NestConfigModule.forRoot({
             isGlobal: true,
             load: envConfigLoaders,
@@ -82,6 +84,10 @@ import { envConfigLoaders, validationSchema } from '../config';
         WebhookModule,
     ],
     providers: [
+        {
+            provide: APP_FILTER,
+            useClass: SentryGlobalFilter,
+        },
         {
             provide: APP_GUARD,
             useClass: GlobalAuthGuard,

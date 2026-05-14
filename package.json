@@ -46,6 +46,8 @@
         "@nestjs/throttler": "^6.5.0",
         "@nestjs/websockets": "^11.1.6",
         "@prisma/client": "^6.11.1",
+        "@prisma/instrumentation": "6.11.1",
+        "@sentry/nestjs": "^10.53.1",
         "@supabase/supabase-js": "^2.49.10",
         "@types/multer": "^2.0.0",
         "axios": "^1.12.2",

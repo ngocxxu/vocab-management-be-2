@@ -1,5 +1,5 @@
 import { EReminderType } from '@/domains/reminder/utils';
-import { LoggerService } from '@/shared';
+import { captureSentryException, LoggerService } from '@/shared';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -64,6 +64,7 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
                         return;
                     }
                     await this.jobFailureService.recordFinalFailure(job, queueName);
+                    this.captureFinalFailure(job, queueName, maxAttempts);
                     await this.deadLetterQueue.add(
                         JOB_NAMES.failedJobMirror,
                         {
@@ -80,6 +81,16 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
                 } catch (err: unknown) {
                     const msg = err instanceof Error ? err.message : String(err);
                     this.logger.error(`QueueFailureListener(${queueName}): ${msg}`);
+                    captureSentryException(err, {
+                        tags: {
+                            'queue.name': queueName,
+                        },
+                        contexts: {
+                            queue_failure_listener: {
+                                queueName,
+                            },
+                        },
+                    });
                 }
             };
 
@@ -91,5 +102,31 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
 
     public async onModuleDestroy(): Promise<void> {
         await Promise.all(this.queueEventsInstances.map(async (qe) => qe.close()));
+    }
+
+    private captureFinalFailure(job: Job, queueName: string, maxAttempts: number): void {
+        const jobId = String(job.id ?? '');
+        const failedReason = job.failedReason ?? 'Bull job failed';
+        const exception = new Error(failedReason);
+        const stackTrace = Array.isArray(job.stacktrace) && job.stacktrace.length > 0 ? job.stacktrace.join('\n') : undefined;
+        if (stackTrace) {
+            exception.stack = stackTrace;
+        }
+
+        captureSentryException(exception, {
+            tags: {
+                'queue.name': queueName,
+                'queue.job_name': job.name ?? '',
+            },
+            contexts: {
+                queue_job: {
+                    queueName,
+                    jobId,
+                    jobName: job.name ?? '',
+                    attemptsMade: job.attemptsMade,
+                    maxAttempts,
+                },
+            },
+        });
     }
 }

@@ -2,4 +2,13 @@
 set -e
 . "$(dirname -- "$0")/_/husky.sh"
 
-pnpm exec lint-staged
+if [ "$(uname -s)" = "Darwin" ]; then
+  export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+fi
+
+if [ ! -x node_modules/.bin/lint-staged ]; then
+  echo "lint-staged is not installed. Run: pnpm install"
+  exit 1
+fi
+
+node_modules/.bin/lint-staged

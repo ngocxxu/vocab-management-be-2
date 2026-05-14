@@ -1,7 +1,11 @@
 /// <reference path="./types/express.d.ts" />
+// eslint-disable-next-line import/no-unassigned-import
+import './instrument';
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as Sentry from '@sentry/nestjs';
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { nanoid } from 'nanoid';
@@ -64,6 +68,12 @@ function requestIdMiddleware(req: Request, res: Response, next: NextFunction): v
     const fromHeader = typeof header === 'string' ? header : Array.isArray(header) ? header[0] : undefined;
     const trimmed = fromHeader?.trim();
     req.requestId = trimmed && trimmed.length > 0 ? trimmed : `req_${Date.now()}_${nanoid(7)}`;
+    Sentry.setTag('request_id', req.requestId);
+    Sentry.setContext('request_metadata', {
+        method: req.method,
+        path: req.originalUrl,
+        requestId: req.requestId,
+    });
     next();
 }
 

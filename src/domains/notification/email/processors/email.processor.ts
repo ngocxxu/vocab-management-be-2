@@ -1,5 +1,5 @@
 import { EMAIL_REMINDER_JOB_CONCURRENCY } from '@/queues/config/queue.config';
-import { LoggerService } from '@/shared';
+import { captureSentryException, LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
 import { Job } from 'bullmq';
@@ -127,6 +127,21 @@ export class EmailProcessor {
                 completedAt: new Date(),
             });
             this.logger.error(`Reminder ${scheduleId} terminal failure: ${msg}`);
+            captureSentryException(error, {
+                tags: {
+                    'queue.name': EReminderType.EMAIL_REMINDER,
+                    'reminder.schedule_id': scheduleId,
+                },
+                contexts: {
+                    reminder_email_failure: {
+                        scheduleId,
+                        attempt,
+                        nextAttempt,
+                        code: code ?? 'send_failed',
+                        terminal,
+                    },
+                },
+            });
             return;
         }
 

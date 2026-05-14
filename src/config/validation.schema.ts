@@ -14,6 +14,11 @@ export const validationSchema = Joi.object({
 
     HEALTH_TOKEN: Joi.string().allow(''),
 
+    SENTRY_DSN: Joi.string().uri().allow(''),
+    SENTRY_ENVIRONMENT: Joi.string().allow(''),
+    SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1),
+    SENTRY_DEBUG: Joi.string().valid('true', 'false').allow(''),
+
     FRONTEND_URL: Joi.string().uri().required(),
 
     CLOUDINARY_URL: Joi.string().required(),
