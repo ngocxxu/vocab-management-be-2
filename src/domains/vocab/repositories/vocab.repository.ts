@@ -126,14 +126,6 @@ export class VocabRepository extends BaseRepository {
     }
 
     public async findRandom(count: number, userId?: string, languageFolderId?: string): Promise<Vocab[]> {
-        const cacheKey = `random:${count}:${userId || 'all'}:${languageFolderId || 'all'}`;
-
-        const cached = await this.redisService.jsonGet<Vocab[]>(RedisPrefix.VOCAB, cacheKey);
-
-        if (cached) {
-            return cached;
-        }
-
         const where: Prisma.VocabWhereInput = {};
         if (userId) {
             where.userId = userId;
@@ -179,8 +171,6 @@ export class VocabRepository extends BaseRepository {
                 },
             },
         });
-
-        await this.setJsonCacheSafely(cacheKey, vocabs, 300);
 
         return vocabs;
     }
