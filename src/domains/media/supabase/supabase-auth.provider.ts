@@ -11,7 +11,12 @@ export class SupabaseAuthProvider {
 
     public getAnonClient(): SupabaseClient {
         if (!this.anonClientSingleton) {
-            this.anonClientSingleton = createClient(this.configService.getOrThrow<string>('supabase.url'), this.configService.getOrThrow<string>('supabase.anonKey'));
+            this.anonClientSingleton = createClient(this.configService.getOrThrow<string>('supabase.url'), this.configService.getOrThrow<string>('supabase.anonKey'), {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false,
+                },
+            });
         }
         return this.anonClientSingleton;
     }
@@ -30,6 +35,10 @@ export class SupabaseAuthProvider {
 
     public createClientWithAccessToken(accessToken: string): SupabaseClient {
         return createClient(this.configService.getOrThrow<string>('supabase.url'), this.configService.getOrThrow<string>('supabase.anonKey'), {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false,
+            },
             global: {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
