@@ -1,30 +1,31 @@
 import { LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Roles } from '@/shared/decorators';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
-import { Body, Controller, Delete, Get, HttpStatus, Param, ParseIntPipe, Post, Put, UseGuards, Query, BadRequestException, Req, Res, StreamableFile } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiConsumes, ApiQuery } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Delete, Get, HttpStatus, Param, ParseIntPipe, Post, Put, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 import { AiService } from '../../ai/services/ai.service';
 import {
-    VocabDto,
-    VocabInput,
+    BulkDeleteInput,
+    CreateTextTargetInput,
     CsvImportQueryDto,
     CsvImportResponseDto,
-    BulkDeleteInput,
-    MasterySummaryDto,
+    DashboardStatisticsDto,
     MasteryBySubjectDto,
+    MasteryDistributionDto,
+    MasterySummaryDto,
     ProgressOverTimeDto,
     TopProblematicVocabDto,
-    MasteryDistributionDto,
-    CreateTextTargetInput,
     VocabConflictBySubjectQuery,
+    VocabDto,
+    VocabInput,
 } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VOCAB_FILTERS, VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
-import { VocabService, VocabMasteryService } from '../services';
+import { VocabMasteryService, VocabService } from '../services';
 import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
 // Type for multer file
@@ -263,6 +264,32 @@ export class VocabController {
         return new StreamableFile(csvBuffer);
     }
 
+    @Get('statistics/dashboard')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Get aggregated dashboard statistics' })
+    @ApiQuery({ name: 'include', required: false, description: 'Comma-separated sections: summary,subjects,problematic,distribution,progress' })
+    @ApiQuery({ name: 'startDate', required: false, description: 'ISO date for progress section start' })
+    @ApiQuery({ name: 'endDate', required: false, description: 'ISO date for progress section end' })
+    @ApiResponse({ status: HttpStatus.OK, type: DashboardStatisticsDto })
+    public async getDashboardStatistics(
+        @CurrentUser() user: User,
+        @Query('include') include?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ): Promise<DashboardStatisticsDto> {
+        const defaultSections = ['summary', 'subjects', 'problematic', 'distribution', 'progress'];
+        const sections = include
+            ? include
+                  .split(',')
+                  .map((section) => section.trim())
+                  .filter(Boolean)
+            : defaultSections;
+
+        const data = await this.vocabMasteryService.getDashboard(user.id, sections, { startDate, endDate });
+        return new DashboardStatisticsDto(data);
+    }
+
     @Get('statistics/summary')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
@@ -289,9 +316,7 @@ export class VocabController {
     @ApiOperation({ summary: 'Get mastery progress over time' })
     @ApiResponse({ status: HttpStatus.OK, type: [ProgressOverTimeDto] })
     public async getProgressOverTime(@CurrentUser() user: User, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string): Promise<ProgressOverTimeDto[]> {
-        const start = startDate ? new Date(startDate) : undefined;
-        const end = endDate ? new Date(endDate) : undefined;
-        const results = await this.vocabMasteryService.getProgressOverTime(user.id, start, end);
+        const results = await this.vocabMasteryService.getProgressOverTime(user.id, startDate, endDate);
         return results.map((r) => new ProgressOverTimeDto(r));
     }
 

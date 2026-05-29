@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { VocabDto } from './vocab.dto';
 
 export class MasterySummaryDto {
-    @ApiProperty({ description: 'Total number of vocabs learned', example: 120 })
+    @ApiProperty({ description: "Total number of vocabs in the user's library", example: 120 })
     public totalVocabs: number;
 
     @ApiProperty({ description: 'Total number of correct answers', example: 340 })
@@ -14,11 +14,31 @@ export class MasterySummaryDto {
     @ApiProperty({ description: 'Average mastery score', example: 7.3 })
     public averageMastery: number;
 
-    public constructor(data: { totalVocabs: number; totalCorrect: number; totalIncorrect: number; averageMastery: number }) {
+    @ApiProperty({ description: 'Most recent practice timestamp', example: '2024-12-05T10:30:00.000Z', nullable: true })
+    public lastPracticeAt: Date | null;
+
+    @ApiProperty({ description: 'Vocabs with error rate at or above critical threshold', example: 12 })
+    public criticalCount: number;
+
+    @ApiProperty({ description: 'Vocabs with error rate at or above warning threshold but below critical', example: 8 })
+    public warningCount: number;
+
+    public constructor(data: {
+        totalVocabs: number;
+        totalCorrect: number;
+        totalIncorrect: number;
+        averageMastery: number;
+        lastPracticeAt: Date | null;
+        criticalCount: number;
+        warningCount: number;
+    }) {
         this.totalVocabs = data.totalVocabs;
         this.totalCorrect = data.totalCorrect;
         this.totalIncorrect = data.totalIncorrect;
         this.averageMastery = Math.round(data.averageMastery * 10) / 10;
+        this.lastPracticeAt = data.lastPracticeAt;
+        this.criticalCount = data.criticalCount;
+        this.warningCount = data.warningCount;
     }
 }
 
@@ -50,9 +70,13 @@ export class ProgressOverTimeDto {
     @ApiProperty({ description: 'Average mastery score on this date', example: 7.2 })
     public averageMastery: number;
 
-    public constructor(data: { date: string; averageMastery: number }) {
+    @ApiProperty({ description: 'Number of mastery history events on this date', example: 12 })
+    public practiceCount: number;
+
+    public constructor(data: { date: string; averageMastery: number; practiceCount: number }) {
         this.date = data.date;
         this.averageMastery = Math.round(data.averageMastery * 10) / 10;
+        this.practiceCount = data.practiceCount;
     }
 }
 

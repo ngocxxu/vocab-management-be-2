@@ -12,5 +12,6 @@ export * from './text-target.dto';
 export * from './vocab-example.dto';
 export * from './word-type.data';
 export * from './vocab-mastery-statistics.dto';
+export * from './dashboard-statistics.dto';
 export * from './vocab-conflict-by-subject.query';
 export * from './vocab-query-params.input';

@@ -421,6 +421,12 @@ export class VocabRepository extends BaseRepository {
         }
     }
 
+    public async countByUserId(userId: string): Promise<number> {
+        return this.prisma.vocab.count({
+            where: { userId },
+        });
+    }
+
     public async countVocabsBySubjectId(subjectId: string, userId: string): Promise<number> {
         return this.prisma.vocab.count({
             where: {

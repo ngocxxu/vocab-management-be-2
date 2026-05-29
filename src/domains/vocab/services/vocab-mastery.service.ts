@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { VocabDto } from '../dto';
 import { VocabBadRequestException } from '../exceptions';
-import { VocabMasteryRepository, VocabMasteryWithVocab } from '../repositories';
+import { VocabMasteryRepository, VocabMasteryWithVocab, VocabRepository } from '../repositories';
 
 @Injectable()
 export class VocabMasteryService {
-    public constructor(private readonly vocabMasteryRepository: VocabMasteryRepository) {}
+    public constructor(
+        private readonly vocabMasteryRepository: VocabMasteryRepository,
+        private readonly vocabRepository: VocabRepository,
+    ) {}
 
     public async getOrCreateMastery(vocabId: string, userId: string) {
         if (!vocabId || !userId) {
@@ -75,20 +78,26 @@ export class VocabMasteryService {
             throw new VocabBadRequestException('User ID is required');
         }
 
-        const result = await this.vocabMasteryRepository.aggregateByUserId(userId);
+        const [result, lastPractice, healthCounts, totalVocabs] = await Promise.all([
+            this.vocabMasteryRepository.aggregateByUserId(userId),
+            this.vocabMasteryRepository.findLastPracticeAtByUserId(userId),
+            this.vocabMasteryRepository.countHealthByUserId(userId),
+            this.vocabRepository.countByUserId(userId),
+        ]);
 
-        // eslint-disable-next-line no-underscore-dangle
-        const count = result._count;
         // eslint-disable-next-line no-underscore-dangle
         const sum = result._sum;
         // eslint-disable-next-line no-underscore-dangle
         const avg = result._avg;
 
         return {
-            totalVocabs: count.id,
+            totalVocabs,
             totalCorrect: sum.correctCount || 0,
             totalIncorrect: sum.incorrectCount || 0,
             averageMastery: avg.masteryScore || 0,
+            lastPracticeAt: lastPractice?.createdAt ?? null,
+            criticalCount: healthCounts.criticalCount,
+            warningCount: healthCounts.warningCount,
         };
     }
 
@@ -100,7 +109,7 @@ export class VocabMasteryService {
         return this.vocabMasteryRepository.getMasteryBySubjectRaw(userId);
     }
 
-    public async getProgressOverTime(userId: string, startDate?: Date, endDate?: Date) {
+    public async getProgressOverTime(userId: string, startDate?: string, endDate?: string) {
         if (!userId) {
             throw new VocabBadRequestException('User ID is required');
         }
@@ -142,5 +151,31 @@ export class VocabMasteryService {
         }
 
         return this.vocabMasteryRepository.getMasteryDistributionRaw(userId);
+    }
+
+    public async getDashboard(
+        userId: string,
+        sections: string[],
+        dateRange: { startDate?: string; endDate?: string },
+    ): Promise<{
+        summary?: Awaited<ReturnType<VocabMasteryService['getSummary']>>;
+        subjects?: Awaited<ReturnType<VocabMasteryService['getMasteryBySubject']>>;
+        problematic?: Awaited<ReturnType<VocabMasteryService['getTopProblematicVocabs']>>;
+        distribution?: Awaited<ReturnType<VocabMasteryService['getMasteryDistribution']>>;
+        progress?: Awaited<ReturnType<VocabMasteryService['getProgressOverTime']>>;
+    }> {
+        if (!userId) {
+            throw new VocabBadRequestException('User ID is required');
+        }
+
+        const [summary, subjects, problematic, distribution, progress] = await Promise.all([
+            sections.includes('summary') ? this.getSummary(userId) : undefined,
+            sections.includes('subjects') ? this.getMasteryBySubject(userId) : undefined,
+            sections.includes('problematic') ? this.getTopProblematicVocabs(userId) : undefined,
+            sections.includes('distribution') ? this.getMasteryDistribution(userId) : undefined,
+            sections.includes('progress') ? this.getProgressOverTime(userId, dateRange.startDate, dateRange.endDate) : undefined,
+        ]);
+
+        return { summary, subjects, problematic, distribution, progress };
     }
 }

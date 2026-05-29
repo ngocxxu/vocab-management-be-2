@@ -1,4 +1,5 @@
 import { BaseRepository } from '@/database';
+import { VOCAB_STATUS_THRESHOLDS } from '@/domains/vocab/constants';
 import { PrismaService } from '@/shared';
 import { Injectable } from '@nestjs/common';
 import { Prisma, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
@@ -65,6 +66,39 @@ export class VocabMasteryRepository extends BaseRepository {
         });
     }
 
+    public async findLastPracticeAtByUserId(userId: string): Promise<{ createdAt: Date } | null> {
+        return this.prisma.vocabMasteryHistory.findFirst({
+            where: { vocabMastery: { userId } },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+        });
+    }
+
+    public async countHealthByUserId(userId: string): Promise<{ criticalCount: number; warningCount: number }> {
+        const criticalThreshold = VOCAB_STATUS_THRESHOLDS.CRITICAL;
+        const warningThreshold = VOCAB_STATUS_THRESHOLDS.WARNING;
+
+        const rows = await this.prisma.$queryRaw<Array<{ criticalCount: number; warningCount: number }>>`
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE incorrect_count::float / (correct_count + incorrect_count) >= ${criticalThreshold}
+                )::int AS "criticalCount",
+                COUNT(*) FILTER (
+                    WHERE incorrect_count::float / (correct_count + incorrect_count) >= ${warningThreshold}
+                      AND incorrect_count::float / (correct_count + incorrect_count) < ${criticalThreshold}
+                )::int AS "warningCount"
+            FROM vocab_mastery
+            WHERE user_id = ${userId}
+              AND (correct_count + incorrect_count) > 0
+        `;
+
+        const row = rows[0];
+        return {
+            criticalCount: row?.criticalCount ?? 0,
+            warningCount: row?.warningCount ?? 0,
+        };
+    }
+
     public async getMasteryBySubjectRaw(userId: string): Promise<
         Array<{
             subjectId: string;
@@ -97,19 +131,19 @@ export class VocabMasteryRepository extends BaseRepository {
         `;
     }
 
-    public async getProgressOverTimeRaw(userId: string, startDate?: Date, endDate?: Date): Promise<Array<{ date: string; averageMastery: number }>> {
+    public async getProgressOverTimeRaw(userId: string, startDate?: string, endDate?: string): Promise<Array<{ date: string; averageMastery: number; practiceCount: number }>> {
         const whereConditions: string[] = ['vm.user_id = $1'];
         const params: unknown[] = [userId];
         let paramIndex = 2;
 
         if (startDate) {
-            whereConditions.push(`vmh.created_at >= $${paramIndex}`);
+            whereConditions.push(`DATE(vmh.created_at) >= $${paramIndex}::date`);
             params.push(startDate);
             paramIndex++;
         }
 
         if (endDate) {
-            whereConditions.push(`vmh.created_at <= $${paramIndex}`);
+            whereConditions.push(`DATE(vmh.created_at) <= $${paramIndex}::date`);
             params.push(endDate);
             paramIndex++;
         }
@@ -119,7 +153,8 @@ export class VocabMasteryRepository extends BaseRepository {
         const sql = `
             SELECT 
                 DATE(vmh.created_at)::text as date,
-                AVG(vmh.mastery_score)::float as "averageMastery"
+                AVG(vmh.mastery_score)::float as "averageMastery",
+                COUNT(*)::int as "practiceCount"
             FROM vocab_mastery_history vmh
             INNER JOIN vocab_mastery vm ON vmh.vocab_mastery_id = vm.id
             WHERE ${whereClause}
@@ -127,7 +162,7 @@ export class VocabMasteryRepository extends BaseRepository {
             ORDER BY DATE(vmh.created_at) ASC
         `;
 
-        return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number }>>(sql, ...params);
+        return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number; practiceCount: number }>>(sql, ...params);
     }
 
     public async findTopProblematic(userId: string, minIncorrect: number, limit: number): Promise<VocabMasteryWithVocab[]> {
