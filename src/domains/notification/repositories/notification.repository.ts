@@ -53,7 +53,7 @@ export class NotificationRepository extends BaseRepository {
                     },
                 },
             },
-            orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+            orderBy: { createdAt: 'desc' },
         });
     }
 
