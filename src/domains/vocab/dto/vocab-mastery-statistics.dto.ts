@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { VocabMasteryHealthStatus } from '../utils/vocab-mastery-status.util';
 import { VocabDto } from './vocab.dto';
 
 export class MasterySummaryDto {
@@ -96,12 +97,28 @@ export class TopProblematicVocabDto {
     @ApiProperty({ description: 'Number of correct answers', example: 2 })
     public correctCount: number;
 
-    public constructor(data: { vocabId: string; vocab: VocabDto; incorrectCount: number; masteryScore: number; correctCount: number }) {
+    @ApiProperty({ description: 'Error rate from 0 to 1', example: 0.625 })
+    public errorRate: number;
+
+    @ApiProperty({ description: 'Health status based on error rate thresholds', enum: ['CRITICAL', 'WARNING'], example: 'CRITICAL' })
+    public healthStatus: VocabMasteryHealthStatus;
+
+    public constructor(data: {
+        vocabId: string;
+        vocab: VocabDto;
+        incorrectCount: number;
+        masteryScore: number;
+        correctCount: number;
+        errorRate: number;
+        healthStatus: 'CRITICAL' | 'WARNING';
+    }) {
         this.vocabId = data.vocabId;
         this.vocab = data.vocab;
         this.incorrectCount = data.incorrectCount;
         this.masteryScore = data.masteryScore;
         this.correctCount = data.correctCount;
+        this.errorRate = Math.round(data.errorRate * 1000) / 1000;
+        this.healthStatus = data.healthStatus;
     }
 }
 

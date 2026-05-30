@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { VocabDto } from '../dto';
 import { VocabBadRequestException } from '../exceptions';
 import { VocabMasteryRepository, VocabMasteryWithVocab, VocabRepository } from '../repositories';
+import { NEEDS_REVIEW_STATUS_FILTERS, NeedsReviewStatusFilter } from '../types';
 
 @Injectable()
 export class VocabMasteryService {
@@ -121,28 +122,52 @@ export class VocabMasteryService {
         return this.vocabMasteryRepository.getProgressOverTimeRaw(userId, startDate, endDate);
     }
 
-    public async getTopProblematicVocabs(userId: string, minIncorrect: number = 5, limit: number = 10) {
+    public async getTopProblematicVocabs(userId: string, status: NeedsReviewStatusFilter = 'all', limit: number = 10, page: number = 1) {
         if (!userId) {
             throw new VocabBadRequestException('User ID is required');
         }
 
-        if (minIncorrect < 0) {
-            throw new VocabBadRequestException('Minimum incorrect count must be non-negative');
+        if (!NEEDS_REVIEW_STATUS_FILTERS.includes(status)) {
+            throw new VocabBadRequestException('Status must be one of: critical, warning, all');
         }
 
         if (limit <= 0 || limit > 100) {
             throw new VocabBadRequestException('Limit must be between 1 and 100');
         }
 
-        const vocabs = await this.vocabMasteryRepository.findTopProblematic(userId, minIncorrect, limit);
+        if (page <= 0) {
+            throw new VocabBadRequestException('Page must be at least 1');
+        }
 
-        return vocabs.map((vm: VocabMasteryWithVocab) => ({
-            vocabId: vm.vocabId,
-            vocab: new VocabDto(vm.vocab),
-            incorrectCount: vm.incorrectCount,
-            masteryScore: vm.masteryScore,
-            correctCount: vm.correctCount,
-        }));
+        const offset = (page - 1) * limit;
+        const rows = await this.vocabMasteryRepository.findNeedsReviewVocabs(userId, status, limit, offset);
+
+        if (rows.length === 0) {
+            return [];
+        }
+
+        const vocabMasteryIds = rows.map((row) => row.vocabMasteryId);
+        const masteries = await this.vocabMasteryRepository.findVocabMasteriesWithVocabByIds(vocabMasteryIds);
+        const masteryById = new Map<string, VocabMasteryWithVocab>(masteries.map((mastery) => [mastery.id, mastery]));
+
+        return rows.flatMap((row) => {
+            const mastery = masteryById.get(row.vocabMasteryId);
+            if (!mastery) {
+                return [];
+            }
+
+            return [
+                {
+                    vocabId: row.vocabId,
+                    vocab: new VocabDto(mastery.vocab),
+                    incorrectCount: row.incorrectCount,
+                    masteryScore: row.masteryScore,
+                    correctCount: row.correctCount,
+                    errorRate: row.errorRate,
+                    healthStatus: row.healthStatus,
+                },
+            ];
+        });
     }
 
     public async getMasteryDistribution(userId: string) {

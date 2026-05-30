@@ -165,14 +165,74 @@ export class VocabMasteryRepository extends BaseRepository {
         return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number; practiceCount: number }>>(sql, ...params);
     }
 
-    public async findTopProblematic(userId: string, minIncorrect: number, limit: number): Promise<VocabMasteryWithVocab[]> {
+    public async findNeedsReviewVocabs(
+        userId: string,
+        status: 'critical' | 'warning' | 'all',
+        limit: number,
+        offset: number,
+    ): Promise<
+        Array<{
+            vocabMasteryId: string;
+            vocabId: string;
+            correctCount: number;
+            incorrectCount: number;
+            masteryScore: number;
+            errorRate: number;
+            healthStatus: 'CRITICAL' | 'WARNING';
+        }>
+    > {
+        const criticalThreshold = VOCAB_STATUS_THRESHOLDS.CRITICAL;
+        const warningThreshold = VOCAB_STATUS_THRESHOLDS.WARNING;
+
+        const statusCondition =
+            status === 'critical'
+                ? Prisma.sql`AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${criticalThreshold}`
+                : status === 'warning'
+                  ? Prisma.sql`AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${warningThreshold}
+                      AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) < ${criticalThreshold}`
+                  : Prisma.sql`AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${warningThreshold}`;
+
+        return this.prisma.$queryRaw<
+            Array<{
+                vocabMasteryId: string;
+                vocabId: string;
+                correctCount: number;
+                incorrectCount: number;
+                masteryScore: number;
+                errorRate: number;
+                healthStatus: 'CRITICAL' | 'WARNING';
+            }>
+        >`
+            SELECT
+                vm.id AS "vocabMasteryId",
+                vm.vocab_id AS "vocabId",
+                vm.correct_count AS "correctCount",
+                vm.incorrect_count AS "incorrectCount",
+                vm.mastery_score AS "masteryScore",
+                (vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count)) AS "errorRate",
+                CASE
+                    WHEN vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${criticalThreshold} THEN 'CRITICAL'
+                    ELSE 'WARNING'
+                END AS "healthStatus"
+            FROM vocab_mastery vm
+            WHERE vm.user_id = ${userId}
+              AND (vm.correct_count + vm.incorrect_count) > 0
+              ${statusCondition}
+            ORDER BY
+                (vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count)) DESC,
+                vm.incorrect_count DESC
+            LIMIT ${limit}
+            OFFSET ${offset}
+        `;
+    }
+
+    public async findVocabMasteriesWithVocabByIds(vocabMasteryIds: string[]): Promise<VocabMasteryWithVocab[]> {
+        if (vocabMasteryIds.length === 0) {
+            return [];
+        }
+
         return this.prisma.vocabMastery.findMany({
-            where: {
-                userId,
-                incorrectCount: {
-                    gte: minIncorrect,
-                },
-            },
+            where: { id: { in: vocabMasteryIds } },
             include: {
                 vocab: {
                     include: {
@@ -184,10 +244,6 @@ export class VocabMasteryRepository extends BaseRepository {
                     },
                 },
             },
-            orderBy: {
-                incorrectCount: 'desc',
-            },
-            take: limit,
         });
     }
 

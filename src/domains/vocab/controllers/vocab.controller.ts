@@ -323,16 +323,21 @@ export class VocabController {
     @Get('statistics/problematic')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
-    @ApiOperation({ summary: 'Get top problematic vocabs' })
+    @ApiOperation({ summary: 'Get vocabs that need review based on error rate thresholds (aligned with summary critical/warning counts)' })
+    @ApiQuery({ name: 'status', required: false, enum: ['critical', 'warning', 'all'], description: 'Filter by health status. Default: all (critical + warning)' })
+    @ApiQuery({ name: 'limit', required: false, description: 'Max results per page (1-100). Default: 10' })
+    @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based). Default: 1' })
     @ApiResponse({ status: HttpStatus.OK, type: [TopProblematicVocabDto] })
     public async getTopProblematicVocabs(
         @CurrentUser() user: User,
-        @Query('minIncorrect') minIncorrect?: number,
+        @Query('status') status?: string,
         @Query('limit') limit?: number,
+        @Query('page') page?: number,
     ): Promise<TopProblematicVocabDto[]> {
-        const min = minIncorrect ? Number(minIncorrect) : 5;
+        const normalizedStatus = (status ?? 'all') as 'critical' | 'warning' | 'all';
         const lim = limit ? Number(limit) : 10;
-        const results = await this.vocabMasteryService.getTopProblematicVocabs(user.id, min, lim);
+        const pageNum = page ? Number(page) : 1;
+        const results = await this.vocabMasteryService.getTopProblematicVocabs(user.id, normalizedStatus, lim, pageNum);
         return results.map((r) => new TopProblematicVocabDto(r));
     }
 
