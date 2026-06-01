@@ -1,7 +1,24 @@
 import { LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Roles } from '@/shared/decorators';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
-import { BadRequestException, Body, Controller, Delete, Get, HttpStatus, Param, ParseIntPipe, Post, Put, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    HttpCode,
+    HttpStatus,
+    Param,
+    ParseIntPipe,
+    Post,
+    Put,
+    Query,
+    Req,
+    Res,
+    StreamableFile,
+    UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
@@ -9,6 +26,7 @@ import { Request, Response } from 'express';
 import { AiService } from '../../ai/services/ai.service';
 import {
     BulkDeleteInput,
+    BulkGetInput,
     CreateTextTargetInput,
     CsvImportQueryDto,
     CsvImportResponseDto,
@@ -103,6 +121,16 @@ export class VocabController {
         const vocab = await this.vocabService.create(input, user.id, user.role);
         this.logger.info(`Created new vocab with ID ${vocab.id}`);
         return vocab;
+    }
+
+    @Post('bulk/get')
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Get multiple vocabs by IDs' })
+    @ApiResponse({ status: HttpStatus.OK, type: [VocabDto] })
+    public async findByIds(@Body() input: BulkGetInput, @CurrentUser() user: User): Promise<VocabDto[]> {
+        return this.vocabService.findByIds(input, user.id);
     }
 
     @Post('bulk/create')

@@ -305,9 +305,13 @@ export class VocabRepository extends BaseRepository {
         return vocab;
     }
 
-    public async findByIds(ids: string[]): Promise<Vocab[]> {
+    public async findByIds(ids: string[], userId: string): Promise<Vocab[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+
         return this.prisma.vocab.findMany({
-            where: { id: { in: ids } },
+            where: { id: { in: ids }, userId },
             include: {
                 sourceLanguage: true,
                 targetLanguage: true,
@@ -321,6 +325,15 @@ export class VocabRepository extends BaseRepository {
                             },
                         },
                     },
+                },
+                vocabMasteries: {
+                    where: {
+                        userId,
+                    },
+                    select: {
+                        masteryScore: true,
+                    },
+                    take: 1,
                 },
             },
         });

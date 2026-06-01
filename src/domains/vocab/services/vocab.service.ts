@@ -8,7 +8,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
-import { BulkDeleteInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabConflictBySubjectQuery, VocabDto, VocabInput } from '../dto';
+import { BulkDeleteInput, BulkGetInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabConflictBySubjectQuery, VocabDto, VocabInput } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
@@ -89,6 +89,21 @@ export class VocabService {
         }
 
         return this.vocabMapper.toResponse(vocab);
+    }
+
+    /**
+     * Find multiple vocabularies by IDs
+     * @param input - Bulk get input containing vocabulary IDs
+     * @param userId - User ID to scope results
+     * @returns Promise<VocabDto[]> Found vocabulary DTOs in request order; missing IDs are omitted
+     */
+    public async findByIds(input: BulkGetInput, userId: string): Promise<VocabDto[]> {
+        const uniqueIds = [...new Set(input.ids)];
+        const vocabs = await this.vocabRepository.findByIds(uniqueIds, userId);
+        const vocabById = new Map(vocabs.map((vocab) => [vocab.id, vocab]));
+        const orderedVocabs = uniqueIds.map((id) => vocabById.get(id)).filter((vocab): vocab is (typeof vocabs)[number] => vocab !== undefined);
+
+        return this.vocabMapper.toResponseList(orderedVocabs);
     }
 
     /**
