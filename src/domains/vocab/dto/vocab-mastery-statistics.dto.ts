@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { VocabMasteryHealthStatus } from '../utils/vocab-mastery-status.util';
+import { MasterySummaryTrendsDto } from './mastery-summary-trends.dto';
 import { VocabDto } from './vocab.dto';
 
 export class MasterySummaryDto {
@@ -24,6 +25,9 @@ export class MasterySummaryDto {
     @ApiProperty({ description: 'Vocabs with error rate at or above warning threshold but below critical', example: 8 })
     public warningCount: number;
 
+    @ApiProperty({ description: 'Rolling 7-day dashboard trend deltas', type: MasterySummaryTrendsDto })
+    public trends: MasterySummaryTrendsDto;
+
     public constructor(data: {
         totalVocabs: number;
         totalCorrect: number;
@@ -32,6 +36,7 @@ export class MasterySummaryDto {
         lastPracticeAt: Date | null;
         criticalCount: number;
         warningCount: number;
+        trends: ConstructorParameters<typeof MasterySummaryTrendsDto>[0];
     }) {
         this.totalVocabs = data.totalVocabs;
         this.totalCorrect = data.totalCorrect;
@@ -40,6 +45,7 @@ export class MasterySummaryDto {
         this.lastPracticeAt = data.lastPracticeAt;
         this.criticalCount = data.criticalCount;
         this.warningCount = data.warningCount;
+        this.trends = new MasterySummaryTrendsDto(data.trends);
     }
 }
 

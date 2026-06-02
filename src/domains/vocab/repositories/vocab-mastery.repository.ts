@@ -12,6 +12,14 @@ export type VocabMasteryWithVocab = VocabMastery & {
     };
 };
 
+export type MasterySummarySnapshot = {
+    totalVocabs: number;
+    totalCorrect: number;
+    totalIncorrect: number;
+    averageMastery: number | null;
+    needReviewCount: number;
+};
+
 @Injectable()
 export class VocabMasteryRepository extends BaseRepository {
     public constructor(prismaService: PrismaService) {
@@ -97,6 +105,49 @@ export class VocabMasteryRepository extends BaseRepository {
             criticalCount: row?.criticalCount ?? 0,
             warningCount: row?.warningCount ?? 0,
         };
+    }
+
+    public async getSummarySnapshotAt(userId: string, cutoff: Date): Promise<MasterySummarySnapshot> {
+        const warningThreshold = VOCAB_STATUS_THRESHOLDS.WARNING;
+        const rows = await this.prisma.$queryRaw<MasterySummarySnapshot[]>`
+            WITH latest_mastery_history AS (
+                SELECT DISTINCT ON (vmh.vocab_mastery_id)
+                    vmh.vocab_mastery_id,
+                    vmh.mastery_score,
+                    vmh.correct_count,
+                    vmh.incorrect_count
+                FROM vocab_mastery_history vmh
+                INNER JOIN vocab_mastery vm ON vmh.vocab_mastery_id = vm.id
+                WHERE vm.user_id = ${userId}
+                  AND vmh.created_at <= ${cutoff}
+                ORDER BY vmh.vocab_mastery_id, vmh.created_at DESC
+            )
+            SELECT
+                (
+                    SELECT COUNT(*)::int
+                    FROM vocab
+                    WHERE user_id = ${userId}
+                      AND created_at <= ${cutoff}
+                ) AS "totalVocabs",
+                COALESCE(SUM(lmh.correct_count), 0)::int AS "totalCorrect",
+                COALESCE(SUM(lmh.incorrect_count), 0)::int AS "totalIncorrect",
+                AVG(lmh.mastery_score)::float AS "averageMastery",
+                COUNT(*) FILTER (
+                    WHERE (lmh.correct_count + lmh.incorrect_count) > 0
+                      AND lmh.incorrect_count::float / (lmh.correct_count + lmh.incorrect_count) >= ${warningThreshold}
+                )::int AS "needReviewCount"
+            FROM latest_mastery_history lmh
+        `;
+
+        return (
+            rows[0] ?? {
+                totalVocabs: 0,
+                totalCorrect: 0,
+                totalIncorrect: 0,
+                averageMastery: null,
+                needReviewCount: 0,
+            }
+        );
     }
 
     public async getMasteryBySubjectRaw(userId: string): Promise<

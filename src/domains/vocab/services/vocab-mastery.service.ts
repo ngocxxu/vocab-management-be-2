@@ -4,6 +4,13 @@ import { VocabBadRequestException } from '../exceptions';
 import { VocabMasteryRepository, VocabMasteryWithVocab, VocabRepository } from '../repositories';
 import { NEEDS_REVIEW_STATUS_FILTERS, NeedsReviewStatusFilter } from '../types';
 
+const TREND_WINDOW_DAYS = 7;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function roundToOneDecimal(value: number): number {
+    return Math.round(value * 10) / 10;
+}
+
 @Injectable()
 export class VocabMasteryService {
     public constructor(
@@ -79,11 +86,13 @@ export class VocabMasteryService {
             throw new VocabBadRequestException('User ID is required');
         }
 
-        const [result, lastPractice, healthCounts, totalVocabs] = await Promise.all([
+        const trendCutoff = new Date(Date.now() - TREND_WINDOW_DAYS * MILLISECONDS_PER_DAY);
+        const [result, lastPractice, healthCounts, totalVocabs, previousSummary] = await Promise.all([
             this.vocabMasteryRepository.aggregateByUserId(userId),
             this.vocabMasteryRepository.findLastPracticeAtByUserId(userId),
             this.vocabMasteryRepository.countHealthByUserId(userId),
             this.vocabRepository.countByUserId(userId),
+            this.vocabMasteryRepository.getSummarySnapshotAt(userId, trendCutoff),
         ]);
 
         // eslint-disable-next-line no-underscore-dangle
@@ -91,14 +100,31 @@ export class VocabMasteryService {
         // eslint-disable-next-line no-underscore-dangle
         const avg = result._avg;
 
+        const totalCorrect = sum.correctCount || 0;
+        const totalIncorrect = sum.incorrectCount || 0;
+        const averageMastery = avg.masteryScore || 0;
+        const needReviewCount = healthCounts.criticalCount + healthCounts.warningCount;
+        const previousAnswerCount = previousSummary.totalCorrect + previousSummary.totalIncorrect;
+        const currentAnswerCount = totalCorrect + totalIncorrect;
+        const previousAverageMastery = previousSummary.averageMastery;
+
         return {
             totalVocabs,
-            totalCorrect: sum.correctCount || 0,
-            totalIncorrect: sum.incorrectCount || 0,
-            averageMastery: avg.masteryScore || 0,
+            totalCorrect,
+            totalIncorrect,
+            averageMastery,
             lastPracticeAt: lastPractice?.createdAt ?? null,
             criticalCount: healthCounts.criticalCount,
             warningCount: healthCounts.warningCount,
+            trends: {
+                totalVocabsPercentDelta: previousSummary.totalVocabs > 0 ? Math.round(((totalVocabs - previousSummary.totalVocabs) / previousSummary.totalVocabs) * 100) : null,
+                averageMasteryDelta: previousAverageMastery !== null ? roundToOneDecimal(averageMastery - previousAverageMastery) : null,
+                accuracyPercentDelta:
+                    previousAnswerCount > 0 && currentAnswerCount > 0
+                        ? Math.round((totalCorrect / currentAnswerCount) * 100) - Math.round((previousSummary.totalCorrect / previousAnswerCount) * 100)
+                        : null,
+                needReviewDelta: previousAverageMastery !== null ? needReviewCount - previousSummary.needReviewCount : null,
+            },
         };
     }
 
