@@ -19,7 +19,7 @@ import {
     StreamableFile,
     UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
@@ -36,14 +36,17 @@ import {
     MasterySummaryDto,
     ProgressOverTimeDto,
     TopProblematicVocabDto,
+    UpsertRelatedWordsInput,
+    VocabAutocompleteDto,
     VocabConflictBySubjectQuery,
     VocabDto,
     VocabInput,
+    VocabRelatedWordsDto,
 } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VOCAB_FILTERS, VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
-import { VocabMasteryService, VocabService } from '../services';
+import { VocabMasteryService, VocabRelatedWordService, VocabService } from '../services';
 import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
 // Type for multer file
@@ -69,6 +72,7 @@ export class VocabController {
         private readonly logger: LoggerService,
         private readonly vocabService: VocabService,
         private readonly vocabMasteryService: VocabMasteryService,
+        private readonly vocabRelatedWordService: VocabRelatedWordService,
         private readonly aiService: AiService,
     ) {}
 
@@ -102,6 +106,50 @@ export class VocabController {
         return this.vocabService.findRandom(count, user.id, languageFolderId);
     }
 
+    @Get(':id/related-words')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Find related words by vocab ID' })
+    @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabRelatedWordsDto })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to access this resource' })
+    public async findRelatedWords(@Param('id') id: string, @CurrentUser() user: User): Promise<VocabRelatedWordsDto> {
+        return this.vocabRelatedWordService.getRelatedWords(id, user.id);
+    }
+
+    @Get(':id/related-words/autocomplete')
+    @Throttle({ default: { limit: 60, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Autocomplete related words in the current folder' })
+    @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
+    @ApiQuery({ name: 'q', required: true, type: String, description: 'Partial source text to search within the current folder', example: 'joy' })
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabAutocompleteDto })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Search query must contain at least 1 character' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to access this resource' })
+    public async autocompleteRelatedWords(@Param('id') id: string, @Query('q') query: string, @CurrentUser() user: User): Promise<VocabAutocompleteDto[]> {
+        return this.vocabRelatedWordService.autocomplete(id, user.id, query);
+    }
+
+    @Delete(':id/related-words/:relatedWordId')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Delete one related word pair from a vocab' })
+    @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
+    @ApiParam({ name: 'relatedWordId', type: String, description: 'Relation row identifier from the source vocab side' })
+    @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Related word deleted' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Source vocab or related-word relation not found' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to modify this resource' })
+    public async deleteRelatedWord(@Param('id') id: string, @Param('relatedWordId') relatedWordId: string, @CurrentUser() user: User): Promise<void> {
+        await this.vocabRelatedWordService.deleteRelatedWord(id, relatedWordId, user.id);
+    }
+
     @Get(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
@@ -116,6 +164,10 @@ export class VocabController {
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Create vocab' })
+    @ApiBody({
+        type: VocabInput,
+        description: 'Create a vocab. Optional relatedWords are created atomically with the vocab; invalid related words roll back the entire request.',
+    })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
     public async create(@Body() input: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
         const vocab = await this.vocabService.create(input, user.id, user.role);
@@ -149,6 +201,15 @@ export class VocabController {
     @ApiResponse({ status: HttpStatus.OK, type: [VocabDto] })
     public async updateBulk(@Body() input: BulkUpdateInput, @CurrentUser() user: User): Promise<VocabDto[]> {
         return this.vocabService.updateBulk(input, user.id);
+    }
+
+    @Post('bulk/delete')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Delete multiple vocabs' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    public async deleteBulk(@Body() input: BulkDeleteInput, @CurrentUser() user: User): Promise<VocabDto[]> {
+        return this.vocabService.deleteBulk(input, user.id);
     }
 
     @Get('conflict/by-subject')
@@ -196,6 +257,46 @@ export class VocabController {
         return vocab;
     }
 
+    @Put(':id/related-words')
+    @Throttle({ default: { limit: 30, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Replace related words for a vocab' })
+    @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
+    @ApiBody({
+        type: UpsertRelatedWordsInput,
+        description: 'Complete replacement payload for the source vocab related-word graph inside the current folder',
+        examples: {
+            sample: {
+                value: {
+                    words: [
+                        {
+                            linkedVocabId: 'ck_related_vocab_1',
+                            isSynonym: true,
+                            isAntonym: false,
+                            isRelated: true,
+                        },
+                        {
+                            freeText: 'joyful phrase',
+                            isSynonym: false,
+                            isAntonym: true,
+                            isRelated: false,
+                        },
+                    ],
+                },
+            },
+        },
+    })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabRelatedWordsDto })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid relation flags, self-reference, duplicate linked vocab, or malformed payload' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Source vocab or linked vocab not found in the current folder scope' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Database relation conflict or foreign-key constraint violation' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to modify this resource' })
+    public async upsertRelatedWords(@Param('id') id: string, @Body() input: UpsertRelatedWordsInput, @CurrentUser() user: User): Promise<VocabRelatedWordsDto> {
+        return this.vocabRelatedWordService.upsertRelatedWords(id, user.id, input);
+    }
+
     @Delete(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
@@ -206,15 +307,6 @@ export class VocabController {
         const vocab = await this.vocabService.delete(id, user.id);
         this.logger.info(`Deleted vocab with ID ${id}`);
         return vocab;
-    }
-
-    @Post('bulk/delete')
-    @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
-    @ApiOperation({ summary: 'Delete multiple vocabs' })
-    @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
-    public async deleteBulk(@Body() input: BulkDeleteInput, @CurrentUser() user: User): Promise<VocabDto[]> {
-        return this.vocabService.deleteBulk(input, user.id);
     }
 
     @Post('import/csv')

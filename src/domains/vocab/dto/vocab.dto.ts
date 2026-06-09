@@ -2,7 +2,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Language, TextTarget, Vocab, VocabMastery } from '@prisma/client';
 import { IsNotEmpty, IsString } from 'class-validator';
-import { LanguageDto, TextTargetDto } from '.';
+import { LanguageDto, TextTargetDto, VocabRelatedWordsDto } from '.';
 
 export class VocabDto {
     @ApiProperty({ description: 'Unique identifier for the vocabulary' })
@@ -66,12 +66,19 @@ export class VocabDto {
     })
     public readonly masteryScore?: number;
 
+    @ApiProperty({
+        description: 'Grouped related words for this vocabulary',
+        type: () => VocabRelatedWordsDto,
+    })
+    public readonly relatedWords: VocabRelatedWordsDto;
+
     public constructor(
         entity: Vocab & {
             sourceLanguage?: Language;
             targetLanguage?: Language;
             textTargets?: TextTarget[];
             vocabMasteries?: VocabMastery[];
+            relatedWords?: VocabRelatedWordsDto;
         },
     ) {
         this.id = entity.id;
@@ -86,5 +93,6 @@ export class VocabDto {
         this.targetLanguage = entity.targetLanguage ? new LanguageDto(entity.targetLanguage) : undefined;
         this.textTargets = entity.textTargets?.map((target) => new TextTargetDto(target)) ?? [];
         this.masteryScore = entity.vocabMasteries?.[0]?.masteryScore;
+        this.relatedWords = entity.relatedWords ?? new VocabRelatedWordsDto();
     }
 }

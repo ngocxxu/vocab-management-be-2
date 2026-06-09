@@ -12,6 +12,7 @@ export enum RedisPrefix {
     LANGUAGE = 'language:',
     LANGUAGE_FOLDER = 'language-folder:',
     QUOTA = 'quota:',
+    VOCAB_RELATED = 'vocab-related:',
 }
 
 export class RedisKeyManager {

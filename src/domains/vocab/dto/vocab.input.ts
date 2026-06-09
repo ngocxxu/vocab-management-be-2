@@ -1,7 +1,8 @@
 // eslint-disable-next-line max-classes-per-file
-import { ApiProperty, PickType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CreateRelatedWordInput } from './upsert-related-words.input';
 import { VocabDto } from './vocab.dto';
 
 export class CreateVocabExampleInput {
@@ -51,6 +52,16 @@ export class VocabInput extends PickType(VocabDto, ['textSource', 'sourceLanguag
     @IsArray()
     @IsString({ each: true })
     public readonly subjectIds?: string[];
+
+    @ApiPropertyOptional({
+        description: 'Optional initial related words created atomically with the vocab. If any related word is invalid, the vocab is not created.',
+        type: () => [CreateRelatedWordInput],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateRelatedWordInput)
+    public readonly relatedWords?: CreateRelatedWordInput[];
 }
 
 export class CreateTextTargetInput {

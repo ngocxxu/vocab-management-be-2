@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CreateRelatedWordInput } from './upsert-related-words.input';
 
 // Cho phép empty string và read-only fields từ DB
 export class UpdateVocabExampleInput {
@@ -105,4 +106,11 @@ export class VocabUpdateInput {
     @ValidateNested({ each: true })
     @Type(() => UpdateTextTargetInput)
     public textTargets?: UpdateTextTargetInput[];
+
+    @ApiProperty({ required: false, type: () => [CreateRelatedWordInput] })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateRelatedWordInput)
+    public relatedWords?: CreateRelatedWordInput[];
 }

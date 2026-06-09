@@ -1,10 +1,11 @@
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { Prisma } from '@prisma/client';
-import { VocabDto } from '../dto';
+import { VocabDto, VocabRelatedWordsDto } from '../dto';
 import { VocabUpdateInput, UpdateTextTargetInput } from '../dto/vocab-update.input';
 import { CreateTextTargetInput, VocabInput } from '../dto/vocab.input';
 
 type VocabEntity = ConstructorParameters<typeof VocabDto>[0];
+type VocabEntityWithRelatedWords = VocabEntity & { relatedWords?: VocabRelatedWordsDto };
 
 export type VocabTranslationQueuePayload = {
     vocabId: string;
@@ -85,11 +86,11 @@ export class VocabMapper {
         };
     }
 
-    public toResponse(vocab: VocabEntity): VocabDto {
+    public toResponse(vocab: VocabEntityWithRelatedWords): VocabDto {
         return new VocabDto(vocab);
     }
 
-    public toResponseList(vocabs: VocabEntity[]): VocabDto[] {
+    public toResponseList(vocabs: VocabEntityWithRelatedWords[]): VocabDto[] {
         return vocabs.map((v) => this.toResponse(v));
     }
 

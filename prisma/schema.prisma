@@ -137,6 +137,8 @@ model Vocab {
   textTargets         TextTarget[]
   vocabMasteries      VocabMastery[]
   vocabTrainerResults VocabTrainerResult[]
+  relatedWords        VocabRelatedWord[]   @relation("VocabRelatedWords")
+  linkedByWords       VocabRelatedWord[]   @relation("VocabLinkedWords")
 
   @@unique([textSource, sourceLanguageCode, targetLanguageCode, languageFolderId])
   @@index([textSource])
@@ -145,6 +147,28 @@ model Vocab {
   @@index([sourceLanguageCode, targetLanguageCode])
   @@index([languageFolderId])
   @@map("vocab")
+}
+
+model VocabRelatedWord {
+  id            String   @id @default(cuid()) @map("id")
+  vocabId       String   @map("vocab_id")
+  vocab         Vocab    @relation("VocabRelatedWords", fields: [vocabId], references: [id], onDelete: Cascade)
+  linkedVocabId String?  @map("linked_vocab_id")
+  linkedVocab   Vocab?   @relation("VocabLinkedWords", fields: [linkedVocabId], references: [id], onDelete: Cascade)
+  freeText      String?  @map("free_text")
+  isSynonym     Boolean  @default(false) @map("is_synonym")
+  isAntonym     Boolean  @default(false) @map("is_antonym")
+  isRelated     Boolean  @default(false) @map("is_related")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([vocabId])
+  @@index([linkedVocabId])
+  @@index([vocabId, freeText])
+  @@index([vocabId, isSynonym])
+  @@index([vocabId, isAntonym])
+  @@index([vocabId, isRelated])
+  @@map("vocab_related_word")
 }
 
 model VocabTrainer {

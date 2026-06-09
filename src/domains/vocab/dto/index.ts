@@ -17,3 +17,7 @@ export * from './vocab-mastery-statistics.dto';
 export * from './dashboard-statistics.dto';
 export * from './vocab-conflict-by-subject.query';
 export * from './vocab-query-params.input';
+export * from './related-word.dto';
+export * from './upsert-related-words.input';
+export * from './vocab-related-words.dto';
+export * from './vocab-autocomplete.dto';

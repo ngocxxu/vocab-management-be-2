@@ -4,13 +4,13 @@ import { PlanModule } from '../catalog/plan';
 import { SubjectModule } from '../catalog/subject';
 import { VocabController } from './controllers';
 import { VocabTranslationProcessor } from './processors/vocab-translation.processor';
-import { VocabRepository, VocabMasteryRepository } from './repositories';
-import { VocabService, VocabMasteryService } from './services';
+import { VocabMasteryRepository, VocabRelatedWordRepository, VocabRepository } from './repositories';
+import { VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
 
 @Module({
     imports: [PlanModule, SubjectModule, forwardRef(() => AiModule)],
     controllers: [VocabController],
-    providers: [VocabRepository, VocabMasteryRepository, VocabService, VocabMasteryService, VocabTranslationProcessor],
-    exports: [VocabService, VocabMasteryService, VocabRepository],
+    providers: [VocabRepository, VocabMasteryRepository, VocabRelatedWordRepository, VocabService, VocabMasteryService, VocabRelatedWordService, VocabTranslationProcessor],
+    exports: [VocabService, VocabMasteryService, VocabRelatedWordService, VocabRepository, VocabRelatedWordRepository],
 })
 export class VocabModule {}
