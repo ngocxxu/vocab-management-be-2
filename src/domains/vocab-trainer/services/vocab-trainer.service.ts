@@ -90,13 +90,24 @@ export class VocabTrainerService {
 
             // Check if questions already exist
             const isQuestionAnswersExist = trainer.questionAnswers && Array.isArray(trainer.questionAnswers) && trainer.questionAnswers.length > 0;
+            const shouldRegenerateQuestions = isQuestionAnswersExist && trainer.lastExamSubmittedAt !== null;
 
-            if (!isQuestionAnswersExist) {
+            if (shouldRegenerateQuestions) {
+                await this.vocabTrainerRepository.updateVocabTrainerFields(trainer.id, {
+                    questionAnswers: [],
+                });
+
+                trainer.questionAnswers = [];
+            }
+
+            if (!isQuestionAnswersExist || shouldRegenerateQuestions) {
                 // Queue generation job
                 const { jobId } = await this.aiService.queueMultipleChoiceGeneration({
                     vocabTrainerId: trainer.id,
                     vocabList: dataVocabAssignments,
                     userId: trainer.userId,
+                    jobType: 'multiple-choice',
+                    queueName: 'multiple-choice-generation',
                 });
 
                 trainer.questionAnswers = [];
@@ -442,6 +453,8 @@ export class VocabTrainerService {
                 })),
                 answerSubmissions: wordTestInputs,
                 userId: user.id,
+                jobType: 'fill-in-blank',
+                queueName: 'fill-in-blank-evaluation',
             });
 
             (trainer as VocabTrainer & { jobId?: string }).jobId = jobId;
@@ -523,6 +536,8 @@ export class VocabTrainerService {
             targetAudience,
             userId: user.id,
             vocabTrainerId: trainer.id,
+            jobType: 'audio',
+            queueName: 'audio-evaluation',
         });
 
         await this.vocabTrainerRepository.update(trainer.id, {

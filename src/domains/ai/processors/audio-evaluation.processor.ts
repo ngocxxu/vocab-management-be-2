@@ -4,11 +4,13 @@ import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { TrainerStatus } from '@prisma/client';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { EReminderType } from '../../reminder/utils';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
+import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
+import { isAiRateLimitError } from '../utils/ai-rate-limit.util';
 
 @Injectable()
 @Processor(EReminderType.AUDIO_EVALUATION)
@@ -16,6 +18,7 @@ export class AudioEvaluationProcessor {
     public constructor(
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
+        private readonly vocabTrainerJobLockService: VocabTrainerJobLockService,
         private readonly notificationGateway: NotificationGateway,
         private readonly vocabTrainerRepository: VocabTrainerRepository,
     ) {}
@@ -25,11 +28,18 @@ export class AudioEvaluationProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.AUDIO_EVALUATION].concurrency,
     })
     public async processAudioEvaluation(job: Job<AudioEvaluationJobData>): Promise<void> {
-        const { fileId, targetDialogue, sourceLanguageCode, targetLanguageCode, sourceWords, targetStyle, targetAudience, userId, vocabTrainerId } = job.data;
+        const { fileId, targetDialogue, sourceLanguageCode, targetLanguageCode, sourceWords, targetStyle, targetAudience, userId, vocabTrainerId, lockToken } = job.data;
 
         const jobId = job.id || '';
 
         try {
+            const ownsLock = await this.vocabTrainerJobLockService.isOwner(userId, String(jobId), lockToken);
+            if (!ownsLock) {
+                this.logger.warn(`Skipping stale audio evaluation job ${jobId} for user ${userId}`);
+                return;
+            }
+
+            await this.vocabTrainerJobLockService.refreshLock(userId, lockToken, job.attemptsMade);
             this.logger.info(`Processing audio evaluation job ${job.id} for user ${userId}`);
 
             this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'evaluating');
@@ -69,6 +79,7 @@ export class AudioEvaluationProcessor {
                 transcript,
                 markdownReport,
             });
+            await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
 
             this.logger.info(`Audio evaluation job ${job.id} completed successfully`);
         } catch (error) {
@@ -78,6 +89,16 @@ export class AudioEvaluationProcessor {
             this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'failed', {
                 error: errorMessage,
             });
+
+            if (isAiRateLimitError(error)) {
+                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+                throw new UnrecoverableError(errorMessage);
+            }
+
+            const maxAttempts = job.opts.attempts ?? 1;
+            if (job.attemptsMade + 1 >= maxAttempts) {
+                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+            }
 
             throw error;
         }

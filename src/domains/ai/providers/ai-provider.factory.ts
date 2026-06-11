@@ -3,9 +3,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { IAiProvider } from './ai-provider.interface';
 import { GeminiProvider } from './gemini.provider';
 import { GroqProvider } from './groq.provider';
+import { OmniRouteProvider } from './omniroute.provider';
 import { OpenRouterProvider } from './openrouter.provider';
 
-export type AiProviderType = 'gemini' | 'openrouter' | 'groq';
+export type AiProviderType = 'gemini' | 'openrouter' | 'groq' | 'omniroute';
 
 @Injectable()
 export class AiProviderFactory {
@@ -47,7 +48,7 @@ export class AiProviderFactory {
 
         if (configValue && typeof configValue === 'string') {
             const provider = configValue.toLowerCase() as AiProviderType;
-            if (['gemini', 'openrouter', 'groq'].includes(provider)) {
+            if (['gemini', 'openrouter', 'groq', 'omniroute'].includes(provider)) {
                 return provider;
             }
             this.logger.warn(`Invalid ai.provider value: ${configValue}, defaulting to gemini`);
@@ -61,7 +62,7 @@ export class AiProviderFactory {
 
         if (audioProviderConfig && typeof audioProviderConfig === 'string') {
             const provider = audioProviderConfig.toLowerCase() as AiProviderType;
-            if (['gemini', 'openrouter', 'groq'].includes(provider)) {
+            if (['gemini', 'openrouter', 'groq', 'omniroute'].includes(provider)) {
                 return provider;
             }
             this.logger.warn(`Invalid ai.audio.provider value: ${audioProviderConfig}, falling back to ai.provider`);
@@ -83,6 +84,10 @@ export class AiProviderFactory {
             case 'groq':
                 this.validateApiKey('GROQ_API_KEY');
                 return new GroqProvider(this.configService);
+
+            case 'omniroute':
+                this.validateApiKey('OMNIROUTE_API_KEY');
+                return new OmniRouteProvider(this.configService);
 
             default:
                 this.logger.warn(`Unknown provider type: ${String(providerType)}, defaulting to gemini`);

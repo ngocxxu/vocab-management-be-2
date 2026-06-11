@@ -4,7 +4,7 @@ import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { PriorityLevel, NotificationAction, NotificationType, TrainerStatus } from '@prisma/client';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { UserRepository } from '../../identity/user/repositories';
 import { NotificationService } from '../../notification/services';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
@@ -14,6 +14,8 @@ import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service'
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { EQuestionType, EReminderRepeat } from '../../vocab-trainer/utils';
 import { AiService } from '../services/ai.service';
+import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
+import { isAiRateLimitError } from '../utils/ai-rate-limit.util';
 
 @Injectable()
 @Processor(EReminderType.FILL_IN_BLANK_EVALUATION)
@@ -21,6 +23,7 @@ export class FillInBlankEvaluationProcessor {
     public constructor(
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
+        private readonly vocabTrainerJobLockService: VocabTrainerJobLockService,
         private readonly notificationGateway: NotificationGateway,
         private readonly vocabTrainerRepository: VocabTrainerRepository,
         private readonly userRepository: UserRepository,
@@ -34,10 +37,17 @@ export class FillInBlankEvaluationProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.FILL_IN_BLANK_EVALUATION].concurrency,
     })
     public async processFillInBlankEvaluation(job: Job<FillInBlankEvaluationJobData>): Promise<void> {
-        const { vocabTrainerId, evaluations, answerSubmissions, userId } = job.data;
+        const { vocabTrainerId, evaluations, answerSubmissions, userId, lockToken } = job.data;
         const jobId = job.id || '';
 
         try {
+            const ownsLock = await this.vocabTrainerJobLockService.isOwner(userId, String(jobId), lockToken);
+            if (!ownsLock) {
+                this.logger.warn(`Skipping stale fill-in-blank evaluation job ${jobId} for user ${userId}`);
+                return;
+            }
+
+            await this.vocabTrainerJobLockService.refreshLock(userId, lockToken, job.attemptsMade);
             this.logger.info(`Processing fill-in-blank evaluation job ${job.id} for user ${userId}`);
 
             this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'evaluating');
@@ -163,6 +173,7 @@ export class FillInBlankEvaluationProcessor {
                     data: result.data,
                 })),
             });
+            await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
 
             this.logger.info(`Fill-in-blank evaluation job ${job.id} completed successfully`);
         } catch (error) {
@@ -172,6 +183,16 @@ export class FillInBlankEvaluationProcessor {
             this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'failed', {
                 error: errorMessage,
             });
+
+            if (isAiRateLimitError(error)) {
+                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+                throw new UnrecoverableError(errorMessage);
+            }
+
+            const maxAttempts = job.opts.attempts ?? 1;
+            if (job.attemptsMade + 1 >= maxAttempts) {
+                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+            }
 
             throw error;
         }

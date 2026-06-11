@@ -22,10 +22,10 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
 
         if (key === 'ai.provider') {
             return baseSchema.keys({
-                value: Joi.string().valid('gemini', 'openrouter', 'groq').required().messages({
+                value: Joi.string().valid('gemini', 'openrouter', 'groq', 'omniroute').required().messages({
                     'string.base': 'AI provider must be a string',
                     'any.required': 'AI provider is required',
-                    'any.only': 'AI provider must be one of: "gemini", "openrouter", or "groq"',
+                    'any.only': 'AI provider must be one of: "gemini", "openrouter", "groq", or "omniroute"',
                 }),
             });
         }
@@ -41,10 +41,10 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
 
         if (key === 'ai.audio.provider') {
             return baseSchema.keys({
-                value: Joi.string().valid('gemini', 'openrouter', 'groq').required().messages({
+                value: Joi.string().valid('gemini', 'openrouter', 'groq', 'omniroute').required().messages({
                     'string.base': 'AI audio provider must be a string',
                     'any.required': 'AI audio provider is required',
-                    'any.only': 'AI audio provider must be one of: "gemini", "openrouter", or "groq"',
+                    'any.only': 'AI audio provider must be one of: "gemini", "openrouter", "groq", or "omniroute"',
                 }),
             });
         }

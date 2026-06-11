@@ -1,7 +1,19 @@
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
+import { VocabTrainerQueueName } from '../constants/vocab-trainer-job.constants';
+import { ActiveJobResponse, VocabTrainerJobType } from '../dto/active-vocab-trainer-job.dto';
 import { EvaluationResult } from './type.util';
 
-export type QueueAudioEvaluationParams = {
+export type QueueJobResult = {
+    jobId: string;
+    activeJob?: ActiveJobResponse;
+};
+
+type QueueJobIdentity = {
+    jobType: VocabTrainerJobType;
+    queueName: VocabTrainerQueueName;
+};
+
+export type QueueAudioEvaluationParams = QueueJobIdentity & {
     fileId: string;
     targetDialogue: Array<{ speaker: string; text: string }>;
     sourceLanguageCode: string;
@@ -13,13 +25,13 @@ export type QueueAudioEvaluationParams = {
     vocabTrainerId: string;
 };
 
-export type QueueMultipleChoiceGenerationParams = {
+export type QueueMultipleChoiceGenerationParams = QueueJobIdentity & {
     vocabTrainerId: string;
     vocabList: VocabWithTextTargets[];
     userId: string;
 };
 
-export type QueueFillInBlankEvaluationParams = {
+export type QueueFillInBlankEvaluationParams = QueueJobIdentity & {
     vocabTrainerId: string;
     evaluations: Array<{
         vocab: VocabWithTextTargets;

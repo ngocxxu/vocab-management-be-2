@@ -1,7 +1,16 @@
+import type { VocabTrainerQueueName } from '@/domains/ai/constants/vocab-trainer-job.constants';
+import type { VocabTrainerJobType } from '@/domains/ai/dto/active-vocab-trainer-job.dto';
 import type { VocabWithTextTargets } from '@/domains/vocab-trainer/utils';
 import type { TemplateData } from '@/shared/utils/type.util';
 
-export interface AudioEvaluationJobData {
+interface VocabTrainerJobMetadata {
+    jobId: string;
+    lockToken: string;
+    jobType: VocabTrainerJobType;
+    queueName: VocabTrainerQueueName;
+}
+
+export interface AudioEvaluationJobData extends VocabTrainerJobMetadata {
     fileId: string;
     targetDialogue: Array<{ speaker: string; text: string }>;
     sourceLanguageCode: string;
@@ -13,13 +22,13 @@ export interface AudioEvaluationJobData {
     vocabTrainerId: string;
 }
 
-export interface MultipleChoiceGenerationJobData {
+export interface MultipleChoiceGenerationJobData extends VocabTrainerJobMetadata {
     vocabTrainerId: string;
     vocabList: VocabWithTextTargets[];
     userId: string;
 }
 
-export interface FillInBlankEvaluationJobData {
+export interface FillInBlankEvaluationJobData extends VocabTrainerJobMetadata {
     vocabTrainerId: string;
     evaluations: Array<{
         vocab: VocabWithTextTargets;

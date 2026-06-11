@@ -3,7 +3,9 @@ import { AudioEvaluationProducer } from '@/queues/producers/audio-evaluation.pro
 import { FillInBlankEvaluationProducer } from '@/queues/producers/fill-in-blank-evaluation.producer';
 import { MultipleChoiceGenerationProducer } from '@/queues/producers/multiple-choice-generation.producer';
 import { Injectable } from '@nestjs/common';
-import { QueueAudioEvaluationParams, QueueFillInBlankEvaluationParams, QueueMultipleChoiceGenerationParams } from '../utils/ai-service-types.util';
+import { randomUUID } from 'crypto';
+import { QueueAudioEvaluationParams, QueueFillInBlankEvaluationParams, QueueJobResult, QueueMultipleChoiceGenerationParams } from '../utils/ai-service-types.util';
+import { VocabTrainerJobLockService } from './vocab-trainer-job-lock.service';
 
 @Injectable()
 export class AiQueueService {
@@ -11,21 +13,47 @@ export class AiQueueService {
         private readonly audioEvaluationProducer: AudioEvaluationProducer,
         private readonly multipleChoiceProducer: MultipleChoiceGenerationProducer,
         private readonly fillInBlankProducer: FillInBlankEvaluationProducer,
+        private readonly vocabTrainerJobLockService: VocabTrainerJobLockService,
     ) {}
 
-    public async queueAudioEvaluation(params: QueueAudioEvaluationParams): Promise<{ jobId: string }> {
-        return this.audioEvaluationProducer.queueAudioEvaluation({
-            ...params,
-        } as AudioEvaluationJobData);
+    public async queueAudioEvaluation(params: QueueAudioEvaluationParams): Promise<QueueJobResult> {
+        return this.withUserActiveJobLock(params, async (jobData, opts) => this.audioEvaluationProducer.queueAudioEvaluation(jobData as AudioEvaluationJobData, opts));
     }
 
-    public async queueMultipleChoiceGeneration(params: QueueMultipleChoiceGenerationParams): Promise<{ jobId: string }> {
-        return this.multipleChoiceProducer.generateQuestions(params as MultipleChoiceGenerationJobData);
+    public async queueMultipleChoiceGeneration(params: QueueMultipleChoiceGenerationParams): Promise<QueueJobResult> {
+        return this.withUserActiveJobLock(params, async (jobData, opts) => this.multipleChoiceProducer.generateQuestions(jobData as MultipleChoiceGenerationJobData, opts));
     }
 
-    public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<{ jobId: string }> {
-        return this.fillInBlankProducer.evaluateAnswers({
-            ...params,
-        } as FillInBlankEvaluationJobData);
+    public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
+        return this.withUserActiveJobLock(params, async (jobData, opts) => this.fillInBlankProducer.evaluateAnswers(jobData as FillInBlankEvaluationJobData, opts));
+    }
+
+    private async withUserActiveJobLock<T extends QueueAudioEvaluationParams | QueueMultipleChoiceGenerationParams | QueueFillInBlankEvaluationParams>(
+        params: T,
+        enqueue: (jobData: T & { jobId: string; lockToken: string }, opts: { jobId: string }) => Promise<{ jobId: string }>,
+    ): Promise<QueueJobResult> {
+        const jobId = randomUUID();
+        const acquireResult = await this.vocabTrainerJobLockService.acquireOrGetActive(params.userId, params.vocabTrainerId, params.queueName, params.jobType, jobId);
+
+        if (!acquireResult.acquired) {
+            return {
+                jobId: acquireResult.activeJob.jobId,
+                activeJob: this.vocabTrainerJobLockService.toResponse(acquireResult.activeJob),
+            };
+        }
+
+        try {
+            return await enqueue(
+                {
+                    ...params,
+                    jobId: acquireResult.job.jobId,
+                    lockToken: acquireResult.job.lockToken,
+                },
+                { jobId: acquireResult.job.jobId },
+            );
+        } catch (error) {
+            await this.vocabTrainerJobLockService.releaseIfOwned(params.userId, acquireResult.job.lockToken);
+            throw error;
+        }
     }
 }

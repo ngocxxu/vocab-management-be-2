@@ -4,7 +4,13 @@ import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiGenerationException } from '../exceptions';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
-import { EvaluateTranslationParams, QueueAudioEvaluationParams, QueueFillInBlankEvaluationParams, QueueMultipleChoiceGenerationParams } from '../utils/ai-service-types.util';
+import {
+    EvaluateTranslationParams,
+    QueueAudioEvaluationParams,
+    QueueFillInBlankEvaluationParams,
+    QueueJobResult,
+    QueueMultipleChoiceGenerationParams,
+} from '../utils/ai-service-types.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../utils/type.util';
 import { AiAudioService } from './ai-audio.service';
 import { AiFillInBlankGradingService } from './ai-fill-in-blank-grading.service';
@@ -65,15 +71,15 @@ export class AiService {
         return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId);
     }
 
-    public async queueAudioEvaluation(params: QueueAudioEvaluationParams): Promise<{ jobId: string }> {
+    public async queueAudioEvaluation(params: QueueAudioEvaluationParams): Promise<QueueJobResult> {
         return this.queueService.queueAudioEvaluation(params);
     }
 
-    public async queueMultipleChoiceGeneration(params: QueueMultipleChoiceGenerationParams): Promise<{ jobId: string }> {
+    public async queueMultipleChoiceGeneration(params: QueueMultipleChoiceGenerationParams): Promise<QueueJobResult> {
         return this.queueService.queueMultipleChoiceGeneration(params);
     }
 
-    public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<{ jobId: string }> {
+    public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
         return this.queueService.queueFillInBlankEvaluation(params);
     }
 

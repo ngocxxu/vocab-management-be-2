@@ -3,11 +3,13 @@ import type { MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-pa
 import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { EReminderType } from '../../reminder/utils';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
+import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
+import { isAiRateLimitError } from '../utils/ai-rate-limit.util';
 
 @Injectable()
 @Processor(EReminderType.MULTIPLE_CHOICE_GENERATION)
@@ -15,6 +17,7 @@ export class MultipleChoiceGenerationProcessor {
     public constructor(
         private readonly logger: LoggerService,
         private readonly aiService: AiService,
+        private readonly vocabTrainerJobLockService: VocabTrainerJobLockService,
         private readonly notificationGateway: NotificationGateway,
         private readonly vocabTrainerRepository: VocabTrainerRepository,
     ) {}
@@ -24,10 +27,17 @@ export class MultipleChoiceGenerationProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.MULTIPLE_CHOICE_GENERATION].concurrency,
     })
     public async processMultipleChoiceGeneration(job: Job<MultipleChoiceGenerationJobData>): Promise<void> {
-        const { vocabTrainerId, vocabList, userId } = job.data;
+        const { vocabTrainerId, vocabList, userId, lockToken } = job.data;
         const jobId = job.id || '';
 
         try {
+            const ownsLock = await this.vocabTrainerJobLockService.isOwner(userId, String(jobId), lockToken);
+            if (!ownsLock) {
+                this.logger.warn(`Skipping stale multiple choice generation job ${jobId} for user ${userId}`);
+                return;
+            }
+
+            await this.vocabTrainerJobLockService.refreshLock(userId, lockToken, job.attemptsMade);
             this.logger.info(`Processing multiple choice generation job ${job.id} for user ${userId}`);
 
             this.notificationGateway.emitMultipleChoiceGenerationProgress(userId, jobId, 'generating');
@@ -49,6 +59,7 @@ export class MultipleChoiceGenerationProcessor {
             this.notificationGateway.emitMultipleChoiceGenerationProgress(userId, jobId, 'completed', {
                 questions,
             });
+            await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
 
             this.logger.info(`Multiple choice generation job ${job.id} completed successfully`);
         } catch (error) {
@@ -58,6 +69,16 @@ export class MultipleChoiceGenerationProcessor {
             this.notificationGateway.emitMultipleChoiceGenerationProgress(userId, jobId, 'failed', {
                 error: errorMessage,
             });
+
+            if (isAiRateLimitError(error)) {
+                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+                throw new UnrecoverableError(errorMessage);
+            }
+
+            const maxAttempts = job.opts.attempts ?? 1;
+            if (job.attemptsMade + 1 >= maxAttempts) {
+                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+            }
 
             throw error;
         }
