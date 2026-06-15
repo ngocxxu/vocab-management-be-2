@@ -32,22 +32,21 @@ export class TextTargetDto {
 
     @ApiProperty({
         description: 'Word type details',
+        type: () => WordTypeDto,
         required: false,
     })
     public readonly wordType?: WordTypeDto;
 
     @ApiProperty({
         description: 'List of examples for this text target',
-        type: 'array',
-        items: { type: 'object' },
+        type: () => [VocabExampleDto],
         required: false,
     })
     public readonly vocabExamples?: VocabExampleDto[];
 
     @ApiProperty({
         description: 'List of subject assignments',
-        type: 'array',
-        items: { type: 'object' },
+        type: () => [TextTargetSubjectDto],
         required: false,
     })
     public readonly textTargetSubjects?: TextTargetSubjectDto[];

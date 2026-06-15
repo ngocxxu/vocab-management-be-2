@@ -1,3 +1,6 @@
+export * from './create-text-target-standalone.input';
+export * from './text-target-query-params.input';
+export * from './update-text-target.input';
 export * from './vocab.dto';
 export * from './vocab.input';
 export * from './bulk-delete.input';

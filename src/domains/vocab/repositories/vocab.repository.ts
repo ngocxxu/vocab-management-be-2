@@ -9,6 +9,14 @@ import { Prisma, Vocab } from '@prisma/client';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
+const textTargetInclude = {
+    wordType: true,
+    vocabExamples: true,
+    textTargetSubjects: {
+        include: { subject: true },
+    },
+} satisfies Prisma.TextTargetInclude;
+
 const csvImportVocabInclude = {
     textTargets: {
         include: {
@@ -379,6 +387,111 @@ export class VocabRepository extends BaseRepository {
     public async deleteTextTargetById(id: string, tx?: Prisma.TransactionClient): Promise<void> {
         const client = tx ?? this.prisma;
         await client.textTarget.delete({ where: { id } });
+    }
+
+    public async findTextTargetById(id: string): Promise<Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }> | null> {
+        return this.prisma.textTarget.findUnique({
+            where: { id },
+            include: textTargetInclude,
+        });
+    }
+
+    public async findTextTargetsByVocabId(
+        vocabId: string,
+        options?: {
+            textTarget?: string;
+            grammar?: string;
+            wordTypeId?: string;
+            sortBy?: string;
+            sortOrder?: 'asc' | 'desc';
+            skip?: number;
+            take?: number;
+        },
+    ): Promise<{ totalItems: number; items: Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }>[] }> {
+        const where: Prisma.TextTargetWhereInput = {
+            vocabId,
+            ...(options?.textTarget ? { textTarget: { contains: options.textTarget, mode: 'insensitive' } } : {}),
+            ...(options?.grammar ? { grammar: { contains: options.grammar, mode: 'insensitive' } } : {}),
+            ...(options?.wordTypeId ? { wordTypeId: options.wordTypeId } : {}),
+        };
+
+        const orderBy = getOrderBy(options?.sortBy, options?.sortOrder, 'createdAt') as Prisma.TextTargetOrderByWithRelationInput;
+
+        const [totalItems, items] = await Promise.all([
+            this.prisma.textTarget.count({ where }),
+            this.prisma.textTarget.findMany({
+                where,
+                include: textTargetInclude,
+                orderBy,
+                skip: options?.skip,
+                take: options?.take,
+            }),
+        ]);
+
+        return { totalItems, items };
+    }
+
+    public async createTextTarget(
+        vocabId: string,
+        data: {
+            wordTypeId?: string;
+            textTarget: string;
+            grammar: string;
+            explanationSource: string;
+            explanationTarget: string;
+            subjectIds?: string[];
+            vocabExamples?: { source: string; target: string }[];
+        },
+    ): Promise<Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }>> {
+        return this.prisma.textTarget.create({
+            data: {
+                vocabId,
+                wordTypeId: data.wordTypeId ?? null,
+                textTarget: data.textTarget,
+                grammar: data.grammar,
+                explanationSource: data.explanationSource,
+                explanationTarget: data.explanationTarget,
+                textTargetSubjects: data.subjectIds?.length ? { create: data.subjectIds.map((subjectId) => ({ subjectId })) } : undefined,
+                vocabExamples: data.vocabExamples?.length ? { create: data.vocabExamples.map((ex) => ({ source: ex.source, target: ex.target })) } : undefined,
+            },
+            include: textTargetInclude,
+        });
+    }
+
+    public async updateTextTarget(
+        id: string,
+        data: {
+            wordTypeId?: string;
+            textTarget?: string;
+            grammar?: string;
+            explanationSource?: string;
+            explanationTarget?: string;
+            subjectIds?: string[];
+            vocabExamples?: { source: string; target: string }[];
+        },
+    ): Promise<Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }>> {
+        return this.runInTransaction(async (tx) => {
+            if (data.subjectIds !== undefined) {
+                await tx.textTargetSubject.deleteMany({ where: { textTargetId: id } });
+            }
+            if (data.vocabExamples !== undefined) {
+                await tx.vocabExample.deleteMany({ where: { textTargetId: id } });
+            }
+
+            return tx.textTarget.update({
+                where: { id },
+                data: {
+                    wordTypeId: data.wordTypeId,
+                    textTarget: data.textTarget,
+                    grammar: data.grammar,
+                    explanationSource: data.explanationSource,
+                    explanationTarget: data.explanationTarget,
+                    textTargetSubjects: data.subjectIds?.length ? { create: data.subjectIds.map((subjectId) => ({ subjectId })) } : undefined,
+                    vocabExamples: data.vocabExamples?.length ? { create: data.vocabExamples.map((ex) => ({ source: ex.source, target: ex.target })) } : undefined,
+                },
+                include: textTargetInclude,
+            });
+        });
     }
 
     public async clearCache(): Promise<void> {
