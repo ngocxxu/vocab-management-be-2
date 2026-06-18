@@ -148,10 +148,35 @@ export class VocabService {
         const { prismaCreate, shouldQueueTranslation, queuePayload } = this.vocabMapper.prepareCreate(createVocabData, userId);
         const relatedWords = createVocabData.relatedWords ?? [];
 
-        const vocab =
-            relatedWords.length > 0
-                ? await this.createWithInitialRelatedWords(prismaCreate, relatedWords, createVocabData.languageFolderId, userId)
-                : await this.vocabRepository.create(prismaCreate);
+        let vocab: Awaited<ReturnType<VocabRepository['create']>>;
+
+        if (relatedWords.length > 0) {
+            vocab = await this.createWithInitialRelatedWords(
+                prismaCreate,
+                relatedWords,
+                createVocabData.languageFolderId,
+                userId,
+                createVocabData.textSource,
+                createVocabData.sourceLanguageCode,
+                createVocabData.targetLanguageCode,
+            );
+        } else {
+            const { createdVocab, backfillIds } = await this.vocabRepository.inTransaction(async (tx) => {
+                const created = await this.vocabRepository.createInTransaction(prismaCreate, tx);
+                const ids = await this.vocabRelatedWordRepository.upgradeFreeTextToLinkedInTransaction(tx, {
+                    id: created.id,
+                    textSource: createVocabData.textSource,
+                    languageFolderId: createVocabData.languageFolderId,
+                    userId,
+                    sourceLanguageCode: createVocabData.sourceLanguageCode,
+                    targetLanguageCode: createVocabData.targetLanguageCode,
+                });
+
+                return { createdVocab: created, backfillIds: ids };
+            });
+            vocab = createdVocab;
+            await this.vocabRelatedWordRepository.clearCacheByVocabIds(backfillIds);
+        }
 
         if (shouldQueueTranslation && queuePayload) {
             await this.vocabTranslationProducer.translateVocab({
@@ -598,16 +623,27 @@ export class VocabService {
         relatedWords: VocabInput['relatedWords'],
         languageFolderId: string,
         userId: string,
+        textSource: string,
+        sourceLanguageCode: string,
+        targetLanguageCode: string,
     ): Promise<Awaited<ReturnType<VocabRepository['create']>>> {
         const { vocab, affectedVocabIds } = await this.vocabRepository.inTransaction(async (tx) => {
             const createdVocab = await this.vocabRepository.createInTransaction(prismaCreate, tx);
             const normalizedWords = normalizeAndValidateRelatedWords(createdVocab.id, relatedWords ?? []);
             await this.assertLinkedVocabsInFolderInTransaction(normalizedWords, userId, languageFolderId, tx);
             const affectedIds = await this.vocabRelatedWordRepository.upsertSymmetricSetInTransaction(tx, createdVocab.id, normalizedWords);
+            const backfillIds = await this.vocabRelatedWordRepository.upgradeFreeTextToLinkedInTransaction(tx, {
+                id: createdVocab.id,
+                textSource,
+                languageFolderId,
+                userId,
+                sourceLanguageCode,
+                targetLanguageCode,
+            });
 
             return {
                 vocab: createdVocab,
-                affectedVocabIds: affectedIds,
+                affectedVocabIds: [...affectedIds, ...backfillIds],
             };
         });
 

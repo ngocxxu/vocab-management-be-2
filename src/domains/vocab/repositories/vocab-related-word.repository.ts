@@ -243,6 +243,58 @@ export class VocabRelatedWordRepository extends BaseRepository {
         await this.clearCacheByVocabIds(affectedVocabIds);
     }
 
+    public async upgradeFreeTextToLinkedInTransaction(
+        tx: Prisma.TransactionClient,
+        newVocab: {
+            id: string;
+            textSource: string;
+            languageFolderId: string;
+            userId: string;
+            sourceLanguageCode: string;
+            targetLanguageCode: string;
+        },
+    ): Promise<string[]> {
+        const matchingRows = await tx.vocabRelatedWord.findMany({
+            where: {
+                freeText: { equals: newVocab.textSource, mode: 'insensitive' },
+                linkedVocabId: null,
+                vocab: {
+                    userId: newVocab.userId,
+                    languageFolderId: newVocab.languageFolderId,
+                    sourceLanguageCode: newVocab.sourceLanguageCode,
+                    targetLanguageCode: newVocab.targetLanguageCode,
+                },
+            },
+            select: { id: true, vocabId: true, isSynonym: true, isAntonym: true, isRelated: true },
+        });
+
+        if (matchingRows.length === 0) return [];
+
+        const affectedVocabIds: string[] = [newVocab.id];
+
+        for (const row of matchingRows) {
+            await tx.vocabRelatedWord.update({
+                where: { id: row.id },
+                data: { freeText: null, linkedVocabId: newVocab.id },
+            });
+
+            await tx.vocabRelatedWord.create({
+                data: {
+                    vocabId: newVocab.id,
+                    linkedVocabId: row.vocabId,
+                    freeText: null,
+                    isSynonym: row.isSynonym,
+                    isAntonym: row.isAntonym,
+                    isRelated: row.isRelated,
+                },
+            });
+
+            affectedVocabIds.push(row.vocabId);
+        }
+
+        return this.getUniqueSortedIds(affectedVocabIds);
+    }
+
     public async clearCacheByVocabIds(vocabIds: string[]): Promise<void> {
         const uniqueIds = this.getUniqueSortedIds(vocabIds);
 
