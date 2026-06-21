@@ -13,6 +13,7 @@ import { FillInBlankEvaluationProducer } from './producers/fill-in-blank-evaluat
 import { MultipleChoiceGenerationProducer } from './producers/multiple-choice-generation.producer';
 import { NotificationFcmProducer } from './producers/notification-fcm.producer';
 import { NotificationProducer } from './producers/notification.producer';
+import { SubjectGenerateProducer } from './producers/subject-generate.producer';
 import { VocabTranslationProducer } from './producers/vocab-translation.producer';
 
 const workloadBullModules = WORKLOAD_QUEUE_NAMES.map((name) =>
@@ -48,6 +49,7 @@ const producers = [
     EmailReminderProducer,
     NotificationProducer,
     NotificationFcmProducer,
+    SubjectGenerateProducer,
 ];
 
 @Global()

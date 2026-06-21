@@ -1,3 +1,4 @@
+import type { GenerateSubjectsDto } from '../../../catalog/subject/dto';
 import { Logger } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
@@ -86,6 +87,17 @@ export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, 
             timestamp: new Date().toISOString(),
         });
         this.logger.log(`Multiple choice generation progress sent to user ${userId}: ${status}`);
+    }
+
+    // Emit subject generation result to specific user
+    public emitSubjectGenerateResult(userId: string, jobId: string, textTarget: string, result: GenerateSubjectsDto): void {
+        this.server.to(`user-${userId}`).emit('subject-generate-result', {
+            jobId,
+            textTarget,
+            result,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`Subject generate result sent to user ${userId}`);
     }
 
     // Emit fill-in-blank evaluation progress to specific user

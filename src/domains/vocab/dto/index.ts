@@ -1,3 +1,4 @@
+export * from './subject-ref.input';
 export * from './create-text-target-standalone.input';
 export * from './text-target-query-params.input';
 export * from './update-text-target.input';

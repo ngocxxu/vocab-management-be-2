@@ -6,6 +6,7 @@ export enum EReminderType {
     MULTIPLE_CHOICE_GENERATION = 'multiple-choice-generation',
     FILL_IN_BLANK_EVALUATION = 'fill-in-blank-evaluation',
     VOCAB_TRANSLATION = 'vocab-translation',
+    SUBJECT_GENERATE = 'subject-generate',
 }
 
 export enum EReminderTitle {

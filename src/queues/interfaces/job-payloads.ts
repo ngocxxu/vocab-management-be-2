@@ -78,3 +78,9 @@ export interface EmailJobData {
 export interface ReminderScheduleEmailJobData {
     scheduleId: string;
 }
+
+export interface SubjectGenerateJobData {
+    textTarget: string;
+    targetLanguageCode: string;
+    userId: string;
+}

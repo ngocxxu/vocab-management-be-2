@@ -2,6 +2,7 @@
 import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { SubjectRefInput } from './subject-ref.input';
 import { CreateRelatedWordInput } from './upsert-related-words.input';
 import { VocabDto } from './vocab.dto';
 
@@ -42,16 +43,15 @@ export class VocabInput extends PickType(VocabDto, ['textSource', 'sourceLanguag
     @Type(() => CreateTextTargetInput)
     public readonly textTargets: CreateTextTargetInput[];
 
-    @ApiProperty({
-        description: 'List of subject ids (used when textTargets is empty and AI translation is needed)',
-        type: 'array',
-        items: { type: 'string' },
-        required: false,
+    @ApiPropertyOptional({
+        description: 'Subject references (used when textTargets is empty and AI translation is needed)',
+        type: () => [SubjectRefInput],
     })
     @IsOptional()
     @IsArray()
-    @IsString({ each: true })
-    public readonly subjectIds?: string[];
+    @ValidateNested({ each: true })
+    @Type(() => SubjectRefInput)
+    public readonly subjects?: SubjectRefInput[];
 
     @ApiPropertyOptional({
         description: 'Optional initial related words created atomically with the vocab. If any related word is invalid, the vocab is not created.',
@@ -87,15 +87,15 @@ export class CreateTextTargetInput {
     @IsString()
     public explanationTarget: string;
 
-    @ApiProperty({
-        description: 'List of subject ids',
-        type: 'array',
-        items: { type: 'string' },
-        required: false,
+    @ApiPropertyOptional({
+        description: 'Subject references (by id for existing, by name for auto-create)',
+        type: () => [SubjectRefInput],
     })
+    @IsOptional()
     @IsArray()
-    @IsString({ each: true })
-    public readonly subjectIds: string[];
+    @ValidateNested({ each: true })
+    @Type(() => SubjectRefInput)
+    public readonly subjects?: SubjectRefInput[];
 
     @ApiProperty({
         description: 'List of vocabExamples for this text target',

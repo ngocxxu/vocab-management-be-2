@@ -1,4 +1,5 @@
-import { SubjectRepository } from '@/domains/catalog/subject/repositories/subject.repository';
+import { SubjectService } from '@/domains/catalog/subject/services/subject.service';
+import { normalizeSubjectName } from '@/domains/catalog/subject/utils';
 import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
@@ -10,10 +11,11 @@ import { LanguageFolderNotFoundException } from '../../catalog/language-folder/e
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
 import { BulkDeleteInput, BulkGetInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabConflictBySubjectQuery, VocabDto, VocabInput } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
+import { SubjectRefInput } from '../dto/subject-ref.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
 import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
-import { VocabMapper, VocabRelatedWordMapper } from '../mappers';
+import { ResolvedTextTargetInput, ResolvedVocabInput, VocabMapper, VocabRelatedWordMapper } from '../mappers';
 import { CsvImportExistingVocab, VocabRelatedWordRepository, VocabRepository } from '../repositories';
 import { type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
@@ -25,7 +27,7 @@ export class VocabService {
 
     public constructor(
         private readonly vocabRepository: VocabRepository,
-        private readonly subjectRepository: SubjectRepository,
+        private readonly subjectService: SubjectService,
         private readonly logger: LoggerService,
         private readonly planQuotaService: PlanQuotaService,
         private readonly vocabTranslationProducer: VocabTranslationProducer,
@@ -121,31 +123,36 @@ export class VocabService {
             await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
 
-        // Validate subject ownership
-        if (createVocabData.textTargets?.length > 0) {
-            const subjectIds = new Set<string>();
-
-            createVocabData.textTargets.forEach((target) => {
-                target.subjectIds?.forEach((id) => subjectIds.add(id));
-            });
-
-            if (subjectIds.size > 0) {
-                // Inject SubjectRepository into VocabService constructor
-                const validSubjects = await this.subjectRepository.findByIds(Array.from(subjectIds), userId);
-
-                if (validSubjects.length !== subjectIds.size) {
-                    throw new VocabBadRequestException('One or more subjects do not belong to you');
-                }
-            }
-        }
-
         const { sourceLanguageCode, targetLanguageCode }: VocabInput = createVocabData;
 
         if (sourceLanguageCode === targetLanguageCode) {
             throw new VocabBadRequestException('Source and target languages must be different');
         }
 
-        const { prismaCreate, shouldQueueTranslation, queuePayload } = this.vocabMapper.prepareCreate(createVocabData, userId);
+        const resolvedTextTargets = await Promise.all(
+            (createVocabData.textTargets ?? []).map(async (target): Promise<ResolvedTextTargetInput> => {
+                const subjectIds = await this.resolveSubjectRefs(target.subjects ?? [], targetLanguageCode, userId, role);
+                return {
+                    textTarget: target.textTarget,
+                    grammar: target.grammar,
+                    explanationSource: target.explanationSource,
+                    explanationTarget: target.explanationTarget,
+                    wordTypeId: target.wordTypeId,
+                    vocabExamples: target.vocabExamples,
+                    subjectIds,
+                };
+            }),
+        );
+
+        const resolvedTopLevelSubjectIds = await this.resolveSubjectRefs(createVocabData.subjects ?? [], targetLanguageCode, userId, role);
+
+        const resolvedInput: ResolvedVocabInput = {
+            ...createVocabData,
+            textTargets: resolvedTextTargets,
+            subjectIds: resolvedTopLevelSubjectIds,
+        };
+
+        const { prismaCreate, shouldQueueTranslation, queuePayload } = this.vocabMapper.prepareCreate(resolvedInput, userId);
         const relatedWords = createVocabData.relatedWords ?? [];
 
         let vocab: Awaited<ReturnType<VocabRepository['create']>>;
@@ -708,5 +715,36 @@ export class VocabService {
         if (invalidFolderVocab) {
             throw new VocabNotFoundException(invalidFolderVocab.id);
         }
+    }
+
+    private async resolveSubjectRefs(refs: SubjectRefInput[], targetLanguageCode: string, userId: string, role?: UserRole): Promise<string[]> {
+        if (!refs.length) return [];
+
+        const idRefs = refs.filter((r): r is { id: string } => Boolean(r.id));
+        const nameRefs = refs.filter((r): r is { name: string } => !r.id && Boolean(r.name));
+
+        const resolvedIds: string[] = [];
+
+        if (idRefs.length) {
+            const ids = idRefs.map((r) => r.id);
+            const valid = await this.subjectService.findByIds(ids, userId);
+            if (valid.length !== ids.length) {
+                throw new VocabBadRequestException('One or more subjects do not belong to you');
+            }
+            resolvedIds.push(...ids);
+        }
+
+        if (nameRefs.length) {
+            const upserted = await Promise.all(
+                nameRefs.map(async (r) => {
+                    const normalized = normalizeSubjectName(r.name);
+                    const dto = await this.subjectService.upsertByName(normalized, targetLanguageCode, userId, role);
+                    return dto.id;
+                }),
+            );
+            resolvedIds.push(...upserted);
+        }
+
+        return resolvedIds;
     }
 }

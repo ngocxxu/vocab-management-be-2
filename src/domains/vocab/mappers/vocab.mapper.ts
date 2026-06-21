@@ -16,9 +16,15 @@ export type VocabTranslationQueuePayload = {
     userId: string;
 };
 
+export type ResolvedTextTargetInput = Omit<CreateTextTargetInput, 'subjects'> & { subjectIds: string[] };
+export type ResolvedVocabInput = Omit<VocabInput, 'textTargets' | 'subjects'> & {
+    textTargets: ResolvedTextTargetInput[];
+    subjectIds: string[];
+};
+
 export class VocabMapper {
     public prepareCreate(
-        input: VocabInput,
+        input: ResolvedVocabInput,
         userId: string,
     ): {
         prismaCreate: Prisma.VocabCreateInput;
@@ -98,7 +104,7 @@ export class VocabMapper {
         return new PaginationDto<VocabDto>(items, totalItems, page, pageSize);
     }
 
-    private mapTextTargetCreate(target: CreateTextTargetInput): Prisma.TextTargetCreateWithoutVocabInput {
+    private mapTextTargetCreate(target: ResolvedTextTargetInput): Prisma.TextTargetCreateWithoutVocabInput {
         return {
             textTarget: target.textTarget,
             grammar: target.grammar,

@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateTextTargetInput } from '../../vocab/dto/vocab.input';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiGenerationException } from '../exceptions';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
@@ -18,7 +17,7 @@ import { AiLanguageNameService } from './ai-language-name.service';
 import { AiMultipleChoiceService } from './ai-multiple-choice.service';
 import { AiQueueService } from './ai-queue.service';
 import { AiTranslationEvaluationService } from './ai-translation-evaluation.service';
-import { AiTranslationService } from './ai-translation.service';
+import { AiTranslationService, TranslatedTextTargetResult } from './ai-translation.service';
 
 @Injectable()
 export class AiService {
@@ -45,7 +44,7 @@ export class AiService {
         subjectIds?: string[],
         userId?: string,
         retryCount = 0,
-    ): Promise<CreateTextTargetInput> {
+    ): Promise<TranslatedTextTargetResult> {
         return this.translationService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, retryCount);
     }
 

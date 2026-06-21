@@ -1,8 +1,9 @@
+import { SubjectGenerateProducer } from '@/queues/producers/subject-generate.producer';
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
-import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
+import { GenerateSubjectsJobDto, GenerateSubjectsInput, ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
 import { SubjectBadRequestException, SubjectInUseException, SubjectNotFoundException } from '../exceptions';
 import { SubjectMapper } from '../mappers';
@@ -15,6 +16,7 @@ export class SubjectService {
     public constructor(
         private readonly subjectRepository: SubjectRepository,
         private readonly planQuotaService: PlanQuotaService,
+        private readonly subjectGenerateProducer: SubjectGenerateProducer,
     ) {}
 
     public async find(userId: string): Promise<IResponse<SubjectDto[]>> {
@@ -40,9 +42,9 @@ export class SubjectService {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'subject');
         }
-        const { name } = createSubjectData;
+        const { name, targetLanguageCode } = createSubjectData;
 
-        const lastSubject = await this.subjectRepository.findLastOrder();
+        const lastSubject = await this.subjectRepository.findLastOrder(userId, targetLanguageCode);
 
         const newOrder = lastSubject ? lastSubject.order + 1 : 1;
 
@@ -50,9 +52,39 @@ export class SubjectService {
             name,
             order: newOrder,
             userId,
+            targetLanguageCode,
         });
 
         return this.subjectMapper.toResponse(subject);
+    }
+
+    public async generateSubjects(input: GenerateSubjectsInput, userId: string): Promise<GenerateSubjectsJobDto> {
+        const { textTarget, targetLanguageCode } = input;
+        const { jobId } = await this.subjectGenerateProducer.queueSubjectGenerate({ textTarget, targetLanguageCode, userId });
+        return new GenerateSubjectsJobDto(jobId);
+    }
+
+    public async upsertByName(name: string, targetLanguageCode: string, userId: string, role?: UserRole): Promise<SubjectDto> {
+        if (role !== undefined) {
+            await this.planQuotaService.assertCreationQuota(userId, role, 'subject');
+        }
+
+        const lastSubject = await this.subjectRepository.findLastOrder(userId, targetLanguageCode);
+        const newOrder = lastSubject ? lastSubject.order + 1 : 1;
+
+        const subject = await this.subjectRepository.upsertByName({
+            name,
+            userId,
+            targetLanguageCode,
+            order: newOrder,
+        });
+
+        return this.subjectMapper.toResponse(subject);
+    }
+
+    public async findByIds(ids: string[], userId: string): Promise<SubjectDto[]> {
+        const subjects = await this.subjectRepository.findByIds(ids, userId);
+        return this.subjectMapper.toResponseList(subjects);
     }
 
     public async update(id: string, updateSubjectData: SubjectInput, userId?: string): Promise<SubjectDto> {

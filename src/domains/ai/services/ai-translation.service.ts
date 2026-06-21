@@ -1,10 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { WordTypeRepository } from '../../catalog/word-type/repositories';
-import { CreateTextTargetInput } from '../../vocab/dto/vocab.input';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
 import { WordTypeRecord } from '../utils/ai-text-types.util';
 import { AI_CONFIG } from '../utils/const.util';
+
+export type TranslatedTextTargetResult = {
+    textTarget: string;
+    grammar: string;
+    explanationSource: string;
+    explanationTarget: string;
+    wordTypeId?: string;
+    subjectIds: string[];
+    vocabExamples?: Array<{ source: string; target: string }>;
+};
 
 @Injectable()
 export class AiTranslationService {
@@ -22,7 +31,7 @@ export class AiTranslationService {
         subjectIds?: string[],
         userId?: string,
         retryCount = 0,
-    ): Promise<CreateTextTargetInput> {
+    ): Promise<TranslatedTextTargetResult> {
         try {
             const prompt = await this.buildTranslationPrompt({
                 textSource,
@@ -33,7 +42,7 @@ export class AiTranslationService {
             const provider = await this.providerFactory.getProvider(userId);
             const text = await provider.generateContent(prompt, userId);
 
-            const parsedResponse = parseJsonOrThrow<CreateTextTargetInput>(text);
+            const parsedResponse = parseJsonOrThrow<TranslatedTextTargetResult>(text);
 
             return {
                 ...parsedResponse,

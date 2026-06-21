@@ -75,6 +75,14 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
             removeOnFail: 500,
         },
     },
+    [EReminderType.SUBJECT_GENERATE]: {
+        concurrency: 5,
+        defaultJobOptions: {
+            attempts: 1,
+            removeOnComplete: 100,
+            removeOnFail: 500,
+        },
+    },
 };
 
 export const DEAD_LETTER_QUEUE_DEFAULT_OPTIONS: JobsOptions = {

@@ -1,9 +1,10 @@
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Roles } from '@/shared/decorators';
-import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
-import { ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
+import { GenerateSubjectsJobDto, GenerateSubjectsInput, ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
 import { SubjectService } from '../services';
 
@@ -33,6 +34,17 @@ export class SubjectController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Subject not found' })
     public async findOne(@Param('id') id: string, @CurrentUser() user: User): Promise<SubjectDto> {
         return this.subjectService.findOne(id, user.id);
+    }
+
+    @Post('generate')
+    @HttpCode(HttpStatus.ACCEPTED)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Throttle({ default: { limit: 10, ttl: 60000 } })
+    @ApiOperation({ summary: 'Enqueue AI subject suggestion generation — result delivered via socket event subject-generate-result' })
+    @ApiResponse({ status: HttpStatus.ACCEPTED, type: GenerateSubjectsJobDto })
+    public async generate(@Body() input: GenerateSubjectsInput, @CurrentUser() user: User): Promise<GenerateSubjectsJobDto> {
+        return this.subjectService.generateSubjects(input, user.id);
     }
 
     @Post()

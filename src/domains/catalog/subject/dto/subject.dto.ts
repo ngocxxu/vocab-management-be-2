@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Subject } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsInt, IsNotEmpty, IsString, MaxLength, Min } from 'class-validator';
@@ -28,6 +28,9 @@ export class SubjectDto {
     @ApiProperty({ description: 'User ID', example: 'string' })
     public readonly userId: string;
 
+    @ApiPropertyOptional({ description: 'Target language code this subject belongs to', example: 'vi' })
+    public readonly targetLanguageCode: string | null;
+
     public constructor(entity: Subject) {
         this.id = entity.id;
         this.name = entity.name;
@@ -35,5 +38,6 @@ export class SubjectDto {
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;
         this.userId = entity.userId;
+        this.targetLanguageCode = entity.targetLanguageCode;
     }
 }

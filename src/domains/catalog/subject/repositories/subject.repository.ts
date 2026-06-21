@@ -71,12 +71,55 @@ export class SubjectRepository extends BaseRepository {
         return subject;
     }
 
-    public async findLastOrder(): Promise<Subject | null> {
+    public async findLastOrder(userId: string, targetLanguageCode: string): Promise<Subject | null> {
         return this.prisma.subject.findFirst({
-            orderBy: {
-                order: 'desc',
+            where: { userId, targetLanguageCode },
+            orderBy: { order: 'desc' },
+        });
+    }
+
+    public async findByNamesInsensitive(names: string[], userId: string, targetLanguageCode: string): Promise<Subject[]> {
+        const lower = names.map((n) => n.toLowerCase());
+        return this.prisma.$queryRaw<Subject[]>`
+            SELECT * FROM "subject"
+            WHERE "user_id" = ${userId}
+              AND "target_language_code" = ${targetLanguageCode}
+              AND LOWER("name") = ANY(${lower}::text[])
+        `;
+    }
+
+    public async upsertByName(data: { name: string; userId: string; targetLanguageCode: string; order: number }, tx?: Prisma.TransactionClient): Promise<Subject> {
+        const client = this.client(tx);
+
+        const existing = await client.subject.findFirst({
+            where: {
+                userId: data.userId,
+                targetLanguageCode: data.targetLanguageCode,
+                name: { equals: data.name, mode: 'insensitive' },
             },
         });
+
+        if (existing) {
+            return existing;
+        }
+
+        try {
+            const created = await client.subject.create({ data });
+            await this.redisService.del(RedisPrefix.SUBJECT, `userId:${data.userId}`);
+            return created;
+        } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                const race = await client.subject.findFirst({
+                    where: {
+                        userId: data.userId,
+                        targetLanguageCode: data.targetLanguageCode,
+                        name: { equals: data.name, mode: 'insensitive' },
+                    },
+                });
+                if (race) return race;
+            }
+            throw error;
+        }
     }
 
     public async findByIds(ids: string[], userId: string): Promise<Subject[]> {
@@ -107,7 +150,7 @@ export class SubjectRepository extends BaseRepository {
         });
     }
 
-    public async create(data: { name: string; order: number; userId: string }): Promise<Subject> {
+    public async create(data: { name: string; order: number; userId: string; targetLanguageCode: string }): Promise<Subject> {
         const subject = await this.prisma.subject.create({
             data,
         });

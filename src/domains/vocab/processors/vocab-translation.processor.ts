@@ -5,9 +5,9 @@ import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Prisma, TextTarget } from '@prisma/client';
 import { Job } from 'bullmq';
+import { TranslatedTextTargetResult } from '../../ai/services/ai-translation.service';
 import { AiService } from '../../ai/services/ai.service';
 import { EReminderType } from '../../reminder/utils';
-import { CreateTextTargetInput } from '../dto/vocab.input';
 import { VocabRepository } from '../repositories/vocab.repository';
 
 type VocabWithTextTargets = Prisma.VocabGetPayload<{
@@ -92,11 +92,11 @@ export class VocabTranslationProcessor {
         targetLanguageCode: string,
         subjectIds: string[] | undefined,
         userId: string,
-    ): Promise<CreateTextTargetInput> {
+    ): Promise<TranslatedTextTargetResult> {
         return this.aiService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId);
     }
 
-    private async updateVocabWithTranslation(vocabId: string, translatedData: CreateTextTargetInput): Promise<void> {
+    private async updateVocabWithTranslation(vocabId: string, translatedData: TranslatedTextTargetResult): Promise<void> {
         const textTargetCreateData: Prisma.TextTargetCreateWithoutVocabInput = {
             textTarget: translatedData.textTarget,
             grammar: translatedData.grammar,
@@ -134,7 +134,7 @@ export class VocabTranslationProcessor {
         };
     }
 
-    private buildVocabExamplesRelation(vocabExamples: CreateTextTargetInput['vocabExamples']): Prisma.TextTargetCreateInput['vocabExamples'] | undefined {
+    private buildVocabExamplesRelation(vocabExamples: Array<{ source: string; target: string }> | undefined): Prisma.TextTargetCreateInput['vocabExamples'] | undefined {
         if (!vocabExamples || vocabExamples.length === 0) {
             return undefined;
         }
