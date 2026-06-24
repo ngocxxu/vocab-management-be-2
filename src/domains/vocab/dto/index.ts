@@ -1,3 +1,4 @@
+export * from './generate-text-target-job.dto';
 export * from './subject-ref.input';
 export * from './create-text-target-standalone.input';
 export * from './text-target-query-params.input';

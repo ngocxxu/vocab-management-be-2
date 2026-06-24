@@ -1,3 +1,4 @@
+import type { TranslatedTextTargetResult } from '../../../ai/services/ai-translation.service';
 import type { GenerateSubjectsDto } from '../../../catalog/subject/dto';
 import { Logger } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
@@ -98,6 +99,17 @@ export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, 
             timestamp: new Date().toISOString(),
         });
         this.logger.log(`Subject generate result sent to user ${userId}`);
+    }
+
+    // Emit vocab generate text target result to specific user
+    public emitVocabGenerateTextTargetResult(userId: string, jobId: string, textSource: string, result: TranslatedTextTargetResult): void {
+        this.server.to(`user-${userId}`).emit('vocab-generate-text-target-result', {
+            jobId,
+            textSource,
+            result,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`Vocab generate text target result sent to user ${userId}`);
     }
 
     // Emit fill-in-blank evaluation progress to specific user

@@ -7,6 +7,7 @@ export enum EReminderType {
     FILL_IN_BLANK_EVALUATION = 'fill-in-blank-evaluation',
     VOCAB_TRANSLATION = 'vocab-translation',
     SUBJECT_GENERATE = 'subject-generate',
+    VOCAB_GENERATE_TEXT_TARGET = 'vocab-generate-text-target',
 }
 
 export enum EReminderTitle {

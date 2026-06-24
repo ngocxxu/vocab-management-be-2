@@ -84,3 +84,10 @@ export interface SubjectGenerateJobData {
     targetLanguageCode: string;
     userId: string;
 }
+
+export interface VocabGenerateTextTargetJobData {
+    textSource: string;
+    sourceLanguageCode: string;
+    targetLanguageCode: string;
+    userId: string;
+}

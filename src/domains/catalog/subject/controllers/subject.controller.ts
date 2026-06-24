@@ -39,7 +39,7 @@ export class SubjectController {
     @Post('generate')
     @HttpCode(HttpStatus.ACCEPTED)
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Roles([UserRole.ADMIN, UserRole.MEMBER])
     @Throttle({ default: { limit: 10, ttl: 60000 } })
     @ApiOperation({ summary: 'Enqueue AI subject suggestion generation — result delivered via socket event subject-generate-result' })
     @ApiResponse({ status: HttpStatus.ACCEPTED, type: GenerateSubjectsJobDto })

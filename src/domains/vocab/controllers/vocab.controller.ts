@@ -1,3 +1,4 @@
+import { VocabGenerateTextTargetProducer } from '@/queues/producers/vocab-generate-text-target.producer';
 import { LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Roles } from '@/shared/decorators';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
@@ -23,11 +24,10 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiQuery, 
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
-import { AiService } from '../../ai/services/ai.service';
 import {
     BulkDeleteInput,
     BulkGetInput,
-    CreateTextTargetInput,
+    GenerateTextTargetJobDto,
     CsvImportQueryDto,
     CsvImportResponseDto,
     DashboardStatisticsDto,
@@ -73,7 +73,7 @@ export class VocabController {
         private readonly vocabService: VocabService,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly vocabRelatedWordService: VocabRelatedWordService,
-        private readonly aiService: AiService,
+        private readonly vocabGenerateTextTargetProducer: VocabGenerateTextTargetProducer,
     ) {}
 
     @Get()
@@ -225,25 +225,25 @@ export class VocabController {
     }
 
     @Post('generate/text-target')
-    @Throttle({ default: { limit: 20, ttl: 60000 } })
+    @HttpCode(HttpStatus.ACCEPTED)
+    @Throttle({ default: { limit: 10, ttl: 60000 } })
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER])
-    @ApiOperation({ summary: 'Generate text target content using AI' })
-    @ApiResponse({ status: HttpStatus.OK, type: CreateTextTargetInput })
-    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input parameters' })
+    @ApiOperation({ summary: 'Enqueue AI text target generation — result delivered via socket event vocab-generate-text-target-result' })
+    @ApiResponse({ status: HttpStatus.ACCEPTED, type: GenerateTextTargetJobDto })
     public async generateTextTarget(
         @Body()
         input: { textSource: string; sourceLanguageCode: string; targetLanguageCode: string },
         @CurrentUser() user: User,
-    ): Promise<CreateTextTargetInput> {
-        if (!input.textSource || !input.sourceLanguageCode || !input.targetLanguageCode) {
-            throw new BadRequestException('textSource, sourceLanguageCode, and targetLanguageCode are required');
-        }
-
-        const result = await this.aiService.translateVocab(input.textSource, input.sourceLanguageCode, input.targetLanguageCode, undefined, user.id);
-
-        this.logger.info(`Generated text target for user ${user.id}, textSource: ${input.textSource}`);
-        return result;
+    ): Promise<GenerateTextTargetJobDto> {
+        const { jobId } = await this.vocabGenerateTextTargetProducer.queueVocabGenerateTextTarget({
+            textSource: input.textSource,
+            sourceLanguageCode: input.sourceLanguageCode,
+            targetLanguageCode: input.targetLanguageCode,
+            userId: user.id,
+        });
+        this.logger.info(`Enqueued vocab generate text target job ${jobId} for user ${user.id}`);
+        return new GenerateTextTargetJobDto(jobId);
     }
 
     @Put(':id')

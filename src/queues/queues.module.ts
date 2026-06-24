@@ -14,6 +14,7 @@ import { MultipleChoiceGenerationProducer } from './producers/multiple-choice-ge
 import { NotificationFcmProducer } from './producers/notification-fcm.producer';
 import { NotificationProducer } from './producers/notification.producer';
 import { SubjectGenerateProducer } from './producers/subject-generate.producer';
+import { VocabGenerateTextTargetProducer } from './producers/vocab-generate-text-target.producer';
 import { VocabTranslationProducer } from './producers/vocab-translation.producer';
 
 const workloadBullModules = WORKLOAD_QUEUE_NAMES.map((name) =>
@@ -50,6 +51,7 @@ const producers = [
     NotificationProducer,
     NotificationFcmProducer,
     SubjectGenerateProducer,
+    VocabGenerateTextTargetProducer,
 ];
 
 @Global()

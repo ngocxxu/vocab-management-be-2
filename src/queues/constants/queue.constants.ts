@@ -13,6 +13,7 @@ export const WORKLOAD_QUEUE_NAMES: EReminderType[] = [
     EReminderType.FILL_IN_BLANK_EVALUATION,
     EReminderType.VOCAB_TRANSLATION,
     EReminderType.SUBJECT_GENERATE,
+    EReminderType.VOCAB_GENERATE_TEXT_TARGET,
 ];
 
 export const JOB_NAMES = {
@@ -22,4 +23,5 @@ export const JOB_NAMES = {
     translateVocab: 'translate-vocab',
     failedJobMirror: 'failed-job',
     generateSubjects: 'generate-subjects',
+    generateTextTarget: 'generate-text-target',
 } as const;
