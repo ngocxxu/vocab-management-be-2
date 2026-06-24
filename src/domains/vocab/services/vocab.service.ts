@@ -424,7 +424,7 @@ export class VocabService {
         const subjectMap = new Map<string, string>();
 
         if (subjectsInCsv.size > 0) {
-            const subjects = await this.vocabRepository.findSubjectsByNames(Array.from(subjectsInCsv), userId);
+            const subjects = await this.vocabRepository.findSubjectsByNames(Array.from(subjectsInCsv), userId, targetLanguageCode);
 
             // Create map: subjectName (lowercase) -> subjectId
             const foundSubjectNames = new Set<string>();
@@ -443,33 +443,64 @@ export class VocabService {
             }
         }
 
+        // Build related words map (union per textSource) and detect conflicts
+        const relatedWordsMap = new Map<string, { synonyms: Set<string>; antonyms: Set<string>; related: Set<string> }>();
+
+        rows.forEach((row: CsvRowData) => {
+            const typedRow = assertCsvRowData(row);
+            const key = typedRow.textSource.toLowerCase();
+
+            let entry = relatedWordsMap.get(key);
+
+            if (!entry) {
+                entry = { synonyms: new Set(), antonyms: new Set(), related: new Set() };
+                relatedWordsMap.set(key, entry);
+            }
+
+            if (typedRow.synonyms) {
+                CsvParserUtil.parseRelatedWords(typedRow.synonyms).forEach((w) => entry.synonyms.add(w.toLowerCase()));
+            }
+            if (typedRow.antonyms) {
+                CsvParserUtil.parseRelatedWords(typedRow.antonyms).forEach((w) => entry.antonyms.add(w.toLowerCase()));
+            }
+            if (typedRow.relatedWords) {
+                CsvParserUtil.parseRelatedWords(typedRow.relatedWords).forEach((w) => entry.related.add(w.toLowerCase()));
+            }
+        });
+
+        const relatedWordErrors: string[] = [];
+        for (const [textSource, relations] of relatedWordsMap) {
+            const conflicts = [...relations.synonyms].filter((w) => relations.antonyms.has(w));
+            if (conflicts.length > 0) {
+                relatedWordErrors.push(`Vocab '${textSource}': [${conflicts.join(', ')}] cannot be both synonym and antonym`);
+            }
+        }
+
         // If there are validation errors, add them to errors array and return early
-        if (wordTypeErrors.length > 0 || subjectErrors.length > 0) {
+        if (wordTypeErrors.length > 0 || subjectErrors.length > 0 || relatedWordErrors.length > 0) {
             const validationErrors: CsvImportErrorDto[] = [];
 
-            // Add word type errors
             wordTypeErrors.forEach((errorMsg) => {
                 validationErrors.push({
-                    row: 0, // 0 indicates validation error
+                    row: 0,
                     error: errorMsg,
-                    data: {
-                        textSource: '',
-                        textTarget: '',
-                        wordType: '',
-                    } as CsvRowDto,
+                    data: { textSource: '', textTarget: '', wordType: '' } as CsvRowDto,
                 });
             });
 
-            // Add subject errors
             subjectErrors.forEach((errorMsg) => {
                 validationErrors.push({
-                    row: 0, // 0 indicates validation error
+                    row: 0,
                     error: errorMsg,
-                    data: {
-                        textSource: '',
-                        textTarget: '',
-                        subjects: '',
-                    } as CsvRowDto,
+                    data: { textSource: '', textTarget: '', subjects: '' } as CsvRowDto,
+                });
+            });
+
+            relatedWordErrors.forEach((errorMsg) => {
+                validationErrors.push({
+                    row: 0,
+                    error: errorMsg,
+                    data: { textSource: '', textTarget: '' } as CsvRowDto,
                 });
             });
 
@@ -537,6 +568,26 @@ export class VocabService {
                     if (outcome.ok) {
                         created += outcome.created;
                         updated += outcome.updated;
+
+                        const relations = relatedWordsMap.get(textSource);
+                        if (relations && (relations.synonyms.size > 0 || relations.antonyms.size > 0 || relations.related.size > 0)) {
+                            const words = [
+                                ...[...relations.synonyms].map((w) => ({ freeText: w, isSynonym: true, isAntonym: false, isRelated: false })),
+                                ...[...relations.antonyms].map((w) => ({ freeText: w, isSynonym: false, isAntonym: true, isRelated: false })),
+                                ...[...relations.related].map((w) => ({ freeText: w, isSynonym: false, isAntonym: false, isRelated: true })),
+                            ];
+
+                            try {
+                                await this.vocabRelatedWordRepository.upsertSymmetricSet(outcome.vocabId, words);
+                            } catch (relatedWordsError: unknown) {
+                                errors.push({
+                                    row: 0,
+                                    error: `Vocab '${textSource}': failed to save related words — ${this.getErrorMessage(relatedWordsError)}`,
+                                    data: { textSource, textTarget: '' } as CsvRowDto,
+                                });
+                            }
+                        }
+
                         return;
                     }
 

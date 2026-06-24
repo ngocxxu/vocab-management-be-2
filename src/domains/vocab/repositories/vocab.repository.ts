@@ -331,10 +331,11 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    public async findSubjectsByNames(names: string[], userId: string): Promise<Array<{ id: string; name: string }>> {
+    public async findSubjectsByNames(names: string[], userId: string, targetLanguageCode: string): Promise<Array<{ id: string; name: string }>> {
         return this.prisma.subject.findMany({
             where: {
                 userId,
+                targetLanguageCode,
                 OR: names.map((name) => ({
                     name: { equals: name, mode: 'insensitive' },
                 })),
@@ -380,7 +381,7 @@ export class VocabRepository extends BaseRepository {
     public async executeCsvImportGroupTransaction(
         params: CsvImportGroupParams,
         transactionOptions: { maxWait: number; timeout: number },
-    ): Promise<{ created: number; updated: number }> {
+    ): Promise<{ created: number; updated: number; vocabId: string }> {
         return this.runInTransaction(async (tx) => this.applyCsvBatchInTransaction(tx, params), transactionOptions);
     }
 
@@ -576,7 +577,7 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    private async applyCsvBatchInTransaction(tx: Prisma.TransactionClient, params: CsvImportGroupParams): Promise<{ created: number; updated: number }> {
+    private async applyCsvBatchInTransaction(tx: Prisma.TransactionClient, params: CsvImportGroupParams): Promise<{ created: number; updated: number; vocabId: string }> {
         const { textSource, textTargetRows, userId, sourceLanguageCode, targetLanguageCode, languageFolderId, wordTypeMap, subjectMap, existingVocabMap } = params;
 
         const mapKey = `${textSource}:${languageFolderId}`;
@@ -650,10 +651,10 @@ export class VocabRepository extends BaseRepository {
                     existingTextTargetKeys.add(normalizedTextTarget);
                 }
             }
-            return { created: 0, updated: 1 };
+            return { created: 0, updated: 1, vocabId: existingVocab.id };
         }
 
-        await tx.vocab.create({
+        const createdVocab = await tx.vocab.create({
             data: {
                 textSource,
                 sourceLanguageCode,
@@ -681,8 +682,9 @@ export class VocabRepository extends BaseRepository {
                     })),
                 },
             },
+            select: { id: true },
         });
-        return { created: 1, updated: 0 };
+        return { created: 1, updated: 0, vocabId: createdVocab.id };
     }
 
     private dedupeCsvImportTextTargets(textTargetsData: CsvImportTextTargetData[]): CsvImportTextTargetData[] {

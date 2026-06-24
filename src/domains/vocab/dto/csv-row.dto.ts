@@ -62,4 +62,19 @@ export class CsvRowDto {
     @IsString()
     @IsOptional()
     public readonly exampleTarget?: string;
+
+    @ApiProperty({ description: 'Synonyms (semicolon-separated)', example: 'hi; hey', required: false })
+    @IsString()
+    @IsOptional()
+    public readonly synonyms?: string;
+
+    @ApiProperty({ description: 'Antonyms (semicolon-separated)', example: 'bye; farewell', required: false })
+    @IsString()
+    @IsOptional()
+    public readonly antonyms?: string;
+
+    @ApiProperty({ description: 'Related words (semicolon-separated)', example: 'greet; salute', required: false })
+    @IsString()
+    @IsOptional()
+    public readonly relatedWords?: string;
 }

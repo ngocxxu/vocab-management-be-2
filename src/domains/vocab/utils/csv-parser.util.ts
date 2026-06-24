@@ -12,6 +12,9 @@ export interface CsvRowData {
     explanationSource?: string;
     explanationTarget?: string;
     subjects?: string;
+    synonyms?: string;
+    antonyms?: string;
+    relatedWords?: string;
     exampleSource?: string;
     exampleTarget?: string;
 }
@@ -52,6 +55,9 @@ export function assertCsvRowData(row: unknown): CsvRowData {
         explanationSource: getStringValue('explanationSource'),
         explanationTarget: getStringValue('explanationTarget'),
         subjects: getStringValue('subjects'),
+        synonyms: getStringValue('synonyms'),
+        antonyms: getStringValue('antonyms'),
+        relatedWords: getStringValue('relatedWords'),
         exampleSource: getStringValue('exampleSource'),
         exampleTarget: getStringValue('exampleTarget'),
     };
@@ -84,6 +90,9 @@ export class CsvParserUtil {
                         explanationSource: row.explanationSource?.trim() || undefined,
                         explanationTarget: row.explanationTarget?.trim() || undefined,
                         subjects: row.subjects?.trim() || undefined,
+                        synonyms: row.synonyms?.trim() || undefined,
+                        antonyms: row.antonyms?.trim() || undefined,
+                        relatedWords: row.relatedWords?.trim() || undefined,
                         exampleSource: row.exampleSource?.trim() || undefined,
                         exampleTarget: row.exampleTarget?.trim() || undefined,
                     };
@@ -125,7 +134,18 @@ export class CsvParserUtil {
         const headers = firstLine.split(',').map((h) => h.trim().toLowerCase());
 
         const requiredHeaders = ['textsource', 'texttarget'];
-        const optionalHeaders = ['wordtype', 'grammar', 'explanationsource', 'explanationtarget', 'subjects', 'examplesource', 'exampletarget'];
+        const optionalHeaders = [
+            'wordtype',
+            'grammar',
+            'explanationsource',
+            'explanationtarget',
+            'subjects',
+            'synonyms',
+            'antonyms',
+            'relatedwords',
+            'examplesource',
+            'exampletarget',
+        ];
 
         // Check if required headers exist
         const hasRequiredHeaders = requiredHeaders.every((header) => headers.includes(header));
@@ -152,9 +172,20 @@ export class CsvParserUtil {
         }
 
         return subjectsString
-            .split(',')
+            .split(';')
             .map((subject) => subject.trim())
             .filter((subject) => subject.length > 0);
+    }
+
+    public static parseRelatedWords(relatedWordsString?: string): string[] {
+        if (!relatedWordsString) {
+            return [];
+        }
+
+        return relatedWordsString
+            .split(';')
+            .map((word) => word.trim())
+            .filter((word) => word.length > 0);
     }
 
     /**
@@ -163,16 +194,32 @@ export class CsvParserUtil {
      * @returns Buffer CSV file buffer
      */
     public static generateCsvBuffer(vocabs: VocabDto[]): Buffer {
-        const headers = ['textSource', 'textTarget', 'wordType', 'grammar', 'explanationSource', 'explanationTarget', 'subjects', 'exampleSource', 'exampleTarget'];
+        const headers = [
+            'textSource',
+            'textTarget',
+            'subjects',
+            'wordType',
+            'grammar',
+            'explanationSource',
+            'explanationTarget',
+            'exampleSource',
+            'exampleTarget',
+            'synonyms',
+            'antonyms',
+            'relatedWords',
+        ];
 
         const rows: string[] = [];
         rows.push(headers.join(','));
 
         for (const vocab of vocabs) {
             const textSource = this.escapeCsvField(vocab.textSource);
+            const synonyms = this.escapeCsvField(vocab.relatedWords.synonyms.map((r) => r.word).join('; '));
+            const antonyms = this.escapeCsvField(vocab.relatedWords.antonyms.map((r) => r.word).join('; '));
+            const relatedWords = this.escapeCsvField(vocab.relatedWords.related.map((r) => r.word).join('; '));
 
             if (!vocab.textTargets || vocab.textTargets.length === 0) {
-                const emptyRow = [textSource, '', '', '', '', '', '', '', ''];
+                const emptyRow = [textSource, '', '', '', '', '', '', '', '', synonyms, antonyms, relatedWords];
                 rows.push(emptyRow.join(','));
                 continue;
             }
@@ -188,21 +235,34 @@ export class CsvParserUtil {
                     textTarget.textTargetSubjects
                         ?.map((tts) => tts.subject?.name || '')
                         .filter(Boolean)
-                        .join(', ') || '';
+                        .join('; ') || '';
 
                 const subjectsEscaped = this.escapeCsvField(subjects);
 
                 const examples = textTarget.vocabExamples || [];
 
                 if (examples.length === 0) {
-                    const row = [textSource, textTargetValue, wordType, grammar, explanationSource, explanationTarget, subjectsEscaped, '', ''];
+                    const row = [textSource, textTargetValue, subjectsEscaped, wordType, grammar, explanationSource, explanationTarget, '', '', synonyms, antonyms, relatedWords];
                     rows.push(row.join(','));
                 } else {
                     for (const example of examples) {
                         const exampleSource = this.escapeCsvField(example?.source || '');
                         const exampleTarget = this.escapeCsvField(example?.target || '');
 
-                        const row = [textSource, textTargetValue, wordType, grammar, explanationSource, explanationTarget, subjectsEscaped, exampleSource, exampleTarget];
+                        const row = [
+                            textSource,
+                            textTargetValue,
+                            subjectsEscaped,
+                            wordType,
+                            grammar,
+                            explanationSource,
+                            explanationTarget,
+                            exampleSource,
+                            exampleTarget,
+                            synonyms,
+                            antonyms,
+                            relatedWords,
+                        ];
 
                         rows.push(row.join(','));
                     }
