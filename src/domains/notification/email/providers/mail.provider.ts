@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
-import type SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { Resend } from 'resend';
 
 export type SendMailInput = {
     from: string;
@@ -11,30 +10,24 @@ export type SendMailInput = {
 
 @Injectable()
 export class MailProvider {
-    private readonly transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
+    private readonly resend: Resend;
     private readonly logger = new Logger(MailProvider.name);
 
     public constructor() {
-        this.transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD,
-            },
+        this.resend = new Resend(process.env.RESEND_API_KEY);
+    }
+
+    public async sendMail(input: SendMailInput): Promise<void> {
+        const { error } = await this.resend.emails.send({
+            from: input.from,
+            to: [input.to],
+            subject: input.subject,
+            html: input.html,
         });
-        void this.verifyConnection();
-    }
 
-    public async verifyConnection(): Promise<void> {
-        try {
-            await this.transporter.verify();
-            this.logger.log('SMTP connection verified successfully');
-        } catch (error) {
-            this.logger.error('SMTP connection failed:', error);
+        if (error) {
+            this.logger.error('Resend send failed:', error);
+            throw new Error(error.message);
         }
-    }
-
-    public async sendMail(input: SendMailInput): Promise<SMTPTransport.SentMessageInfo> {
-        return this.transporter.sendMail(input);
     }
 }

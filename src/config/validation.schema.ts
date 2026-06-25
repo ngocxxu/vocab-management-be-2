@@ -43,8 +43,7 @@ export const validationSchema = Joi.object({
     SUPABASE_KEY: Joi.string().required(),
     SUPABASE_SERVICE_ROLE_KEY: Joi.string().required(),
 
-    EMAIL_USER: Joi.string().required(),
-    EMAIL_PASSWORD: Joi.string().required(),
+    RESEND_API_KEY: Joi.string().required(),
 
     FCM_PROJECT_ID: Joi.string().required(),
     FCM_CLIENT_EMAIL: Joi.string().required(),
