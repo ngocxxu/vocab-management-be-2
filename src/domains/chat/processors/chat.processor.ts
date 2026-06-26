@@ -5,12 +5,14 @@ import { QUEUE_CONFIG } from '@/queues/config/queue.config';
 import { JOB_NAMES } from '@/queues/constants/queue.constants';
 import type { AiChatJobData } from '@/queues/interfaces/job-payloads';
 import { LoggerService, RedisPrefix, RedisService, RedisPubSubService } from '@/shared';
-import { Process, Processor } from '@nestjs/bull';
+import { captureSentryException } from '@/shared/utils/sentry.util';
+import { OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { ChatRole, UserRole } from '@prisma/client';
 import { Job } from 'bullmq';
+import { nanoid } from 'nanoid';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { EReminderType } from '../../reminder/utils';
-import { CHAT_CANCEL_KEY, CHAT_CHANNELS } from '../constants';
+import { CHAT_CANCEL_KEY, CHAT_CHANNELS, CHAT_CONFIRM_TIMEOUT_MS } from '../constants';
 import { ChatMessageRepository } from '../repositories';
 import { McpToolRegistry } from '../services/mcp-tool-registry.service';
 
@@ -54,6 +56,20 @@ export class ChatProcessor {
         } catch (error) {
             this.logger.error(`chat.job.failed userId=${userId} error=${error instanceof Error ? error.message : String(error)} jobId=${String(job.id)}`);
             throw error;
+        }
+    }
+
+    @OnQueueFailed()
+    public async handleJobFailed(job: Job<AiChatJobData>, error: Error): Promise<void> {
+        const { userId } = job.data;
+        const maxAttempts = job.opts?.attempts ?? 3;
+        if (job.attemptsMade >= maxAttempts) {
+            await this.redisPubSub.publish(CHAT_CHANNELS.error(userId), {
+                message: 'AI service error. Please try again later.',
+                retryable: false,
+            });
+            captureSentryException(error, { tags: { userId, jobId: String(job.id) } });
+            this.logger.error(`chat.job.dlq userId=${userId} jobId=${String(job.id)} error=${error.message}`);
         }
     }
 
@@ -133,12 +149,37 @@ Message: ${userMessage}`;
             }
 
             const tool = this.mcpToolRegistry.getToolByName(response.name);
-            await this.redisPubSub.publish(CHAT_CHANNELS.event(userId), { type: 'tool_used', toolName: response.name, label: tool?.description ?? response.name });
             history.push({ role: 'assistant', content: '', toolCalls: [{ id: response.toolCallId, name: response.name, arguments: JSON.stringify(response.params) }] });
 
             const toolStart = Date.now();
             let toolResult: string;
             let toolSuccess = false;
+
+            if (tool?.isWrite) {
+                const requestId = nanoid();
+                await this.redisPubSub.publish(CHAT_CHANNELS.event(userId), {
+                    type: 'confirm_required',
+                    requestId,
+                    action: response.name,
+                    params: response.params,
+                });
+
+                let confirmed = false;
+                try {
+                    const decision = await this.redisPubSub.subscribeOnce(CHAT_CHANNELS.confirm(userId, requestId), CHAT_CONFIRM_TIMEOUT_MS);
+                    confirmed = decision === 'confirmed';
+                } catch {
+                    // timeout → treat as rejected
+                }
+
+                if (!confirmed) {
+                    toolCallsMeta.push({ toolName: response.name, success: false, latencyMs: Date.now() - toolStart });
+                    history.push({ role: 'tool', content: 'User declined', toolCallId: response.toolCallId, toolName: response.name });
+                    continue;
+                }
+            }
+
+            await this.redisPubSub.publish(CHAT_CHANNELS.event(userId), { type: 'tool_used', toolName: response.name, label: tool?.description ?? response.name });
 
             try {
                 if (!tool) throw new Error(`Unknown tool: ${response.name}`);
@@ -159,6 +200,7 @@ Message: ${userMessage}`;
         }
 
         this.logger.warn(`chat.job.exhausted userId=${userId} maxIterations=${maxIterations}`);
+        captureSentryException(new Error('Agentic loop max iterations exhausted'), { tags: { userId } });
         await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, FALLBACK_MESSAGE, toolCallsMeta);
         await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: FALLBACK_MESSAGE });
     }

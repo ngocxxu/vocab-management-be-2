@@ -4,6 +4,8 @@ import { LanguageModule } from '@/domains/catalog/language';
 import { LanguageFolderModule } from '@/domains/catalog/language-folder';
 import { SubjectModule } from '@/domains/catalog/subject';
 import { UserModule } from '@/domains/identity/user';
+import { NotificationModule } from '@/domains/notification';
+import { ReminderModule } from '@/domains/reminder';
 import { VocabModule } from '@/domains/vocab';
 import { VocabTrainerModule } from '@/domains/vocab-trainer';
 import { Module } from '@nestjs/common';
@@ -14,7 +16,7 @@ import { ChatMessageRepository } from './repositories';
 import { ChatService, McpToolRegistry } from './services';
 
 @Module({
-    imports: [AuthModule, AiModule, UserModule, VocabModule, VocabTrainerModule, LanguageModule, LanguageFolderModule, SubjectModule],
+    imports: [AuthModule, AiModule, UserModule, VocabModule, VocabTrainerModule, LanguageModule, LanguageFolderModule, SubjectModule, NotificationModule, ReminderModule],
     controllers: [ChatController],
     providers: [ChatService, ChatMessageRepository, ChatBotGateway, ChatProcessor, McpToolRegistry],
 })

@@ -1,6 +1,9 @@
 import { LanguageRepository } from '@/domains/catalog/language/repositories/language.repository';
 import { LanguageFolderRepository } from '@/domains/catalog/language-folder/repositories/language-folder.repository';
 import { SubjectRepository } from '@/domains/catalog/subject/repositories/subject.repository';
+import { UserRepository } from '@/domains/identity/user/repositories/user.repository';
+import { NotificationService } from '@/domains/notification/services/notification.service';
+import { ReminderService } from '@/domains/reminder/services/reminder.service';
 import { VocabRelatedWordRepository } from '@/domains/vocab/repositories/vocab-related-word.repository';
 import { VocabRepository } from '@/domains/vocab/repositories/vocab.repository';
 import { VocabMasteryService } from '@/domains/vocab/services/vocab-mastery.service';
@@ -33,6 +36,9 @@ export class McpToolRegistry {
         private readonly languageFolderRepository: LanguageFolderRepository,
         private readonly subjectRepository: SubjectRepository,
         private readonly languageRepository: LanguageRepository,
+        private readonly userRepository: UserRepository,
+        private readonly notificationService: NotificationService,
+        private readonly reminderService: ReminderService,
     ) {
         this.tools = this.registerTools();
     }
@@ -213,6 +219,71 @@ export class McpToolRegistry {
                 isWrite: false,
                 timeoutMs: 5000,
                 execute: async () => this.languageRepository.findAll(),
+            },
+            // ── Write Tools: MEMBER ──────────────────────────────────────────
+            {
+                name: 'create_immediate_reminder',
+                description: 'Send an immediate reminder notification to the user',
+                schema: z.object({
+                    message: z.string().min(1).max(500).describe('Reminder message content'),
+                    reminderType: z.string().optional().default('CUSTOM').describe('Type of reminder'),
+                }),
+                minTier: UserRole.MEMBER,
+                isWrite: true,
+                timeoutMs: 8000,
+                execute: async (params, userId) => {
+                    const { message, reminderType } = params as { message: string; reminderType: string };
+                    const user = await this.userRepository.findById(userId);
+                    if (!user?.email) throw new Error('User email not found');
+                    await this.reminderService.sendImmediateReminder(user.email, reminderType, 'custom', { message });
+                    return { success: true, message: 'Reminder sent' };
+                },
+            },
+            {
+                name: 'create_scheduled_reminder',
+                description: 'Schedule a reminder notification for the user at a specific future time',
+                schema: z.object({
+                    message: z.string().min(1).max(500).describe('Reminder message content'),
+                    scheduledAt: z.string().datetime().describe('ISO 8601 datetime to send the reminder'),
+                    reminderType: z.string().optional().default('CUSTOM').describe('Type of reminder'),
+                }),
+                minTier: UserRole.MEMBER,
+                isWrite: true,
+                timeoutMs: 8000,
+                execute: async (params, userId) => {
+                    const { message, scheduledAt, reminderType } = params as { message: string; scheduledAt: string; reminderType: string };
+                    const delayMs = new Date(scheduledAt).getTime() - Date.now();
+                    if (delayMs <= 0) throw new Error('scheduledAt must be in the future');
+                    const user = await this.userRepository.findById(userId);
+                    if (!user?.email) throw new Error('User email not found');
+                    await this.reminderService.scheduleReminder(user.email, reminderType, 'custom', { message }, delayMs);
+                    return { success: true, scheduledAt };
+                },
+            },
+            {
+                name: 'mark_notification_read',
+                description: 'Mark a specific notification as read',
+                schema: z.object({ notificationId: z.string().describe('ID of the notification to mark as read') }),
+                minTier: UserRole.MEMBER,
+                isWrite: true,
+                timeoutMs: 5000,
+                execute: async (params, userId) => {
+                    const { notificationId } = params as { notificationId: string };
+                    await this.notificationService.markAsRead(notificationId, userId);
+                    return { success: true };
+                },
+            },
+            {
+                name: 'mark_all_notifications_read',
+                description: 'Mark all unread notifications as read',
+                schema: z.object({}),
+                minTier: UserRole.MEMBER,
+                isWrite: true,
+                timeoutMs: 5000,
+                execute: async (_params, userId) => {
+                    const count = await this.notificationService.markAllAsRead(userId);
+                    return { success: true, markedCount: count };
+                },
             },
         ];
     }
