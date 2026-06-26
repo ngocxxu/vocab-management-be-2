@@ -1,7 +1,7 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { Injectable } from '@nestjs/common';
-import { ChatMessage, ChatRole } from '@prisma/client';
+import { ChatMessage, ChatRole, Prisma } from '@prisma/client';
 import { CHAT_HISTORY_DEFAULT_LIMIT } from '../constants';
 
 @Injectable()
@@ -10,10 +10,33 @@ export class ChatMessageRepository extends BaseRepository {
         super(prismaService);
     }
 
-    public async create(userId: string, role: ChatRole, content: string): Promise<ChatMessage> {
+    public async create(
+        userId: string,
+        role: ChatRole,
+        content: string,
+        toolCalls?: Array<{ toolName: string; success: boolean; latencyMs: number }>,
+        tokenCount?: number,
+        latencyMs?: number,
+    ): Promise<ChatMessage> {
         return this.prisma.chatMessage.create({
-            data: { userId, role, content },
+            data: {
+                userId,
+                role,
+                content,
+                ...(toolCalls !== undefined && { toolCalls: toolCalls as unknown as Prisma.InputJsonValue }),
+                ...(tokenCount !== undefined && { tokenCount }),
+                ...(latencyMs !== undefined && { latencyMs }),
+            },
         });
+    }
+
+    public async findLastN(userId: string, n: number): Promise<ChatMessage[]> {
+        const rows = await this.prisma.chatMessage.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take: n,
+        });
+        return rows.reverse();
     }
 
     public async findByUserCursor(userId: string, cursor?: string, limit = CHAT_HISTORY_DEFAULT_LIMIT): Promise<ChatMessage[]> {

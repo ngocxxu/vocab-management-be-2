@@ -4,9 +4,10 @@ import axios, { AxiosError } from 'axios';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import FormData from 'form-data';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
+import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
 @Injectable()
-export class OmniRouteProvider implements IAiProvider {
+export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiProvider {
     private static readonly DEFAULT_TEXT_MODEL = 'general-text-combo';
     private static readonly DEFAULT_AUDIO_MODEL = 'deepgram/nova-3';
     private static readonly AUDIO_MODEL_PROVIDER_MAP: Record<string, string> = {
@@ -28,12 +29,13 @@ export class OmniRouteProvider implements IAiProvider {
         'qwen3-asr': 'qwen-code',
     };
 
-    private readonly logger = new Logger(OmniRouteProvider.name);
-    private readonly apiKey: string;
-    private readonly chatCompletionsUrl = 'https://omniroute.ngocquach.com/v1/chat/completions';
+    protected readonly logger = new Logger(OmniRouteProvider.name);
+    protected readonly apiKey: string;
+    protected readonly chatUrl = 'https://omniroute.ngocquach.com/v1/chat/completions';
     private readonly transcriptionsUrl = 'https://omniroute.ngocquach.com/v1/audio/transcriptions';
 
     public constructor(private readonly configService: ConfigService) {
+        super();
         const apiKey = process.env.OMNIROUTE_API_KEY;
         if (!apiKey) {
             throw new Error('OMNIROUTE_API_KEY environment variable is required');
@@ -47,7 +49,7 @@ export class OmniRouteProvider implements IAiProvider {
 
         try {
             const response = await axios.post(
-                this.chatCompletionsUrl,
+                this.chatUrl,
                 {
                     model: modelName,
                     messages: [
@@ -127,6 +129,37 @@ export class OmniRouteProvider implements IAiProvider {
         }
 
         return OmniRouteProvider.DEFAULT_AUDIO_MODEL;
+    }
+
+    protected handleApiError(error: unknown, operation: string, modelName: string): void {
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError<{ error?: { message?: string } }>;
+            const statusCode = axiosError.response?.status;
+            const errorData = axiosError.response?.data;
+
+            let errorMessage = `OmniRoute API ${operation} failed`;
+            if (statusCode === 401) {
+                errorMessage = 'OmniRoute API: Unauthorized. Please check your API key.';
+            } else if (statusCode === 404) {
+                errorMessage = `OmniRoute API: Model "${modelName}" not found or endpoint not available.`;
+            } else if (statusCode === 429) {
+                errorMessage = 'OmniRoute API: Rate limit exceeded. Please try again later.';
+            } else if (statusCode === 400) {
+                errorMessage = `OmniRoute API: Bad request. ${errorData?.error?.message || ''}`;
+            } else if (statusCode) {
+                errorMessage = `OmniRoute API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
+            }
+
+            this.logger.error(errorMessage, {
+                statusCode,
+                errorData,
+                model: modelName,
+                operation,
+            });
+            return;
+        }
+
+        this.logger.error(`OmniRoute API ${operation} error:`, error);
     }
 
     private getFileExtension(mimeType: string): string {
@@ -211,36 +244,5 @@ export class OmniRouteProvider implements IAiProvider {
         const apiMessage = axiosError.response?.data?.error?.message;
 
         return statusCode === 400 && typeof apiMessage === 'string' && apiMessage.toLowerCase().includes('invalid transcription model');
-    }
-
-    private handleApiError(error: unknown, operation: string, modelName: string): void {
-        if (axios.isAxiosError(error)) {
-            const axiosError = error as AxiosError<{ error?: { message?: string } }>;
-            const statusCode = axiosError.response?.status;
-            const errorData = axiosError.response?.data;
-
-            let errorMessage = `OmniRoute API ${operation} failed`;
-            if (statusCode === 401) {
-                errorMessage = 'OmniRoute API: Unauthorized. Please check your API key.';
-            } else if (statusCode === 404) {
-                errorMessage = `OmniRoute API: Model "${modelName}" not found or endpoint not available.`;
-            } else if (statusCode === 429) {
-                errorMessage = 'OmniRoute API: Rate limit exceeded. Please try again later.';
-            } else if (statusCode === 400) {
-                errorMessage = `OmniRoute API: Bad request. ${errorData?.error?.message || ''}`;
-            } else if (statusCode) {
-                errorMessage = `OmniRoute API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
-            }
-
-            this.logger.error(errorMessage, {
-                statusCode,
-                errorData,
-                model: modelName,
-                operation,
-            });
-            return;
-        }
-
-        this.logger.error(`OmniRoute API ${operation} error:`, error);
     }
 }

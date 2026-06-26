@@ -3,14 +3,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 import { AI_CONFIG } from '../utils/const.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
+import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
 @Injectable()
-export class OpenRouterProvider implements IAiProvider {
-    private readonly logger = new Logger(OpenRouterProvider.name);
-    private readonly apiKey: string;
-    private readonly baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
+export class OpenRouterProvider extends OpenAiCompatibleProvider implements IAiProvider {
+    protected readonly logger = new Logger(OpenRouterProvider.name);
+    protected readonly apiKey: string;
+    protected readonly chatUrl = 'https://openrouter.ai/api/v1/chat/completions';
 
     public constructor(private readonly configService: ConfigService) {
+        super();
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY environment variable is required');
@@ -52,7 +54,7 @@ export class OpenRouterProvider implements IAiProvider {
         try {
             // 4. Call API
             const response = await axios.post(
-                this.baseUrl,
+                this.chatUrl,
                 {
                     model: openRouterModelName,
                     messages: [
@@ -101,6 +103,42 @@ export class OpenRouterProvider implements IAiProvider {
         return this.getModelName(userId);
     }
 
+    protected override resolveModelName(modelName: string): string {
+        return this.mapModelNameToOpenRouter(modelName);
+    }
+
+    protected handleApiError(error: unknown, operation: string, modelName: string): void {
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError<{ error?: { message?: string; type?: string } }>;
+            const statusCode = axiosError.response?.status;
+            const errorData = axiosError.response?.data;
+
+            let errorMessage = `OpenRouter API ${operation} failed`;
+            if (statusCode === 401) {
+                errorMessage = 'OpenRouter API: Unauthorized. Please check your API key.';
+            } else if (statusCode === 402) {
+                errorMessage = 'OpenRouter API: Payment required. Please check your account credits.';
+            } else if (statusCode === 404) {
+                errorMessage = `OpenRouter API: Model "${modelName}" not found or endpoint not available.`;
+            } else if (statusCode === 429) {
+                errorMessage = 'OpenRouter API: Rate limit exceeded. Please try again later.';
+            } else if (statusCode === 400) {
+                errorMessage = `OpenRouter API: Bad request. ${errorData?.error?.message || ''}`;
+            } else if (statusCode) {
+                errorMessage = `OpenRouter API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
+            }
+
+            this.logger.error(`${errorMessage}`, {
+                statusCode,
+                errorData,
+                model: modelName,
+                operation,
+            });
+        } else {
+            this.logger.error(`OpenRouter API ${operation} error:`, error);
+        }
+    }
+
     private mapModelNameToOpenRouter(modelName: string): string {
         if (modelName.startsWith('google/') || modelName.includes('/')) {
             return modelName;
@@ -139,37 +177,5 @@ export class OpenRouterProvider implements IAiProvider {
 
         this.logger.warn(`Unknown audio MIME type: ${mimeType}, defaulting to wav`);
         return 'wav';
-    }
-
-    private handleApiError(error: unknown, operation: string, modelName: string): void {
-        if (axios.isAxiosError(error)) {
-            const axiosError = error as AxiosError<{ error?: { message?: string; type?: string } }>;
-            const statusCode = axiosError.response?.status;
-            const errorData = axiosError.response?.data;
-
-            let errorMessage = `OpenRouter API ${operation} failed`;
-            if (statusCode === 401) {
-                errorMessage = 'OpenRouter API: Unauthorized. Please check your API key.';
-            } else if (statusCode === 402) {
-                errorMessage = 'OpenRouter API: Payment required. Please check your account credits.';
-            } else if (statusCode === 404) {
-                errorMessage = `OpenRouter API: Model "${modelName}" not found or endpoint not available.`;
-            } else if (statusCode === 429) {
-                errorMessage = 'OpenRouter API: Rate limit exceeded. Please try again later.';
-            } else if (statusCode === 400) {
-                errorMessage = `OpenRouter API: Bad request. ${errorData?.error?.message || ''}`;
-            } else if (statusCode) {
-                errorMessage = `OpenRouter API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
-            }
-
-            this.logger.error(`${errorMessage}`, {
-                statusCode,
-                errorData,
-                model: modelName,
-                operation,
-            });
-        } else {
-            this.logger.error(`OpenRouter API ${operation} error:`, error);
-        }
     }
 }

@@ -57,6 +57,6 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         MultipleChoiceGenerationProcessor,
         FillInBlankEvaluationProcessor,
     ],
-    exports: [AiService],
+    exports: [AiService, AiProviderFactory],
 })
 export class AiModule {}

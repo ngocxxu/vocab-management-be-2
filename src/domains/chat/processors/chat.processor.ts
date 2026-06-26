@@ -1,32 +1,165 @@
+import { AiProviderFactory } from '@/domains/ai/providers/ai-provider.factory';
+import { ChatHistoryMessage, IAiProvider } from '@/domains/ai/providers/ai-provider.interface';
+import { UserRepository } from '@/domains/identity/user/repositories/user.repository';
 import { QUEUE_CONFIG } from '@/queues/config/queue.config';
 import { JOB_NAMES } from '@/queues/constants/queue.constants';
 import type { AiChatJobData } from '@/queues/interfaces/job-payloads';
-import { LoggerService, RedisPubSubService } from '@/shared';
+import { LoggerService, RedisPrefix, RedisService, RedisPubSubService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
+import { ChatRole, UserRole } from '@prisma/client';
 import { Job } from 'bullmq';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { EReminderType } from '../../reminder/utils';
-import { CHAT_CHANNELS } from '../constants';
+import { CHAT_CANCEL_KEY, CHAT_CHANNELS } from '../constants';
+import { ChatMessageRepository } from '../repositories';
+import { McpToolRegistry } from '../services/mcp-tool-registry.service';
+
+const TIER_MAX_ITERATIONS: Record<string, number> = { ADMIN: 4, MEMBER: 3, GUEST: 2 };
+const FALLBACK_MESSAGE = "I wasn't able to complete this in the allowed steps. Please try rephrasing.";
+const OUT_OF_SCOPE_MESSAGE = 'Sorry, I can only help with app-related questions.';
 
 @Processor(EReminderType.AI_CHAT)
 export class ChatProcessor {
     public constructor(
         private readonly redisPubSub: RedisPubSubService,
+        private readonly redisService: RedisService,
+        private readonly aiProviderFactory: AiProviderFactory,
+        private readonly userRepository: UserRepository,
+        private readonly chatMessageRepository: ChatMessageRepository,
+        private readonly mcpToolRegistry: McpToolRegistry,
         private readonly logger: LoggerService,
     ) {}
 
-    @Process({
-        name: JOB_NAMES.aiChat,
-        concurrency: QUEUE_CONFIG[EReminderType.AI_CHAT].concurrency,
-    })
+    @Process({ name: JOB_NAMES.aiChat, concurrency: QUEUE_CONFIG[EReminderType.AI_CHAT].concurrency })
     public async handleChatJob(job: Job<AiChatJobData>): Promise<void> {
-        const { userId, messageId } = job.data;
-        this.logger.info(`Processing chat job: jobId=${job.id} userId=${userId} messageId=${messageId}`);
+        const { userId, messageId, tier } = job.data;
 
-        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), {
-            content: 'Hello! I am your AI assistant. (stub response)',
-            messageId,
-        });
+        if (await this.isCancelled(userId)) return;
 
-        this.logger.info(`Chat job completed: jobId=${job.id} userId=${userId}`);
+        const startTime = Date.now();
+        this.logger.info(`chat.job.start userId=${userId} tier=${tier} jobId=${String(job.id)}`);
+
+        try {
+            const { provider, systemPrompt, history } = await this.buildContext(userId, tier, messageId);
+            const intent = await this.classifyIntent(provider, userId, history[history.length - 1]?.content ?? '');
+            this.logger.info(`chat.intent userId=${userId} intent=${intent}`);
+
+            if (intent === 'OUT_OF_SCOPE') {
+                await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, OUT_OF_SCOPE_MESSAGE);
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: OUT_OF_SCOPE_MESSAGE });
+                return;
+            }
+
+            await this.runAgenticLoop({ provider, systemPrompt, history, tier, userId, startTime });
+        } catch (error) {
+            this.logger.error(`chat.job.failed userId=${userId} error=${error instanceof Error ? error.message : String(error)} jobId=${String(job.id)}`);
+            throw error;
+        }
+    }
+
+    private async isCancelled(userId: string): Promise<boolean> {
+        const cancelled = await this.redisService.get(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
+        if (!cancelled) return false;
+        await this.redisService.del(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: '' });
+        return true;
+    }
+
+    private async buildContext(userId: string, tier: string, messageId: string): Promise<{ provider: IAiProvider; systemPrompt: string; history: ChatHistoryMessage[] }> {
+        const [provider, user, dbMessages] = await Promise.all([
+            this.aiProviderFactory.getProvider(userId),
+            this.userRepository.findById(userId),
+            this.chatMessageRepository.findLastN(userId, 10),
+        ]);
+
+        const currentMessage = dbMessages.find((m) => m.id === messageId);
+        if (!currentMessage) throw new Error(`Chat message ${messageId} not found for userId ${userId}`);
+
+        const userContext = user ? `Name: ${user.firstName} ${user.lastName}, Tier: ${user.role}` : `Tier: ${tier}`;
+        const systemPrompt = `You are an AI assistant inside a vocabulary learning app.
+You ONLY answer questions related to: vocabulary, learning progress, folders, trainer sessions, reminders, and features of this application.
+If the user asks about anything unrelated to the app, politely refuse.
+User context: ${userContext}`;
+
+        const history: ChatHistoryMessage[] = dbMessages
+            .filter((m) => m.id !== messageId)
+            .map((m) => ({ role: m.role === ChatRole.USER ? ('user' as const) : ('assistant' as const), content: m.content }));
+        history.push({ role: 'user', content: currentMessage.content });
+
+        return { provider, systemPrompt, history };
+    }
+
+    private async classifyIntent(provider: IAiProvider, userId: string, userMessage: string): Promise<string> {
+        const intentPrompt = `Classify the intent. Reply with exactly APP or OUT_OF_SCOPE.
+APP = vocabulary, learning progress, folders, trainer sessions, reminders, or features of this application.
+OUT_OF_SCOPE = anything else (general knowledge, coding, news, etc).
+Message: ${userMessage}`;
+        try {
+            const result = await provider.generateContent(intentPrompt, userId);
+            return result.trim().toUpperCase().includes('OUT_OF_SCOPE') ? 'OUT_OF_SCOPE' : 'APP';
+        } catch {
+            return 'APP'; // fail open
+        }
+    }
+
+    private async runAgenticLoop(ctx: {
+        provider: IAiProvider;
+        systemPrompt: string;
+        history: ChatHistoryMessage[];
+        tier: string;
+        userId: string;
+        startTime: number;
+    }): Promise<void> {
+        const { provider, systemPrompt, history, tier, userId, startTime } = ctx;
+        const tierRole = Object.values(UserRole).includes(tier as UserRole) ? (tier as UserRole) : UserRole.GUEST;
+        const toolDeclarations = this.mcpToolRegistry.getToolsForTier(tierRole).map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: zodToJsonSchema(t.schema as never, { $refStrategy: 'none' }) as Record<string, unknown>,
+        }));
+
+        const maxIterations = TIER_MAX_ITERATIONS[tier] ?? 2;
+        const toolCallsMeta: Array<{ toolName: string; success: boolean; latencyMs: number }> = [];
+
+        for (let iteration = 0; iteration < maxIterations; iteration++) {
+            const response = await provider.chat({ systemPrompt, history, tools: toolDeclarations });
+
+            if (response.type === 'text') {
+                const latencyMs = Date.now() - startTime;
+                await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, response.content, toolCallsMeta, response.tokenCount, latencyMs);
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: response.content });
+                this.logger.info(`chat.job.done userId=${userId} tokens=${response.tokenCount ?? 0} latencyMs=${latencyMs} tools=${toolCallsMeta.length} iter=${iteration + 1}`);
+                return;
+            }
+
+            const tool = this.mcpToolRegistry.getToolByName(response.name);
+            await this.redisPubSub.publish(CHAT_CHANNELS.event(userId), { type: 'tool_used', toolName: response.name, label: tool?.description ?? response.name });
+            history.push({ role: 'assistant', content: '', toolCalls: [{ id: response.toolCallId, name: response.name, arguments: JSON.stringify(response.params) }] });
+
+            const toolStart = Date.now();
+            let toolResult: string;
+            let toolSuccess = false;
+
+            try {
+                if (!tool) throw new Error(`Unknown tool: ${response.name}`);
+                const rawResult = await Promise.race([
+                    tool.execute(tool.schema.parse(response.params), userId),
+                    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Tool timed out')), tool.timeoutMs)),
+                ]);
+                toolResult = JSON.stringify(rawResult).substring(0, 2000);
+                toolSuccess = true;
+                this.logger.info(`chat.tool.called toolName=${response.name} success=true latencyMs=${Date.now() - toolStart} userId=${userId}`);
+            } catch (err) {
+                toolResult = err instanceof Error ? err.message : 'Tool execution failed';
+                this.logger.warn(`chat.tool.error toolName=${response.name} error=${toolResult} userId=${userId}`);
+            }
+
+            toolCallsMeta.push({ toolName: response.name, success: toolSuccess, latencyMs: Date.now() - toolStart });
+            history.push({ role: 'tool', content: toolResult, toolCallId: response.toolCallId, toolName: response.name });
+        }
+
+        this.logger.warn(`chat.job.exhausted userId=${userId} maxIterations=${maxIterations}`);
+        await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, FALLBACK_MESSAGE, toolCallsMeta);
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: FALLBACK_MESSAGE });
     }
 }
