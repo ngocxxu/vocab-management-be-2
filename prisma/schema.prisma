@@ -391,6 +391,7 @@ model User {
   configs                Config[]
   vocabMasteries         VocabMastery[]
   reminderSchedules      ReminderSchedule[]
+  chatMessages           ChatMessage[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])
@@ -567,4 +568,25 @@ model JobFailure {
   @@unique([queueName, jobId])
   @@index([queueName, failedAt])
   @@map("job_failure")
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid()) @map("id")
+  userId     String   @map("user_id")
+  role       ChatRole @map("role")
+  content    String   @db.Text @map("content")
+  toolCalls  Json?    @map("tool_calls")
+  tokenCount Int?     @map("token_count")
+  latencyMs  Int?     @map("latency_ms")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Asc)])
+  @@map("chat_messages")
 }

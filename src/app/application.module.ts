@@ -7,6 +7,7 @@ import { LanguageFolderModule } from '@/domains/catalog/language-folder';
 import { PlanModule } from '@/domains/catalog/plan';
 import { SubjectModule } from '@/domains/catalog/subject';
 import { WordTypeModule } from '@/domains/catalog/word-type';
+import { ChatModule } from '@/domains/chat';
 import { AuthModule as IdentityAuthModule } from '@/domains/identity/auth';
 import { UserModule } from '@/domains/identity/user';
 import { CloudinaryModule } from '@/domains/media/cloudinary';
@@ -67,6 +68,7 @@ import { envConfigLoaders, validationSchema } from '../config';
         IdentityAuthModule,
         ConfigModule,
         CloudinaryModule,
+        ChatModule,
         AiModule,
         UserModule,
         LanguageModule,

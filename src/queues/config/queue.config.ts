@@ -91,6 +91,15 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
             removeOnFail: 500,
         },
     },
+    [EReminderType.AI_CHAT]: {
+        concurrency: 5,
+        defaultJobOptions: {
+            attempts: 2,
+            backoff: exponentialBackoff,
+            removeOnComplete: 100,
+            removeOnFail: 500,
+        },
+    },
 };
 
 export const DEAD_LETTER_QUEUE_DEFAULT_OPTIONS: JobsOptions = {

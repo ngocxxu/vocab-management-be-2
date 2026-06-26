@@ -91,3 +91,9 @@ export interface VocabGenerateTextTargetJobData {
     targetLanguageCode: string;
     userId: string;
 }
+
+export interface AiChatJobData {
+    userId: string;
+    messageId: string;
+    tier: string;
+}
