@@ -1,12 +1,13 @@
 import type { TranslatedTextTargetResult } from '../../../ai/services/ai-translation.service';
 import type { GenerateSubjectsDto } from '../../../catalog/subject/dto';
+import { getWsCorsOptions } from '@/shared';
 import { Logger } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { MultipleChoiceQuestion } from '../../../ai/utils/type.util';
 
 @WebSocketGateway({
-    cors: { origin: '*', credentials: true },
+    cors: getWsCorsOptions(),
     namespace: '/notification',
 })
 export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {

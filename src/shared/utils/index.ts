@@ -4,3 +4,4 @@ export * from './query-builder.util';
 export * from './redis-key.util';
 export * from './jwt.util';
 export * from './sentry.util';
+export * from './ws-cors.util';

@@ -1,5 +1,5 @@
 import { AuthTokenService } from '@/auth';
-import { LoggerService, RedisPrefix, RedisService, RedisPubSubService } from '@/shared';
+import { LoggerService, RedisPrefix, RedisService, RedisPubSubService, getWsCorsOptions } from '@/shared';
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { plainToInstance } from 'class-transformer';
@@ -20,7 +20,7 @@ interface ConnectedUser {
 }
 
 @WebSocketGateway({
-    cors: { origin: '*', credentials: true },
+    cors: getWsCorsOptions(),
     namespace: '/chat-bot',
 })
 export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
