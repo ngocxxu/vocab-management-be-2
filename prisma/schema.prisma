@@ -580,7 +580,7 @@ model ChatMessage {
   id         String   @id @default(cuid()) @map("id")
   userId     String   @map("user_id")
   role       ChatRole @map("role")
-  content    String   @db.Text @map("content")
+  message    String   @db.Text @map("message")
   toolCalls  Json?    @map("tool_calls")
   tokenCount Int?     @map("token_count")
   latencyMs  Int?     @map("latency_ms")

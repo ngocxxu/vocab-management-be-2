@@ -18,7 +18,7 @@ export abstract class OpenAiCompatibleProvider {
             const response = await axios.post<{
                 choices: Array<{ message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }>;
                 usage?: { total_tokens?: number };
-            }>(this.chatUrl, body, { headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' } });
+            }>(this.chatUrl, body, { headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' }, signal: params.signal });
             const msg = response.data.choices[0]?.message;
             if (msg?.tool_calls?.length) {
                 const tc = msg.tool_calls[0];

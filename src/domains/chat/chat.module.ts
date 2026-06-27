@@ -13,11 +13,11 @@ import { ChatController } from './controllers';
 import { ChatBotGateway } from './gateway/chat-bot.gateway';
 import { ChatProcessor } from './processors/chat.processor';
 import { ChatMessageRepository } from './repositories';
-import { ChatService, McpToolRegistry } from './services';
+import { AbortControllerRegistry, ChatService, McpToolRegistry } from './services';
 
 @Module({
     imports: [AuthModule, AiModule, UserModule, VocabModule, VocabTrainerModule, LanguageModule, LanguageFolderModule, SubjectModule, NotificationModule, ReminderModule],
     controllers: [ChatController],
-    providers: [ChatService, ChatMessageRepository, ChatBotGateway, ChatProcessor, McpToolRegistry],
+    providers: [ChatService, ChatMessageRepository, ChatBotGateway, ChatProcessor, McpToolRegistry, AbortControllerRegistry],
 })
 export class ChatModule {}

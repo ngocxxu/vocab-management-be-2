@@ -17,6 +17,7 @@ export class ChatService {
     ) {}
 
     public async saveAndEnqueue(userId: string, content: string, tier: string): Promise<string> {
+        await this.redisService.del(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
         const message = await this.chatMessageRepository.create(userId, ChatRole.USER, content);
         const { jobId } = await this.aiChatProducer.addChatJob({ userId, messageId: message.id, tier });
         this.logger.info(`Chat job enqueued: jobId=${jobId} userId=${userId} messageId=${message.id}`);
@@ -26,18 +27,20 @@ export class ChatService {
     public async getHistory(userId: string, cursor?: string, limit?: number): Promise<{ items: ChatMessageDto[]; nextCursor: string | null }> {
         const take = Math.min(limit ?? CHAT_HISTORY_DEFAULT_LIMIT, CHAT_HISTORY_MAX_LIMIT);
         const messages = await this.chatMessageRepository.findByUserCursor(userId, cursor, take);
-        const items = messages.map((m) => new ChatMessageDto(m));
-        const lastMessage = messages[messages.length - 1];
-        const nextCursor = messages.length === take && lastMessage ? lastMessage.createdAt.toISOString() : null;
+        const oldestMessage = messages[messages.length - 1];
+        const nextCursor = messages.length === take && oldestMessage ? oldestMessage.createdAt.toISOString() : null;
+        const items = messages.reverse().map((m) => new ChatMessageDto(m));
         return { items, nextCursor };
     }
 
-    public async ensureGreeting(userId: string): Promise<void> {
+    public async ensureGreeting(userId: string): Promise<ChatMessageDto | null> {
         const existing = await this.chatMessageRepository.findByUserCursor(userId, undefined, 1);
         if (existing.length === 0) {
-            await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, CHAT_GREETING_MESSAGE);
+            const message = await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, CHAT_GREETING_MESSAGE);
             this.logger.info(`Greeting created for userId=${userId}`);
+            return new ChatMessageDto(message);
         }
+        return null;
     }
 
     public async getUnreadCount(userId: string): Promise<{ unreadCount: number }> {

@@ -14,11 +14,13 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { EReminderType } from '../../reminder/utils';
 import { CHAT_CANCEL_KEY, CHAT_CHANNELS, CHAT_CONFIRM_TIMEOUT_MS } from '../constants';
 import { ChatMessageRepository } from '../repositories';
+import { AbortControllerRegistry } from '../services/abort-controller-registry.service';
 import { McpToolRegistry } from '../services/mcp-tool-registry.service';
 
 const TIER_MAX_ITERATIONS: Record<string, number> = { ADMIN: 4, MEMBER: 3, GUEST: 2 };
 const FALLBACK_MESSAGE = "I wasn't able to complete this in the allowed steps. Please try rephrasing.";
 const OUT_OF_SCOPE_MESSAGE = 'Sorry, I can only help with app-related questions.';
+const CANCELLED_MESSAGE = 'Generation cancelled.';
 
 @Processor(EReminderType.AI_CHAT)
 export class ChatProcessor {
@@ -29,6 +31,7 @@ export class ChatProcessor {
         private readonly userRepository: UserRepository,
         private readonly chatMessageRepository: ChatMessageRepository,
         private readonly mcpToolRegistry: McpToolRegistry,
+        private readonly abortRegistry: AbortControllerRegistry,
         private readonly logger: LoggerService,
     ) {}
 
@@ -38,12 +41,13 @@ export class ChatProcessor {
 
         if (await this.isCancelled(userId)) return;
 
+        const signal = this.abortRegistry.create(userId);
         const startTime = Date.now();
         this.logger.info(`chat.job.start userId=${userId} tier=${tier} jobId=${String(job.id)}`);
 
         try {
             const { provider, systemPrompt, history } = await this.buildContext(userId, tier, messageId);
-            const intent = await this.classifyIntent(provider, userId, history[history.length - 1]?.content ?? '');
+            const intent = await this.classifyIntent(provider, userId, history[history.length - 1]?.content ?? '', signal);
             this.logger.info(`chat.intent userId=${userId} intent=${intent}`);
 
             if (intent === 'OUT_OF_SCOPE') {
@@ -52,10 +56,17 @@ export class ChatProcessor {
                 return;
             }
 
-            await this.runAgenticLoop({ provider, systemPrompt, history, tier, userId, startTime });
+            await this.runAgenticLoop({ provider, systemPrompt, history, tier, userId, startTime, signal });
         } catch (error) {
+            if ((error as { code?: string })?.code === 'ERR_CANCELED' || (error instanceof Error && error.name === 'CanceledError')) {
+                this.logger.info(`chat.job.aborted userId=${userId} jobId=${String(job.id)}`);
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: CANCELLED_MESSAGE });
+                return;
+            }
             this.logger.error(`chat.job.failed userId=${userId} error=${error instanceof Error ? error.message : String(error)} jobId=${String(job.id)}`);
             throw error;
+        } finally {
+            this.abortRegistry.delete(userId);
         }
     }
 
@@ -77,7 +88,7 @@ export class ChatProcessor {
         const cancelled = await this.redisService.get(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
         if (!cancelled) return false;
         await this.redisService.del(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
-        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: '' });
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: CANCELLED_MESSAGE });
         return true;
     }
 
@@ -99,22 +110,23 @@ User context: ${userContext}`;
 
         const history: ChatHistoryMessage[] = dbMessages
             .filter((m) => m.id !== messageId)
-            .map((m) => ({ role: m.role === ChatRole.USER ? ('user' as const) : ('assistant' as const), content: m.content }));
-        history.push({ role: 'user', content: currentMessage.content });
+            .map((m) => ({ role: m.role === ChatRole.USER ? ('user' as const) : ('assistant' as const), content: m.message }));
+        history.push({ role: 'user', content: currentMessage.message });
 
         return { provider, systemPrompt, history };
     }
 
-    private async classifyIntent(provider: IAiProvider, userId: string, userMessage: string): Promise<string> {
+    private async classifyIntent(provider: IAiProvider, userId: string, userMessage: string, signal?: AbortSignal): Promise<string> {
         const intentPrompt = `Classify the intent. Reply with exactly APP or OUT_OF_SCOPE.
-APP = vocabulary, learning progress, folders, trainer sessions, reminders, or features of this application.
-OUT_OF_SCOPE = anything else (general knowledge, coding, news, etc).
+APP = vocabulary, learning progress, folders, trainer sessions, reminders, features of this application, greetings, or general conversational messages.
+OUT_OF_SCOPE = unrelated topics (general knowledge, coding, news, politics, etc).
 Message: ${userMessage}`;
         try {
-            const result = await provider.generateContent(intentPrompt, userId);
+            const result = await provider.generateContent(intentPrompt, userId, { signal });
             return result.trim().toUpperCase().includes('OUT_OF_SCOPE') ? 'OUT_OF_SCOPE' : 'APP';
-        } catch {
-            return 'APP'; // fail open
+        } catch (error) {
+            if ((error as { code?: string })?.code === 'ERR_CANCELED' || (error instanceof Error && error.name === 'CanceledError')) throw error;
+            return 'APP'; // fail open on non-abort errors
         }
     }
 
@@ -125,8 +137,9 @@ Message: ${userMessage}`;
         tier: string;
         userId: string;
         startTime: number;
+        signal?: AbortSignal;
     }): Promise<void> {
-        const { provider, systemPrompt, history, tier, userId, startTime } = ctx;
+        const { provider, systemPrompt, history, tier, userId, startTime, signal } = ctx;
         const tierRole = Object.values(UserRole).includes(tier as UserRole) ? (tier as UserRole) : UserRole.GUEST;
         const toolDeclarations = this.mcpToolRegistry.getToolsForTier(tierRole).map((t) => ({
             name: t.name,
@@ -138,7 +151,8 @@ Message: ${userMessage}`;
         const toolCallsMeta: Array<{ toolName: string; success: boolean; latencyMs: number }> = [];
 
         for (let iteration = 0; iteration < maxIterations; iteration++) {
-            const response = await provider.chat({ systemPrompt, history, tools: toolDeclarations });
+            if (await this.isCancelled(userId)) return;
+            const response = await provider.chat({ systemPrompt, history, tools: toolDeclarations, signal });
 
             if (response.type === 'text') {
                 const latencyMs = Date.now() - startTime;

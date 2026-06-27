@@ -13,7 +13,7 @@ export class ChatMessageRepository extends BaseRepository {
     public async create(
         userId: string,
         role: ChatRole,
-        content: string,
+        message: string,
         toolCalls?: Array<{ toolName: string; success: boolean; latencyMs: number }>,
         tokenCount?: number,
         latencyMs?: number,
@@ -22,7 +22,7 @@ export class ChatMessageRepository extends BaseRepository {
             data: {
                 userId,
                 role,
-                content,
+                message,
                 ...(toolCalls !== undefined && { toolCalls: toolCalls as unknown as Prisma.InputJsonValue }),
                 ...(tokenCount !== undefined && { tokenCount }),
                 ...(latencyMs !== undefined && { latencyMs }),

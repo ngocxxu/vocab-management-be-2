@@ -1,4 +1,4 @@
-import { AuthTokenService } from '@/auth';
+import { WsAuthService } from '@/auth';
 import { LoggerService, RedisPrefix, RedisService, RedisPubSubService, getWsCorsOptions } from '@/shared';
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
@@ -7,7 +7,7 @@ import { validate } from 'class-validator';
 import { Server, Socket } from 'socket.io';
 import { CHAT_CANCEL_KEY, CHAT_CANCEL_TTL_SECONDS, CHAT_CHANNELS, CHAT_RATE_LIMITS, CHAT_RATE_LIMIT_WINDOW_SECONDS } from '../constants';
 import { SendMessageDto } from '../dto';
-import { ChatService } from '../services';
+import { AbortControllerRegistry, ChatService } from '../services';
 
 interface ConnectedUser {
     userId: string;
@@ -25,16 +25,17 @@ interface ConnectedUser {
 })
 export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
-    public server: Server;
+    public server!: Server;
 
     private readonly logger = new Logger(ChatBotGateway.name);
     private readonly connectedUsers = new Map<string, ConnectedUser>();
 
     public constructor(
         private readonly chatService: ChatService,
-        private readonly authTokenService: AuthTokenService,
+        private readonly wsAuthService: WsAuthService,
         private readonly redisPubSub: RedisPubSubService,
         private readonly redisService: RedisService,
+        private readonly abortRegistry: AbortControllerRegistry,
         private readonly loggerService: LoggerService,
     ) {}
 
@@ -59,9 +60,12 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
         }
 
         try {
-            const messageId = await this.chatService.saveAndEnqueue(user.userId, dto.content, user.tier);
+            const messageId = await this.chatService.saveAndEnqueue(user.userId, dto.message, user.tier);
             client.emit('message_queued', { messageId });
-        } catch {
+        } catch (err) {
+            this.logger.error(
+                `[DEBUG] saveAndEnqueue failed: userId=${user.userId} error=${err instanceof Error ? err.message : String(err)} stack=${err instanceof Error ? err.stack : ''}`,
+            );
             client.emit('ai_error', { message: 'Failed to queue request', retryable: true, code: 'ENQUEUE_FAILED' });
         }
     }
@@ -70,6 +74,7 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
     public async handleCancelGeneration(@ConnectedSocket() client: Socket): Promise<void> {
         const user = this.connectedUsers.get(client.id);
         if (!user) return;
+        this.abortRegistry.abort(user.userId);
         await this.redisService.set(RedisPrefix.CHAT, CHAT_CANCEL_KEY(user.userId), '1', CHAT_CANCEL_TTL_SECONDS);
         this.loggerService.info(`Chat cancel requested: userId=${user.userId}`);
     }
@@ -98,15 +103,17 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     public async handleConnection(client: Socket): Promise<void> {
+        let authUser: Awaited<ReturnType<typeof this.wsAuthService.authenticateSocket>>;
         try {
-            const token = this.extractToken(client);
-            if (!token) {
-                client.emit('ai_error', { message: 'Missing auth token', retryable: false, code: 'MISSING_TOKEN' });
-                client.disconnect();
-                return;
-            }
+            authUser = await this.wsAuthService.authenticateSocket(client);
+        } catch (err) {
+            this.logger.warn(`ChatBot auth rejected: ${err instanceof Error ? err.message : String(err)}`);
+            client.emit('ai_error', { message: 'Authentication failed', retryable: false, code: 'AUTH_FAILED' });
+            client.disconnect();
+            return;
+        }
 
-            const authUser = await this.authTokenService.resolveAuthUser(token, 'combined');
+        try {
             const tier = authUser.roles[0] ?? 'GUEST';
 
             const doneHandler = (msg: string): void => {
@@ -151,11 +158,21 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
             });
 
             client.data = { userId: authUser.id, tier } as Record<string, unknown>;
-            await this.chatService.ensureGreeting(authUser.id);
             this.loggerService.info(`ChatBot client connected: socketId=${client.id} userId=${authUser.id}`);
-        } catch {
-            client.emit('ai_error', { message: 'Authentication failed', retryable: false, code: 'AUTH_FAILED' });
+        } catch (err) {
+            this.logger.warn(`ChatBot setup failed for userId=${authUser.id}: ${err instanceof Error ? err.message : String(err)}`);
+            client.emit('ai_error', { message: 'Connection setup failed', retryable: true, code: 'SETUP_FAILED' });
             client.disconnect();
+            return;
+        }
+
+        try {
+            const greeting = await this.chatService.ensureGreeting(authUser.id);
+            if (greeting) {
+                client.emit('ai_done', { message: greeting });
+            }
+        } catch (err) {
+            this.logger.warn(`ChatBot ensureGreeting failed for userId=${authUser.id}: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 
@@ -165,6 +182,7 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
             this.redisPubSub.unsubscribe(CHAT_CHANNELS.done(user.userId), user.handlers.done);
             this.redisPubSub.unsubscribe(CHAT_CHANNELS.error(user.userId), user.handlers.error);
             this.redisPubSub.unsubscribe(CHAT_CHANNELS.event(user.userId), user.handlers.event);
+            this.abortRegistry.delete(user.userId);
             this.connectedUsers.delete(client.id);
             this.loggerService.info(`ChatBot client disconnected: socketId=${client.id} userId=${user.userId}`);
         }
@@ -175,17 +193,5 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
         const count = await this.redisService.client.incr(key);
         if (count === 1) await this.redisService.client.expire(key, CHAT_RATE_LIMIT_WINDOW_SECONDS);
         return count <= (CHAT_RATE_LIMITS[tier] ?? CHAT_RATE_LIMITS.GUEST);
-    }
-
-    private extractToken(client: Socket): string | null {
-        const authHeader = client.handshake.headers.authorization;
-        if (authHeader?.startsWith('Bearer ')) {
-            return authHeader.slice(7);
-        }
-        const authData = client.handshake.auth as Record<string, unknown>;
-        if (typeof authData?.token === 'string') {
-            return authData.token;
-        }
-        return null;
     }
 }

@@ -7,5 +7,5 @@ export class SendMessageDto {
     @IsString()
     @IsNotEmpty()
     @MaxLength(CHAT_MAX_MESSAGE_LENGTH)
-    public readonly content: string;
+    public readonly message: string;
 }

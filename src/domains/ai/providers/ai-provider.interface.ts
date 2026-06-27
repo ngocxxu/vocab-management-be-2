@@ -1,6 +1,7 @@
 export interface GenerateContentOptions {
     audioBuffer?: Buffer;
     audioMimeType?: string;
+    signal?: AbortSignal;
 }
 
 export interface ChatHistoryMessage {
@@ -21,6 +22,7 @@ export interface ChatParams {
     systemPrompt: string;
     history: ChatHistoryMessage[];
     tools: McpToolDeclaration[];
+    signal?: AbortSignal;
 }
 
 export type ChatResponse = { type: 'text'; content: string; tokenCount?: number } | { type: 'tool_call'; name: string; params: unknown; toolCallId: string };

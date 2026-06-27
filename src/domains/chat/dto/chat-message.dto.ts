@@ -9,7 +9,7 @@ export class ChatMessageDto {
     public readonly role: ChatRole;
 
     @ApiProperty()
-    public readonly content: string;
+    public readonly message: string;
 
     @ApiProperty({ nullable: true })
     public readonly toolCalls: unknown;
@@ -20,7 +20,7 @@ export class ChatMessageDto {
     public constructor(entity: ChatMessage) {
         this.id = entity.id;
         this.role = entity.role;
-        this.content = entity.content;
+        this.message = entity.message;
         this.toolCalls = entity.toolCalls ?? null;
         this.createdAt = entity.createdAt.toISOString();
     }

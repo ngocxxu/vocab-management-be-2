@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import FormData from 'form-data';
-import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
+import { ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
 @Injectable()
@@ -43,8 +43,15 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
         this.apiKey = apiKey;
     }
 
+    public override async chat(params: ChatParams): Promise<ChatResponse> {
+        const response = await super.chat(params);
+        if (response.type === 'text') {
+            return { ...response, content: this.stripOmniModelTag(response.content) };
+        }
+        return response;
+    }
+
     public async generateContent(prompt: string, userId?: string, options?: GenerateContentOptions): Promise<string> {
-        void options;
         const modelName = await this.getModelName(userId);
 
         try {
@@ -64,6 +71,7 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
                         Authorization: `Bearer ${this.apiKey}`,
                         'Content-Type': 'application/json',
                     },
+                    signal: options?.signal,
                 },
             );
 
@@ -73,7 +81,7 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
                 throw new Error('No content received from OmniRoute API');
             }
 
-            return content;
+            return this.stripOmniModelTag(content);
         } catch (error) {
             this.handleApiError(error, 'generateContent', modelName);
             throw error;
@@ -160,6 +168,10 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
         }
 
         this.logger.error(`OmniRoute API ${operation} error:`, error);
+    }
+
+    private stripOmniModelTag(content: string): string {
+        return content.replace(/<omniModel>[^<]*<\/omniModel>/g, '').trimEnd();
     }
 
     private getFileExtension(mimeType: string): string {
