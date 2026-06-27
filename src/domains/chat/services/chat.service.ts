@@ -1,8 +1,8 @@
 import { AiChatProducer } from '@/queues/producers/ai-chat.producer';
-import { LoggerService, RedisPrefix, RedisService } from '@/shared';
+import { LoggerService, PrismaService, RedisPrefix, RedisService } from '@/shared';
 import { Injectable } from '@nestjs/common';
 import { ChatRole } from '@prisma/client';
-import { CHAT_CANCEL_KEY, CHAT_CANCEL_TTL_SECONDS, CHAT_HISTORY_DEFAULT_LIMIT, CHAT_HISTORY_MAX_LIMIT } from '../constants';
+import { CHAT_CANCEL_KEY, CHAT_CANCEL_TTL_SECONDS, CHAT_GREETING_MESSAGE, CHAT_HISTORY_DEFAULT_LIMIT, CHAT_HISTORY_MAX_LIMIT } from '../constants';
 import { ChatMessageDto } from '../dto';
 import { ChatMessageRepository } from '../repositories';
 
@@ -12,6 +12,7 @@ export class ChatService {
         private readonly chatMessageRepository: ChatMessageRepository,
         private readonly aiChatProducer: AiChatProducer,
         private readonly redisService: RedisService,
+        private readonly prisma: PrismaService,
         private readonly logger: LoggerService,
     ) {}
 
@@ -29,6 +30,24 @@ export class ChatService {
         const lastMessage = messages[messages.length - 1];
         const nextCursor = messages.length === take && lastMessage ? lastMessage.createdAt.toISOString() : null;
         return { items, nextCursor };
+    }
+
+    public async ensureGreeting(userId: string): Promise<void> {
+        const existing = await this.chatMessageRepository.findByUserCursor(userId, undefined, 1);
+        if (existing.length === 0) {
+            await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, CHAT_GREETING_MESSAGE);
+            this.logger.info(`Greeting created for userId=${userId}`);
+        }
+    }
+
+    public async getUnreadCount(userId: string): Promise<{ unreadCount: number }> {
+        const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { chatLastReadAt: true } });
+        const unreadCount = await this.chatMessageRepository.countUnread(userId, user?.chatLastReadAt ?? null);
+        return { unreadCount };
+    }
+
+    public async markAsRead(userId: string): Promise<void> {
+        await this.chatMessageRepository.markAllRead(userId);
     }
 
     public async deleteHistory(userId: string): Promise<void> {

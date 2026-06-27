@@ -11,6 +11,8 @@ export const CHAT_MAX_MESSAGE_LENGTH = 300;
 export const CHAT_HISTORY_DEFAULT_LIMIT = 10;
 export const CHAT_HISTORY_MAX_LIMIT = 50;
 
+export const CHAT_GREETING_MESSAGE = 'Hi! How can I help you today?';
+
 export const CHAT_RATE_LIMITS: Record<string, number> = { ADMIN: 100, MEMBER: 30, GUEST: 10 };
 export const CHAT_RATE_LIMIT_WINDOW_SECONDS = 60;
 export const CHAT_CONFIRM_TIMEOUT_MS = 30_000;

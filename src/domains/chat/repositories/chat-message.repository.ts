@@ -50,6 +50,23 @@ export class ChatMessageRepository extends BaseRepository {
         });
     }
 
+    public async countUnread(userId: string, since: Date | null): Promise<number> {
+        return this.prisma.chatMessage.count({
+            where: {
+                userId,
+                role: ChatRole.ASSISTANT,
+                ...(since ? { createdAt: { gt: since } } : {}),
+            },
+        });
+    }
+
+    public async markAllRead(userId: string): Promise<void> {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { chatLastReadAt: new Date() },
+        });
+    }
+
     public async deleteAllByUser(userId: string): Promise<number> {
         const result = await this.prisma.chatMessage.deleteMany({ where: { userId } });
         return result.count;

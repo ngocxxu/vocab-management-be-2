@@ -151,6 +151,7 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
             });
 
             client.data = { userId: authUser.id, tier } as Record<string, unknown>;
+            await this.chatService.ensureGreeting(authUser.id);
             this.loggerService.info(`ChatBot client connected: socketId=${client.id} userId=${authUser.id}`);
         } catch {
             client.emit('ai_error', { message: 'Authentication failed', retryable: false, code: 'AUTH_FAILED' });
