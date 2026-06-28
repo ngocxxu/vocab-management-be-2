@@ -156,8 +156,9 @@ Message: ${userMessage}`;
 
             if (response.type === 'text') {
                 const latencyMs = Date.now() - startTime;
-                await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, response.content, toolCallsMeta, response.tokenCount, latencyMs);
-                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: response.content });
+                const content = response.content || 'Please try again.';
+                await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, content, toolCallsMeta, response.tokenCount, latencyMs);
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content });
                 this.logger.info(`chat.job.done userId=${userId} tokens=${response.tokenCount ?? 0} latencyMs=${latencyMs} tools=${toolCallsMeta.length} iter=${iteration + 1}`);
                 return;
             }
