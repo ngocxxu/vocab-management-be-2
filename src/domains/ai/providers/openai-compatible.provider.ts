@@ -9,11 +9,7 @@ export abstract class OpenAiCompatibleProvider {
         const modelName = await this.getModelName();
         const resolvedModel = this.resolveModelName(modelName);
         const messages = this.buildOpenAiMessages(params.systemPrompt, params.history);
-        const body: Record<string, unknown> = { model: resolvedModel, messages };
-        if (params.tools.length > 0) {
-            body.tools = params.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
-            body.tool_choice = 'auto';
-        }
+        const body = this.buildChatBody(resolvedModel, messages, params);
         try {
             const response = await axios.post<{
                 choices: Array<{ message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }>;
@@ -33,6 +29,15 @@ export abstract class OpenAiCompatibleProvider {
 
     protected resolveModelName(modelName: string): string {
         return modelName;
+    }
+
+    protected buildChatBody(resolvedModel: string, messages: unknown[], params: ChatParams): Record<string, unknown> {
+        const body: Record<string, unknown> = { model: resolvedModel, messages };
+        if (params.tools.length > 0) {
+            body.tools = params.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
+            body.tool_choice = 'auto';
+        }
+        return body;
     }
 
     protected buildOpenAiMessages(systemPrompt: string, history: ChatHistoryMessage[]): unknown[] {

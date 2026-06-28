@@ -10,7 +10,7 @@ import { OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { ChatRole, UserRole } from '@prisma/client';
 import { Job } from 'bullmq';
 import { nanoid } from 'nanoid';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import { EReminderType } from '../../reminder/utils';
 import { CHAT_CANCEL_KEY, CHAT_CHANNELS, CHAT_CONFIRM_TIMEOUT_MS } from '../constants';
 import { ChatMessageRepository } from '../repositories';
@@ -47,7 +47,9 @@ export class ChatProcessor {
 
         try {
             const { provider, systemPrompt, history } = await this.buildContext(userId, tier, messageId);
-            const intent = await this.classifyIntent(provider, userId, history[history.length - 1]?.content ?? '', signal);
+            const lastAssistantMsg = [...history].reverse().find((m) => m.role === 'assistant')?.content;
+            const recentHistory = history.slice(-6, -1);
+            const intent = await this.classifyIntent(provider, userId, history[history.length - 1]?.content ?? '', signal, lastAssistantMsg, recentHistory);
             this.logger.info(`chat.intent userId=${userId} intent=${intent}`);
 
             if (intent === 'OUT_OF_SCOPE') {
@@ -116,11 +118,26 @@ User context: ${userContext}`;
         return { provider, systemPrompt, history };
     }
 
-    private async classifyIntent(provider: IAiProvider, userId: string, userMessage: string, signal?: AbortSignal): Promise<string> {
-        const intentPrompt = `Classify the intent. Reply with exactly APP or OUT_OF_SCOPE.
-APP = vocabulary, learning progress, folders, trainer sessions, reminders, features of this application, greetings, or general conversational messages.
-OUT_OF_SCOPE = unrelated topics (general knowledge, coding, news, politics, etc).
-Message: ${userMessage}`;
+    private async classifyIntent(
+        provider: IAiProvider,
+        userId: string,
+        userMessage: string,
+        signal?: AbortSignal,
+        lastAssistantMessage?: string,
+        recentHistory?: ChatHistoryMessage[],
+    ): Promise<string> {
+        let contextBlock = '';
+        if (recentHistory && recentHistory.length > 0) {
+            const turns = recentHistory.map((m) => `${m.role}: ${m.content}`).join('\n');
+            contextBlock = `Recent conversation:\n${turns}\n`;
+        } else if (lastAssistantMessage) {
+            contextBlock = `Previous assistant message: ${lastAssistantMessage}\n`;
+        }
+        const appScope =
+            'APP = vocabulary, learning progress, folders, trainer sessions, reminders, features of this application,' +
+            ' greetings, general conversational messages, or short replies (yes/no/ok/sure/cancel) that continue an ongoing app conversation.';
+        const outScope = 'OUT_OF_SCOPE = unrelated topics with no app context (general knowledge, coding, news, politics, etc).';
+        const intentPrompt = `Classify the intent. Reply with exactly APP or OUT_OF_SCOPE.\n${appScope}\n${outScope}\n${contextBlock}User message: ${userMessage}`;
         try {
             const result = await provider.generateContent(intentPrompt, userId, { signal });
             return result.trim().toUpperCase().includes('OUT_OF_SCOPE') ? 'OUT_OF_SCOPE' : 'APP';
@@ -141,11 +158,11 @@ Message: ${userMessage}`;
     }): Promise<void> {
         const { provider, systemPrompt, history, tier, userId, startTime, signal } = ctx;
         const tierRole = Object.values(UserRole).includes(tier as UserRole) ? (tier as UserRole) : UserRole.GUEST;
-        const toolDeclarations = this.mcpToolRegistry.getToolsForTier(tierRole).map((t) => ({
-            name: t.name,
-            description: t.description,
-            parameters: zodToJsonSchema(t.schema as never, { $refStrategy: 'none' }) as Record<string, unknown>,
-        }));
+        const toolDeclarations = this.mcpToolRegistry.getToolsForTier(tierRole).map((t) => {
+            const rawSchema = z.toJSONSchema(t.schema) as Record<string, unknown>;
+            const parameters = Object.fromEntries(Object.entries(rawSchema).filter(([key]) => key !== '$schema'));
+            return { name: t.name, description: t.description, parameters };
+        });
 
         const maxIterations = TIER_MAX_ITERATIONS[tier] ?? 2;
         const toolCallsMeta: Array<{ toolName: string; success: boolean; latencyMs: number }> = [];

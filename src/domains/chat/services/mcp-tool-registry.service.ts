@@ -7,9 +7,11 @@ import { ReminderService } from '@/domains/reminder/services/reminder.service';
 import { VocabRelatedWordRepository } from '@/domains/vocab/repositories/vocab-related-word.repository';
 import { VocabRepository } from '@/domains/vocab/repositories/vocab.repository';
 import { VocabMasteryService } from '@/domains/vocab/services/vocab-mastery.service';
+import { VocabTrainerInput } from '@/domains/vocab-trainer/dto/vocab-trainer.input';
 import { VocabTrainerRepository } from '@/domains/vocab-trainer/repositories/vocab-trainer.repository';
+import { VocabTrainerService } from '@/domains/vocab-trainer/services/vocab-trainer.service';
 import { Injectable } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { QuestionType, TrainerStatus, UserRole } from '@prisma/client';
 import { z } from 'zod';
 
 export interface McpTool {
@@ -33,6 +35,7 @@ export class McpToolRegistry {
         private readonly vocabRelatedWordRepository: VocabRelatedWordRepository,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly vocabTrainerRepository: VocabTrainerRepository,
+        private readonly vocabTrainerService: VocabTrainerService,
         private readonly languageFolderRepository: LanguageFolderRepository,
         private readonly subjectRepository: SubjectRepository,
         private readonly languageRepository: LanguageRepository,
@@ -190,6 +193,50 @@ export class McpToolRegistry {
                 execute: async (params, userId) => {
                     const { trainerId } = params as { trainerId: string };
                     return this.vocabTrainerRepository.findByIdWithVocabsAndResults(trainerId, userId);
+                },
+            },
+            // ── Trainer: MEMBER (write) ──────────────────────────────────────
+            {
+                name: 'create_trainer_session',
+                description: 'Create a new vocab trainer/exam session, optionally based on the weakest vocabularies',
+                schema: z.object({
+                    name: z.string().min(1).max(100).describe('Name for the trainer session'),
+                    questionType: z
+                        .enum(['MULTIPLE_CHOICE', 'FLIP_CARD', 'FILL_IN_THE_BLANK', 'MATCHING', 'TRUE_OR_FALSE', 'SHORT_ANSWER'])
+                        .optional()
+                        .default('MULTIPLE_CHOICE')
+                        .describe('Question type for the session'),
+                    useWeakVocabs: z.boolean().optional().default(true).describe('If true, automatically picks the weakest vocabularies'),
+                    weakVocabLimit: z.number().int().min(1).max(20).optional().default(10).describe('How many weak vocabs to include'),
+                    vocabIds: z.array(z.string()).optional().describe('Specific vocab IDs to include (overrides useWeakVocabs)'),
+                }),
+                minTier: UserRole.MEMBER,
+                isWrite: true,
+                timeoutMs: 10000,
+                execute: async (params, userId) => {
+                    const { name, questionType, useWeakVocabs, weakVocabLimit, vocabIds } = params as {
+                        name: string;
+                        questionType: string;
+                        useWeakVocabs: boolean;
+                        weakVocabLimit: number;
+                        vocabIds?: string[];
+                    };
+
+                    let assignmentIds: string[] = vocabIds ?? [];
+
+                    if (assignmentIds.length === 0 && useWeakVocabs) {
+                        const weakVocabs = await this.vocabMasteryService.getTopProblematicVocabs(userId, 'all', weakVocabLimit, 1);
+                        assignmentIds = weakVocabs.map((v) => v.vocabId);
+                    }
+
+                    const input: VocabTrainerInput = {
+                        name,
+                        status: TrainerStatus.PENDING,
+                        questionType: (questionType as QuestionType) ?? QuestionType.MULTIPLE_CHOICE,
+                        vocabAssignmentIds: assignmentIds,
+                    };
+
+                    return this.vocabTrainerService.create(input, userId);
                 },
             },
             // ── Context: GUEST ───────────────────────────────────────────────

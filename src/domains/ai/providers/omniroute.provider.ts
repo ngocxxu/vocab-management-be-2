@@ -142,10 +142,15 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
     protected handleApiError(error: unknown, operation: string, modelName: string): void {
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError<{ error?: { message?: string } }>;
+
+            if (axiosError.code === 'ERR_CANCELED') {
+                return;
+            }
+
             const statusCode = axiosError.response?.status;
             const errorData = axiosError.response?.data;
 
-            let errorMessage = `OmniRoute API ${operation} failed`;
+            let errorMessage: string;
             if (statusCode === 401) {
                 errorMessage = 'OmniRoute API: Unauthorized. Please check your API key.';
             } else if (statusCode === 404) {
@@ -156,6 +161,8 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
                 errorMessage = `OmniRoute API: Bad request. ${errorData?.error?.message || ''}`;
             } else if (statusCode) {
                 errorMessage = `OmniRoute API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
+            } else {
+                errorMessage = `OmniRoute API ${operation} failed: ${axiosError.code ?? 'network error'}`;
             }
 
             this.logger.error(errorMessage, {
