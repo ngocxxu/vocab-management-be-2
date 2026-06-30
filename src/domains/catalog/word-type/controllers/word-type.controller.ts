@@ -1,5 +1,6 @@
 import { IResponse, LoggerService, RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
+import { Public } from '@/shared/decorators/public.decorator';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
@@ -16,8 +17,7 @@ export class WordTypeController {
     ) {}
 
     @Get()
-    @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Public()
     @ApiOperation({ summary: 'Find all word types' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: WordTypeDto })
     public async find(): Promise<IResponse<WordTypeDto[]>> {
@@ -25,8 +25,7 @@ export class WordTypeController {
     }
 
     @Get(':id')
-    @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Public()
     @ApiOperation({ summary: 'Find word type by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })

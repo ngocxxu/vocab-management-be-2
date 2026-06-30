@@ -14,6 +14,7 @@ export const WORKLOAD_QUEUE_NAMES: EReminderType[] = [
     EReminderType.VOCAB_TRANSLATION,
     EReminderType.SUBJECT_GENERATE,
     EReminderType.VOCAB_GENERATE_TEXT_TARGET,
+    EReminderType.AI_CHAT,
 ];
 
 export const JOB_NAMES = {
@@ -24,4 +25,5 @@ export const JOB_NAMES = {
     failedJobMirror: 'failed-job',
     generateSubjects: 'generate-subjects',
     generateTextTarget: 'generate-text-target',
+    aiChat: 'ai-chat',
 } as const;

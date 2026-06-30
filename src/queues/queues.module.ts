@@ -7,6 +7,7 @@ import { DEAD_LETTER_QUEUE_DEFAULT_OPTIONS, QUEUE_CONFIG } from './config/queue.
 import { DEAD_LETTER_QUEUE, WORKLOAD_QUEUE_NAMES } from './constants/queue.constants';
 import { JobFailureService } from './dlq/job-failure.service';
 import { QueueFailureListener } from './dlq/queue-failure.listener';
+import { AiChatProducer } from './producers/ai-chat.producer';
 import { AudioEvaluationProducer } from './producers/audio-evaluation.producer';
 import { EmailReminderProducer } from './producers/email-reminder.producer';
 import { FillInBlankEvaluationProducer } from './producers/fill-in-blank-evaluation.producer';
@@ -43,6 +44,7 @@ const deadLetterBoard = BullBoardModule.forFeature({
 });
 
 const producers = [
+    AiChatProducer,
     AudioEvaluationProducer,
     MultipleChoiceGenerationProducer,
     FillInBlankEvaluationProducer,

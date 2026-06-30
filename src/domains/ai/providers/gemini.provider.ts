@@ -1,8 +1,8 @@
 import { ConfigService } from '@/domains/platform/config/services';
-import { GenerativeModel, GoogleGenerativeAI } from '@google/generative-ai';
+import { Content, GenerativeModel, GoogleGenerativeAI, Part } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { AI_CONFIG } from '../utils/const.util';
-import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
+import { ChatHistoryMessage, ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 
 @Injectable()
 export class GeminiProvider implements IAiProvider {
@@ -81,6 +81,70 @@ export class GeminiProvider implements IAiProvider {
             return audioModelConfig;
         }
         return this.getModelName(userId);
+    }
+
+    public async chat(params: ChatParams): Promise<ChatResponse> {
+        const modelName = (await this.getModelName()) || 'gemini-1.5-flash';
+        const functionDeclarations = params.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters as unknown as import('@google/generative-ai').FunctionDeclarationSchema,
+        }));
+
+        const model = this.genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: params.systemPrompt,
+            ...(functionDeclarations.length > 0 && { tools: [{ functionDeclarations }] }),
+        });
+
+        const contents = this.buildGeminiContents(params.history);
+        const result = await model.generateContent({ contents });
+        const response = result.response;
+
+        const parts = response.candidates?.[0]?.content?.parts ?? [];
+        const funcCallPart = parts.find((p: Part) => p.functionCall);
+        if (funcCallPart?.functionCall) {
+            const fc = funcCallPart.functionCall;
+            return {
+                type: 'tool_call',
+                name: fc.name,
+                params: fc.args as unknown,
+                toolCallId: `gemini-${fc.name}-${Date.now()}`,
+            };
+        }
+
+        return {
+            type: 'text',
+            content: response.text(),
+            tokenCount: response.usageMetadata?.totalTokenCount,
+        };
+    }
+
+    private buildGeminiContents(history: ChatHistoryMessage[]): Content[] {
+        const contents: Content[] = [];
+
+        for (const msg of history) {
+            if (msg.role === 'user') {
+                contents.push({ role: 'user', parts: [{ text: msg.content }] });
+            } else if (msg.role === 'assistant') {
+                if (msg.toolCalls?.length) {
+                    const tc = msg.toolCalls[0];
+                    contents.push({
+                        role: 'model',
+                        parts: [{ functionCall: { name: tc.name, args: JSON.parse(tc.arguments) as Record<string, unknown> } }],
+                    });
+                } else {
+                    contents.push({ role: 'model', parts: [{ text: msg.content }] });
+                }
+            } else if (msg.role === 'tool') {
+                contents.push({
+                    role: 'user',
+                    parts: [{ functionResponse: { name: msg.toolName ?? 'unknown', response: { result: msg.content } } }],
+                });
+            }
+        }
+
+        return contents;
     }
 
     private async getModel(userId?: string, useAudioModel = false): Promise<GenerativeModel> {

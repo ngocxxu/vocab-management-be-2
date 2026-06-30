@@ -5,15 +5,17 @@ import axios, { AxiosError } from 'axios';
 import FormData from 'form-data';
 import { AI_CONFIG } from '../utils/const.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
+import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
 @Injectable()
-export class GroqProvider implements IAiProvider {
-    private readonly logger = new Logger(GroqProvider.name);
-    private readonly apiKey: string;
-    private readonly chatCompletionsUrl = 'https://api.groq.com/openai/v1/chat/completions';
+export class GroqProvider extends OpenAiCompatibleProvider implements IAiProvider {
+    protected readonly logger = new Logger(GroqProvider.name);
+    protected readonly apiKey: string;
+    protected readonly chatUrl = 'https://api.groq.com/openai/v1/chat/completions';
     private readonly transcriptionsUrl = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
     public constructor(private readonly configService: ConfigService) {
+        super();
         const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
             throw new Error('GROQ_API_KEY environment variable is required');
@@ -27,7 +29,7 @@ export class GroqProvider implements IAiProvider {
 
         try {
             const response = await axios.post(
-                this.chatCompletionsUrl,
+                this.chatUrl,
                 {
                     model: modelName,
                     messages: [
@@ -116,6 +118,38 @@ export class GroqProvider implements IAiProvider {
         return this.getModelName(userId);
     }
 
+    protected handleApiError(error: unknown, operation: string, modelName: string): void {
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError<{ error?: { message?: string; type?: string } }>;
+            const statusCode = axiosError.response?.status;
+            const errorData = axiosError.response?.data;
+
+            let errorMessage = `Groq API ${operation} failed`;
+            if (statusCode === 401) {
+                errorMessage = 'Groq API: Unauthorized. Please check your API key.';
+            } else if (statusCode === 402) {
+                errorMessage = 'Groq API: Payment required. Please check your account credits.';
+            } else if (statusCode === 404) {
+                errorMessage = `Groq API: Model "${modelName}" not found or endpoint not available.`;
+            } else if (statusCode === 429) {
+                errorMessage = 'Groq API: Rate limit exceeded. Please try again later.';
+            } else if (statusCode === 400) {
+                errorMessage = `Groq API: Bad request. ${errorData?.error?.message || ''}`;
+            } else if (statusCode) {
+                errorMessage = `Groq API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
+            }
+
+            this.logger.error(`${errorMessage}`, {
+                statusCode,
+                errorData,
+                model: modelName,
+                operation,
+            });
+        } else {
+            this.logger.error(`Groq API ${operation} error:`, error);
+        }
+    }
+
     private getFileExtension(mimeType: string): string {
         const mimeToExt: Record<string, string> = {
             'audio/wav': 'wav',
@@ -147,37 +181,5 @@ export class GroqProvider implements IAiProvider {
 
         this.logger.warn(`Unknown audio MIME type: ${mimeType}, defaulting to wav`);
         return 'wav';
-    }
-
-    private handleApiError(error: unknown, operation: string, modelName: string): void {
-        if (axios.isAxiosError(error)) {
-            const axiosError = error as AxiosError<{ error?: { message?: string; type?: string } }>;
-            const statusCode = axiosError.response?.status;
-            const errorData = axiosError.response?.data;
-
-            let errorMessage = `Groq API ${operation} failed`;
-            if (statusCode === 401) {
-                errorMessage = 'Groq API: Unauthorized. Please check your API key.';
-            } else if (statusCode === 402) {
-                errorMessage = 'Groq API: Payment required. Please check your account credits.';
-            } else if (statusCode === 404) {
-                errorMessage = `Groq API: Model "${modelName}" not found or endpoint not available.`;
-            } else if (statusCode === 429) {
-                errorMessage = 'Groq API: Rate limit exceeded. Please try again later.';
-            } else if (statusCode === 400) {
-                errorMessage = `Groq API: Bad request. ${errorData?.error?.message || ''}`;
-            } else if (statusCode) {
-                errorMessage = `Groq API: Request failed with status ${statusCode}. ${errorData?.error?.message || ''}`;
-            }
-
-            this.logger.error(`${errorMessage}`, {
-                statusCode,
-                errorData,
-                model: modelName,
-                operation,
-            });
-        } else {
-            this.logger.error(`Groq API ${operation} error:`, error);
-        }
     }
 }

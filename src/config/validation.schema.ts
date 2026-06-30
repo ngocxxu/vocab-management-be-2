@@ -27,6 +27,8 @@ export const validationSchema = Joi.object({
     GEMINI_API_KEY: Joi.string().allow(''),
     GROQ_API_KEY: Joi.string().allow(''),
     OMNIROUTE_API_KEY: Joi.string().allow(''),
+    CLOUDFLARE_AI_API_KEY: Joi.string().allow(''),
+    CLOUDFLARE_ACCOUNT_ID: Joi.string().allow(''),
 
     INSTANCE_ID: Joi.string().allow(''),
     REMINDER_POLLER_ENABLED: Joi.string().valid('true', 'false').allow(''),

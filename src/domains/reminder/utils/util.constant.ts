@@ -8,6 +8,7 @@ export enum EReminderType {
     VOCAB_TRANSLATION = 'vocab-translation',
     SUBJECT_GENERATE = 'subject-generate',
     VOCAB_GENERATE_TEXT_TARGET = 'vocab-generate-text-target',
+    AI_CHAT = 'ai-chat',
 }
 
 export enum EReminderTitle {
