@@ -17,10 +17,11 @@ import { ChatMessageRepository } from '../repositories';
 import { AbortControllerRegistry } from '../services/abort-controller-registry.service';
 import { McpToolRegistry } from '../services/mcp-tool-registry.service';
 
-const TIER_MAX_ITERATIONS: Record<string, number> = { ADMIN: 4, MEMBER: 3, GUEST: 2 };
+const TIER_MAX_ITERATIONS: Record<string, number> = { ADMIN: 10, MEMBER: 7, GUEST: 3 };
 const FALLBACK_MESSAGE = "I wasn't able to complete this in the allowed steps. Please try rephrasing.";
 const OUT_OF_SCOPE_MESSAGE = 'Sorry, I can only help with app-related questions.';
 const CANCELLED_MESSAGE = 'Generation cancelled.';
+const ACTION_CANCELLED_MESSAGE = 'Action cancelled.';
 
 @Processor(EReminderType.AI_CHAT)
 export class ChatProcessor {
@@ -96,7 +97,7 @@ export class ChatProcessor {
 
     private async buildContext(userId: string, tier: string, messageId: string): Promise<{ provider: IAiProvider; systemPrompt: string; history: ChatHistoryMessage[] }> {
         const [provider, user, dbMessages] = await Promise.all([
-            this.aiProviderFactory.getProvider(userId),
+            this.aiProviderFactory.getChatProvider(userId),
             this.userRepository.findById(userId),
             this.chatMessageRepository.findLastN(userId, 10),
         ]);
@@ -108,6 +109,9 @@ export class ChatProcessor {
         const systemPrompt = `You are an AI assistant inside a vocabulary learning app.
 You ONLY answer questions related to: vocabulary, learning progress, folders, trainer sessions, reminders, and features of this application.
 If the user asks about anything unrelated to the app, politely refuse.
+Never invent IDs (folder, vocab, etc.) — always call the relevant lookup tool (e.g. get_my_folders) first to obtain a real ID before using it in another tool call.
+If a tool call returns an error, do not stay silent: explain the problem to the user in plain language
+and suggest a next step (e.g. retry with a valid folder, or call the lookup tool first).
 User context: ${userContext}`;
 
         const history: ChatHistoryMessage[] = dbMessages
@@ -166,14 +170,35 @@ User context: ${userContext}`;
 
         const maxIterations = TIER_MAX_ITERATIONS[tier] ?? 2;
         const toolCallsMeta: Array<{ toolName: string; success: boolean; latencyMs: number }> = [];
+        let lastToolName: string | null = null;
+        let sameToolCount = 0;
+        let emptyTextStrikes = 0;
+        const MAX_EMPTY_TEXT_STRIKES = 1;
 
         for (let iteration = 0; iteration < maxIterations; iteration++) {
             if (await this.isCancelled(userId)) return;
             const response = await provider.chat({ systemPrompt, history, tools: toolDeclarations, signal });
 
             if (response.type === 'text') {
+                const content = response.content?.trim();
+                if (!content) {
+                    emptyTextStrikes++;
+                    this.logger.warn(`chat.empty.text userId=${userId} iter=${iteration} strikes=${emptyTextStrikes} — provider returned empty text`);
+
+                    if (emptyTextStrikes > MAX_EMPTY_TEXT_STRIKES) {
+                        this.logger.warn(`chat.empty.text userId=${userId} — giving up after ${emptyTextStrikes} empty responses`);
+                        await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, FALLBACK_MESSAGE, toolCallsMeta);
+                        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: FALLBACK_MESSAGE });
+                        return;
+                    }
+
+                    history.push({
+                        role: 'user',
+                        content: 'Your last response was empty. Please continue: either retry the action with corrected parameters, or explain the error to me.',
+                    });
+                    continue;
+                }
                 const latencyMs = Date.now() - startTime;
-                const content = response.content || 'Please try again.';
                 await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, content, toolCallsMeta, response.tokenCount, latencyMs);
                 await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content });
                 this.logger.info(`chat.job.done userId=${userId} tokens=${response.tokenCount ?? 0} latencyMs=${latencyMs} tools=${toolCallsMeta.length} iter=${iteration + 1}`);
@@ -181,6 +206,19 @@ User context: ${userContext}`;
             }
 
             const tool = this.mcpToolRegistry.getToolByName(response.name);
+
+            if (response.name === lastToolName) {
+                sameToolCount++;
+                if (sameToolCount >= 2) {
+                    this.logger.warn(`chat.loop.duplicate toolName=${response.name} userId=${userId} — breaking loop`);
+                    await this.finalizeWithSummary({ provider, systemPrompt, history, userId, startTime, signal, toolCallsMeta, reason: 'duplicate-tool-break' });
+                    return;
+                }
+            } else {
+                lastToolName = response.name;
+                sameToolCount = 0;
+            }
+
             history.push({ role: 'assistant', content: '', toolCalls: [{ id: response.toolCallId, name: response.name, arguments: JSON.stringify(response.params) }] });
 
             const toolStart = Date.now();
@@ -196,23 +234,27 @@ User context: ${userContext}`;
                     params: response.params,
                 });
 
-                let confirmed = false;
+                const confirmKey = CHAT_CHANNELS.confirm(userId, requestId);
+                const blockingClient = this.redisService.createBlockingClient();
+                let brpopResult: [string, string] | null = null;
                 try {
-                    const decision = await this.redisPubSub.subscribeOnce(CHAT_CHANNELS.confirm(userId, requestId), CHAT_CONFIRM_TIMEOUT_MS);
-                    confirmed = decision === 'confirmed';
-                } catch {
-                    // timeout → treat as rejected
+                    brpopResult = await blockingClient.brpop(confirmKey, Math.ceil(CHAT_CONFIRM_TIMEOUT_MS / 1000));
+                } finally {
+                    blockingClient.disconnect();
                 }
+                const confirmed = brpopResult !== null && brpopResult[1] === 'confirmed';
 
                 if (!confirmed) {
                     toolCallsMeta.push({ toolName: response.name, success: false, latencyMs: Date.now() - toolStart });
-                    history.push({ role: 'tool', content: 'User declined', toolCallId: response.toolCallId, toolName: response.name });
-                    continue;
+                    await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, ACTION_CANCELLED_MESSAGE, toolCallsMeta);
+                    await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: ACTION_CANCELLED_MESSAGE });
+                    return;
                 }
             }
 
             await this.redisPubSub.publish(CHAT_CHANNELS.event(userId), { type: 'tool_used', toolName: response.name, label: tool?.description ?? response.name });
 
+            const isWriteTool = tool?.isWrite ?? false;
             try {
                 if (!tool) throw new Error(`Unknown tool: ${response.name}`);
                 const rawResult = await Promise.race([
@@ -229,11 +271,55 @@ User context: ${userContext}`;
 
             toolCallsMeta.push({ toolName: response.name, success: toolSuccess, latencyMs: Date.now() - toolStart });
             history.push({ role: 'tool', content: toolResult, toolCallId: response.toolCallId, toolName: response.name });
+
+            // After a confirmed write tool succeeds, do one final AI turn for a summary then stop.
+            // Without this, the AI can call the same write tool again in the next iteration, producing duplicates.
+            if (isWriteTool && toolSuccess) {
+                await this.finalizeWithSummary({
+                    provider,
+                    systemPrompt,
+                    history,
+                    userId,
+                    startTime,
+                    signal,
+                    toolCallsMeta,
+                    reason: `write-tool-exit iter=${iteration + 1}`,
+                    fallbackContent: toolResult,
+                });
+                return;
+            }
         }
 
         this.logger.warn(`chat.job.exhausted userId=${userId} maxIterations=${maxIterations}`);
         captureSentryException(new Error('Agentic loop max iterations exhausted'), { tags: { userId } });
         await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, FALLBACK_MESSAGE, toolCallsMeta);
         await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: FALLBACK_MESSAGE });
+    }
+
+    private async finalizeWithSummary(ctx: {
+        provider: IAiProvider;
+        systemPrompt: string;
+        history: ChatHistoryMessage[];
+        userId: string;
+        startTime: number;
+        signal?: AbortSignal;
+        toolCallsMeta: Array<{ toolName: string; success: boolean; latencyMs: number }>;
+        reason: string;
+        fallbackContent?: string;
+    }): Promise<void> {
+        const { provider, systemPrompt, history, userId, startTime, signal, toolCallsMeta, reason, fallbackContent } = ctx;
+        const summaryResponse = await provider.chat({ systemPrompt, history, tools: [], signal });
+        const summaryContent = summaryResponse.type === 'text' && summaryResponse.content?.trim() ? summaryResponse.content.trim() : (fallbackContent ?? FALLBACK_MESSAGE);
+        const latencyMs = Date.now() - startTime;
+        await this.chatMessageRepository.create(
+            userId,
+            ChatRole.ASSISTANT,
+            summaryContent,
+            toolCallsMeta,
+            summaryResponse.type === 'text' ? summaryResponse.tokenCount : undefined,
+            latencyMs,
+        );
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: summaryContent });
+        this.logger.info(`chat.job.done userId=${userId} latencyMs=${latencyMs} tools=${toolCallsMeta.length} (${reason})`);
     }
 }

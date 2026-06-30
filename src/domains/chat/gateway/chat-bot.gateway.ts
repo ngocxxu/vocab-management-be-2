@@ -7,7 +7,7 @@ import { validate } from 'class-validator';
 import { Server, Socket } from 'socket.io';
 import { CHAT_CANCEL_KEY, CHAT_CANCEL_TTL_SECONDS, CHAT_CHANNELS, CHAT_RATE_LIMITS, CHAT_RATE_LIMIT_WINDOW_SECONDS } from '../constants';
 import { SendMessageDto } from '../dto';
-import { AbortControllerRegistry, ChatService } from '../services';
+import { AbortControllerRegistry, ChatService, getHighestRole } from '../services';
 
 interface ConnectedUser {
     userId: string;
@@ -95,7 +95,9 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
     public async handleConfirmResponse(@MessageBody() body: { confirmed: boolean; requestId: string }, @ConnectedSocket() client: Socket): Promise<void> {
         const user = this.connectedUsers.get(client.id);
         if (!user || !body?.requestId) return;
-        await this.redisPubSub.publish(CHAT_CHANNELS.confirm(user.userId, body.requestId), body.confirmed ? 'confirmed' : 'rejected');
+        const confirmKey = CHAT_CHANNELS.confirm(user.userId, body.requestId);
+        await this.redisService.client.lpush(confirmKey, body.confirmed ? 'confirmed' : 'rejected');
+        await this.redisService.client.expire(confirmKey, 60);
     }
 
     public afterInit(): void {
@@ -114,7 +116,7 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
         }
 
         try {
-            const tier = authUser.roles[0] ?? 'GUEST';
+            const tier = getHighestRole(authUser.roles);
 
             const doneHandler = (msg: string): void => {
                 try {

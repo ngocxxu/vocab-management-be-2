@@ -1,9 +1,11 @@
+import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import { ChatHistoryMessage, ChatParams, ChatResponse } from './ai-provider.interface';
 
 export abstract class OpenAiCompatibleProvider {
     protected abstract readonly apiKey: string;
     protected abstract readonly chatUrl: string;
+    protected abstract readonly logger: Logger;
 
     public async chat(params: ChatParams): Promise<ChatResponse> {
         const modelName = await this.getModelName();
@@ -15,10 +17,15 @@ export abstract class OpenAiCompatibleProvider {
                 choices: Array<{ message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }>;
                 usage?: { total_tokens?: number };
             }>(this.chatUrl, body, { headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' }, signal: params.signal });
-            const msg = response.data.choices[0]?.message;
+            const choice = response.data.choices[0];
+            const msg = choice?.message;
+            const finishReason = (choice as { finish_reason?: string })?.finish_reason;
             if (msg?.tool_calls?.length) {
                 const tc = msg.tool_calls[0];
                 return { type: 'tool_call', name: tc.function.name, params: JSON.parse(tc.function.arguments) as unknown, toolCallId: tc.id };
+            }
+            if (finishReason === 'tool_calls' && !msg?.tool_calls?.length) {
+                this.logger.warn(`chat.stripped_tool_calls model=${resolvedModel} finish_reason=tool_calls but tool_calls missing — provider may have stripped them`);
             }
             return { type: 'text', content: msg?.content ?? '', tokenCount: response.data.usage?.total_tokens };
         } catch (error) {

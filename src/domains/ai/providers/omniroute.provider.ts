@@ -46,7 +46,11 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
     public override async chat(params: ChatParams): Promise<ChatResponse> {
         const response = await super.chat(params);
         if (response.type === 'text') {
-            return { ...response, content: this.stripOmniModelTag(response.content) };
+            const stripped = this.stripOmniModelTag(response.content);
+            if (!stripped && response.content) {
+                this.logger.warn(`chat.omni.empty_after_strip raw="${response.content.substring(0, 200)}"`);
+            }
+            return { ...response, content: stripped };
         }
         return response;
     }

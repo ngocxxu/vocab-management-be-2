@@ -6,6 +6,7 @@ import { RedisKeyManager, RedisPrefix } from '../utils/redis-key.util';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
     private redisClient: Redis;
+    private redisUrl!: string;
     private readonly logger = new Logger(RedisService.name);
 
     public constructor(private readonly configService: ConfigService) {}
@@ -15,9 +16,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     public async onModuleInit(): Promise<void> {
-        const redisUrl = this.configService.getOrThrow<string>('redis.url');
+        this.redisUrl = this.configService.getOrThrow<string>('redis.url');
 
-        this.redisClient = new Redis(redisUrl, {
+        this.redisClient = new Redis(this.redisUrl, {
             lazyConnect: true,
             retryStrategy: (times: number) => {
                 const delay = Math.min(times * 50, 2000);
@@ -57,6 +58,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
             await this.redisClient.quit();
             this.logger.log('Redis client disconnected');
         }
+    }
+
+    public createBlockingClient(): Redis {
+        return new Redis(this.redisUrl, { maxRetriesPerRequest: null });
     }
 
     public async set(prefix: RedisPrefix, key: string, value: string, ttl?: number): Promise<void> {

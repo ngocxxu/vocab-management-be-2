@@ -123,10 +123,15 @@ export class VocabService {
             await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
 
-        const { sourceLanguageCode, targetLanguageCode }: VocabInput = createVocabData;
+        const { sourceLanguageCode, targetLanguageCode, languageFolderId }: VocabInput = createVocabData;
 
         if (sourceLanguageCode === targetLanguageCode) {
             throw new VocabBadRequestException('Source and target languages must be different');
+        }
+
+        const languageFolder = await this.vocabRepository.findLanguageFolderById(languageFolderId, userId);
+        if (!languageFolder) {
+            throw new LanguageFolderNotFoundException(languageFolderId);
         }
 
         const resolvedTextTargets = await Promise.all(
