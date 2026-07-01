@@ -1,6 +1,6 @@
 import { LoggerService } from '@/shared';
 import { CurrentUser, ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
-import { BadRequestException, Body, Controller, Get, HttpStatus, Post, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 
@@ -15,8 +15,10 @@ import {
     SessionDto,
     SignInInput,
     SignUpInput,
+    SignUpResponseDto,
     VerifyOtpInput,
 } from '../dto';
+import { AuthUnauthorizedException } from '../exceptions';
 import { OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
 import { AuthService } from '../services';
 
@@ -43,11 +45,11 @@ export class AuthController {
         status: HttpStatus.BAD_REQUEST,
         description: 'Registration failed',
     })
-    public async signUp(@Body(SignUpPipe) input: SignUpInput): Promise<SessionDto> {
+    public async signUp(@Body(SignUpPipe) input: SignUpInput): Promise<SignUpResponseDto> {
         const result = await this.authService.signUp(input);
         this.logger.info(`User signed up successfully with email: ${input.email}`);
 
-        return result.session;
+        return new SignUpResponseDto(result.session, result.message);
     }
 
     @Post('signin')
@@ -140,7 +142,7 @@ export class AuthController {
     })
     public verifyToken(@CurrentUser() user: User): UserDto {
         if (!user) {
-            throw new UnauthorizedException('User not found');
+            throw new AuthUnauthorizedException('user_not_found');
         }
 
         this.logger.info(`Token verified successfully for user: ${user.email}`);
@@ -164,7 +166,7 @@ export class AuthController {
         const refreshToken = input.refreshToken;
 
         if (!refreshToken) {
-            throw new UnauthorizedException('Refresh token not found');
+            throw new AuthUnauthorizedException('refresh_token_missing');
         }
 
         const result = await this.authService.refreshSession(refreshToken);

@@ -1,7 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
-export class AuthSupabaseMessageException extends UnauthorizedException {
-    public constructor(message: string) {
-        super(message);
+export class AuthSupabaseMessageException extends HttpException {
+    public constructor(message: string, status: HttpStatus = HttpStatus.UNAUTHORIZED) {
+        super(message, status);
     }
 }

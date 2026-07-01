@@ -171,7 +171,7 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
         try {
             const greeting = await this.chatService.ensureGreeting(authUser.id);
             if (greeting) {
-                client.emit('ai_done', { message: greeting });
+                client.emit('ai_done', { message: greeting.message });
             }
         } catch (err) {
             this.logger.warn(`ChatBot ensureGreeting failed for userId=${authUser.id}: ${err instanceof Error ? err.message : String(err)}`);

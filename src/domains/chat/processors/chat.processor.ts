@@ -55,7 +55,7 @@ export class ChatProcessor {
 
             if (intent === 'OUT_OF_SCOPE') {
                 await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, OUT_OF_SCOPE_MESSAGE);
-                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: OUT_OF_SCOPE_MESSAGE });
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: OUT_OF_SCOPE_MESSAGE });
                 return;
             }
 
@@ -63,7 +63,7 @@ export class ChatProcessor {
         } catch (error) {
             if ((error as { code?: string })?.code === 'ERR_CANCELED' || (error instanceof Error && error.name === 'CanceledError')) {
                 this.logger.info(`chat.job.aborted userId=${userId} jobId=${String(job.id)}`);
-                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: CANCELLED_MESSAGE });
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: CANCELLED_MESSAGE });
                 return;
             }
             this.logger.error(`chat.job.failed userId=${userId} error=${error instanceof Error ? error.message : String(error)} jobId=${String(job.id)}`);
@@ -91,7 +91,7 @@ export class ChatProcessor {
         const cancelled = await this.redisService.get(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
         if (!cancelled) return false;
         await this.redisService.del(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
-        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: CANCELLED_MESSAGE });
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: CANCELLED_MESSAGE });
         return true;
     }
 
@@ -188,7 +188,7 @@ User context: ${userContext}`;
                     if (emptyTextStrikes > MAX_EMPTY_TEXT_STRIKES) {
                         this.logger.warn(`chat.empty.text userId=${userId} — giving up after ${emptyTextStrikes} empty responses`);
                         await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, FALLBACK_MESSAGE, toolCallsMeta);
-                        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: FALLBACK_MESSAGE });
+                        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: FALLBACK_MESSAGE });
                         return;
                     }
 
@@ -200,7 +200,7 @@ User context: ${userContext}`;
                 }
                 const latencyMs = Date.now() - startTime;
                 await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, content, toolCallsMeta, response.tokenCount, latencyMs);
-                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content });
+                await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: content });
                 this.logger.info(`chat.job.done userId=${userId} tokens=${response.tokenCount ?? 0} latencyMs=${latencyMs} tools=${toolCallsMeta.length} iter=${iteration + 1}`);
                 return;
             }
@@ -247,7 +247,7 @@ User context: ${userContext}`;
                 if (!confirmed) {
                     toolCallsMeta.push({ toolName: response.name, success: false, latencyMs: Date.now() - toolStart });
                     await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, ACTION_CANCELLED_MESSAGE, toolCallsMeta);
-                    await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: ACTION_CANCELLED_MESSAGE });
+                    await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: ACTION_CANCELLED_MESSAGE });
                     return;
                 }
             }
@@ -293,7 +293,7 @@ User context: ${userContext}`;
         this.logger.warn(`chat.job.exhausted userId=${userId} maxIterations=${maxIterations}`);
         captureSentryException(new Error('Agentic loop max iterations exhausted'), { tags: { userId } });
         await this.chatMessageRepository.create(userId, ChatRole.ASSISTANT, FALLBACK_MESSAGE, toolCallsMeta);
-        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: FALLBACK_MESSAGE });
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: FALLBACK_MESSAGE });
     }
 
     private async finalizeWithSummary(ctx: {
@@ -319,7 +319,7 @@ User context: ${userContext}`;
             summaryResponse.type === 'text' ? summaryResponse.tokenCount : undefined,
             latencyMs,
         );
-        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { content: summaryContent });
+        await this.redisPubSub.publish(CHAT_CHANNELS.done(userId), { message: summaryContent });
         this.logger.info(`chat.job.done userId=${userId} latencyMs=${latencyMs} tools=${toolCallsMeta.length} (${reason})`);
     }
 }

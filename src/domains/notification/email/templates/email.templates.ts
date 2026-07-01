@@ -19,91 +19,191 @@ export class EmailTemplates {
     }
 
     public static examReminderTemplate(data: TemplateData): string {
-        return `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-              <h2 style="color: #333;">Test Reminder</h2>
-              <p style="font-size: 16px;">Hello <strong>${data.firstName} ${data.lastName}</strong>,</p>
-              
-              <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                <p style="margin: 0; font-size: 16px;">
-                  This is a reminder to complete your test: <strong>"${data.testName}"</strong>
-                </p>
-              </div>
-              
-              <p style="font-size: 14px; color: #666;">
-                <strong>Repeat Schedule:</strong> Every ${data.repeatDays} days
+        return EmailTemplates.shell({
+            icon: '&#128276;',
+            heading: 'Test Reminder',
+            body: `
+              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
+                Hello <strong style="color:#202124;">${data.firstName} ${data.lastName}</strong>,
               </p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${data.examUrl}" 
-                   style="background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold;">
-                  Complete Test Now
-                </a>
-              </div>
-              
-              <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                <p style="margin: 0; font-size: 14px; color: #856404;">
-                  💡 <strong>Tip:</strong> Regular practice helps improve your vocabulary retention!
-                </p>
-              </div>
-              
-              <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
-              <p style="font-size: 12px; color: #666; text-align: center;">
-                This is an automated reminder from Vocab Management System.<br>
-                If you don't want to receive these reminders, please contact support.
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+                <tr>
+                  <td style="background-color:#e8f0fe; border-radius:8px; padding:15px;">
+                    <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.5; color:#202124;">
+                      This is a reminder to complete your test: <strong>"${data.testName}"</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:16px 0 0 0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:13px; color:#5f6368;">
+                <strong>Repeat schedule:</strong> Every ${data.repeatDays} days
               </p>
-            </div>
-          </div>
-        `;
+              ${EmailTemplates.ctaButton(String(data.examUrl ?? ''), 'Complete test now')}
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+                <tr>
+                  <td style="background-color:#fef7e0; border-radius:8px; padding:14px 15px;">
+                    <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:13px; line-height:1.5; color:#b06000;">
+                      &#128161; <strong>Tip:</strong> Regular practice helps improve your vocabulary retention.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            `,
+            footerNote: "If you don't want to receive these reminders, please contact support.",
+        });
     }
 
     public static reminderTemplate(data: TemplateData): string {
-        return `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-            <h2 style="color: #333;">Hello ${data.userName}!</h2>
-            <p style="font-size: 16px; line-height: 1.5;">${data.content}</p>
-            ${data.dueDate ? `<p style="background: #fff3cd; padding: 10px; border-radius: 4px;"><strong>Due Date:</strong> ${data.dueDate}</p>` : ''}
-            <hr style="margin: 20px 0;">
-            <p style="font-size: 12px; color: #666;">
-              This is an automated reminder from Vocab Management System.
-            </p>
-          </div>
-        </div>
-      `;
+        return EmailTemplates.shell({
+            icon: '&#9200;',
+            heading: `Hello ${data.userName}!`,
+            body: `
+              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">${data.content}</p>
+              ${
+                  data.dueDate
+                      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;">
+                <tr>
+                  <td style="background-color:#fef7e0; border-radius:8px; padding:12px 15px;">
+                    <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial,
+                      sans-serif; font-size:13.5px; color:#b06000;"><strong>Due date:</strong> ${data.dueDate}</p>
+                  </td>
+                </tr>
+              </table>`
+                      : ''
+              }
+            `,
+        });
     }
 
     public static welcomeTemplate(data: TemplateData): string {
-        return `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #007bff;">Welcome to Vocab Management!</h1>
-          <p>Hi ${data.userName},</p>
-          <p>Thank you for joining our platform. Get ready to boost your vocabulary!</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${data.loginUrl}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-              Get Started
-            </a>
-          </div>
-        </div>
-      `;
+        return EmailTemplates.shell({
+            icon: '&#127881;',
+            heading: 'Welcome to Vocab Management!',
+            body: `
+              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
+                Hi <strong style="color:#202124;">${data.userName}</strong>, thank you for joining our platform. Get ready to boost your vocabulary!
+              </p>
+              ${EmailTemplates.ctaButton(String(data.loginUrl ?? ''), 'Get started')}
+            `,
+        });
     }
 
     public static passwordResetTemplate(data: TemplateData): string {
+        return EmailTemplates.shell({
+            icon: '&#128274;',
+            heading: 'Password reset request',
+            body: `
+              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
+                Hi <strong style="color:#202124;">${data.userName}</strong>, you requested to reset your password. Click the button below to choose a new one.
+              </p>
+              ${EmailTemplates.ctaButton(String(data.resetUrl ?? ''), 'Reset password')}
+            `,
+            footerNote: "This link will expire in 1 hour. If you didn't request this, please ignore this email.",
+        });
+    }
+
+    private static ctaButton(url: string, label: string): string {
         return `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Password Reset Request</h2>
-          <p>Hi ${data.userName},</p>
-          <p>You requested to reset your password. Click the button below:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${data.resetUrl}" style="background: #dc3545; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-              Reset Password
-            </a>
-          </div>
-          <p style="font-size: 12px; color: #666;">
-            This link will expire in 1 hour. If you didn't request this, please ignore this email.
-          </p>
-        </div>
-      `;
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:24px;">
+            <tr>
+              <td align="center" style="border-radius:8px; background-color:#1a73e8;">
+                <a href="${url}" target="_blank" style="display:block; padding:13px 24px;
+                  font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px;
+                  font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">
+                  ${label}
+                </a>
+              </td>
+            </tr>
+          </table>
+        `;
+    }
+
+    private static shell(options: { icon: string; heading: string; body: string; footerNote?: string }): string {
+        const { icon, heading, body, footerNote } = options;
+
+        return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <body style="margin:0; padding:0; background-color:#f8f9fd; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8f9fd;">
+            <tr>
+              <td align="center" style="padding:40px 16px;">
+                <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="max-width:480px; width:100%;">
+
+                  <tr>
+                    <td align="center" style="padding-bottom:28px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td style="width:28px; height:28px; background-color:#1a73e8; border-radius:8px; text-align:center; vertical-align:middle;">
+                            <span style="font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial,
+                              sans-serif; font-size:14px; font-weight:700; color:#ffffff; line-height:28px;">V</span>
+                          </td>
+                          <td style="padding-left:10px; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica,
+                            Arial, sans-serif; font-size:15px; font-weight:600; color:#202124;">Vocab Management</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="background-color:#ffffff; border:1px solid #e8eaed; border-radius:12px; padding:0; box-shadow:0 1px 2px rgba(60,64,67,0.08);">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                        <tr>
+                          <td align="center" style="padding:40px 40px 0 40px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                              <tr>
+                                <td width="48" height="48" align="center" valign="middle" style="width:48px;
+                                  height:48px; background-color:#e8f0fe; border-radius:10px; text-align:center; vertical-align:middle;">
+                                  <div style="width:48px; height:48px; line-height:48px; font-size:20px; color:#1a73e8; text-align:center;">${icon}</div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+
+                        <tr>
+                          <td style="padding:20px 40px 0 40px;">
+                            <h1 style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial,
+                              sans-serif; font-size:22px; line-height:1.35; color:#202124; font-weight:600;">${heading}</h1>
+                          </td>
+                        </tr>
+
+                        <tr>
+                          <td style="padding:12px 40px 0 40px;">
+                            ${body}
+                          </td>
+                        </tr>
+
+                        <tr>
+                          <td style="padding:24px 40px 32px 40px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                              <tr><td style="border-top:1px solid #e8eaed; font-size:0; line-height:0;">&nbsp;</td></tr>
+                            </table>
+                            <p style="margin:16px 0 0 0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:12.5px; line-height:1.6; color:#5f6368;">
+                              ${footerNote ?? 'This is an automated message from Vocab Management. Please do not reply to this email.'}
+                            </p>
+                          </td>
+                        </tr>
+
+                      </table>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td align="center" style="padding:24px 16px 0 16px;">
+                      <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:12px; line-height:1.6; color:#5f6368;">
+                        &copy; Vocab Management &middot; support@mail.ngocquach.com
+                      </p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        `;
     }
 }

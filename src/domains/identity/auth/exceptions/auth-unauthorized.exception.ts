@@ -7,7 +7,8 @@ export type AuthUnauthorizedCode =
     | 'invalid_access_token'
     | 'session_refresh_failed'
     | 'supabase_user_missing'
-    | 'failed_get_session';
+    | 'failed_get_session'
+    | 'refresh_token_missing';
 
 const MESSAGES: Record<AuthUnauthorizedCode, string> = {
     no_session_after_signup: 'No session data returned after signup',
@@ -17,6 +18,7 @@ const MESSAGES: Record<AuthUnauthorizedCode, string> = {
     session_refresh_failed: 'Session refresh failed',
     supabase_user_missing: 'User data is missing from Supabase response',
     failed_get_session: 'Failed to get session',
+    refresh_token_missing: 'Refresh token not found',
 };
 
 export class AuthUnauthorizedException extends UnauthorizedException {

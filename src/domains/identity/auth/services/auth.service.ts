@@ -1,14 +1,14 @@
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
 import { jwtDecode } from '@/shared/utils/jwt.util';
-import { Injectable } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma, UserRole } from '@prisma/client';
 import { AuthError } from '@supabase/supabase-js';
 import { UserDto } from '../../user/dto';
 import { UserRepository } from '../../user/repositories';
 import { OAuthResponseDto, SessionDto, SignUpInput } from '../dto';
-import { AuthBadRequestException, AuthSupabaseMessageException, AuthUnauthorizedException, InvalidCredentialsException } from '../exceptions';
-import { SignInResponse } from '../utils';
+import { AuthBadRequestException, AuthConflictException, AuthSupabaseMessageException, AuthUnauthorizedException, InvalidCredentialsException } from '../exceptions';
+import { SignInResponse, SignUpServiceResponse } from '../utils';
 
 @Injectable()
 export class AuthService {
@@ -33,15 +33,28 @@ export class AuthService {
         return this.supabaseAuth.getServiceRoleClient().auth.admin;
     }
 
-    public async signUp(input: SignUpInput): Promise<SignInResponse> {
+    public async signUp(input: SignUpInput): Promise<SignUpServiceResponse> {
         const { email, password, firstName, lastName, phone, avatar, role } = input;
+
+        const existingUser = await this.userRepository.findByEmail(email);
+        if (existingUser) {
+            if (existingUser.emailConfirmed) {
+                throw new AuthConflictException('email_already_registered');
+            }
+
+            await this.resendConfirmation(email);
+            return { session: null, message: 'confirmation_email_sent' };
+        }
 
         const { data, error } = await this.auth.signUp({
             email,
             password,
             options: {
+                emailRedirectTo: `${process.env.APP_URL}/auth/callback`,
                 data: {
                     role: role ?? UserRole.GUEST,
+                    first_name: firstName && firstName.trim() !== '' ? firstName.trim() : '',
+                    last_name: lastName && lastName.trim() !== '' ? lastName.trim() : '',
                 },
             },
         });
@@ -54,42 +67,39 @@ export class AuthService {
         }
 
         const supabaseUser = data.user;
-        const user = await this.userRepository.create({
-            email: email ?? supabaseUser.email,
-            supabaseUserId: supabaseUser.id,
-            firstName: firstName && firstName.trim() !== '' ? firstName : '',
-            lastName: lastName && lastName.trim() !== '' ? lastName : '',
-            phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
-            avatar: avatar && avatar.trim() !== '' ? avatar : null,
-            role: role ?? UserRole.GUEST,
-            isActive: true,
-        });
+        let user;
+        try {
+            user = await this.userRepository.create({
+                email: email ?? supabaseUser.email,
+                supabaseUserId: supabaseUser.id,
+                firstName: firstName && firstName.trim() !== '' ? firstName : '',
+                lastName: lastName && lastName.trim() !== '' ? lastName : '',
+                phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
+                avatar: avatar && avatar.trim() !== '' ? avatar : null,
+                role: role ?? UserRole.GUEST,
+                isActive: true,
+                emailConfirmed: false,
+            });
+        } catch (createError: unknown) {
+            await this.authAdmin.deleteUser(supabaseUser.id);
+            if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+                throw new AuthConflictException('email_already_registered');
+            }
+            throw createError;
+        }
 
         if (!user) {
             await this.authAdmin.deleteUser(supabaseUser.id);
             throw new AuthBadRequestException('registration_failed');
         }
 
-        let session = data.session;
-        if (!session) {
-            const signInResult = await this.auth.signInWithPassword({
-                email,
-                password,
-            });
-
-            if (signInResult.error) {
-                this.raiseAuthError(signInResult.error, 'signUp');
-            }
-            if (!signInResult.data.session) {
-                throw new AuthUnauthorizedException('no_session_after_signup');
-            }
-            session = signInResult.data.session;
+        if (!data.session) {
+            return { session: null, message: 'confirmation_email_sent' };
         }
 
         return {
-            session: new SessionDto(session, new UserDto(user)),
-            accessToken: session.access_token,
-            refreshToken: session.refresh_token,
+            session: new SessionDto(data.session, new UserDto(user)),
+            message: null,
         };
     }
 
@@ -230,6 +240,9 @@ export class AuthService {
         const { error } = await this.auth.resend({
             type: 'signup',
             email,
+            options: {
+                emailRedirectTo: `${process.env.APP_URL}/auth/callback`,
+            },
         });
 
         if (error) {
@@ -257,18 +270,29 @@ export class AuthService {
         let user = await this.userRepository.findBySupabaseUserId(supabaseUser.id);
 
         if (!user) {
-            user = await this.userRepository.create({
-                email: extractedUserData.email,
-                supabaseUserId: supabaseUser.id,
-                firstName: extractedUserData.firstName,
-                lastName: extractedUserData.lastName,
-                phone: extractedUserData.phone,
-                avatar: extractedUserData.avatar,
-                role: extractedUserData.role,
-                isActive: true,
-            });
+            try {
+                user = await this.userRepository.create({
+                    email: extractedUserData.email,
+                    supabaseUserId: supabaseUser.id,
+                    firstName: extractedUserData.firstName,
+                    lastName: extractedUserData.lastName,
+                    phone: extractedUserData.phone,
+                    avatar: extractedUserData.avatar,
+                    role: extractedUserData.role,
+                    isActive: true,
+                    emailConfirmed: true,
+                });
+            } catch (createError: unknown) {
+                if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+                    user = await this.userRepository.findBySupabaseUserId(supabaseUser.id);
+                }
+                if (!user) {
+                    throw createError;
+                }
+            }
         } else {
             const needsUpdate =
+                !user.emailConfirmed ||
                 user.firstName !== extractedUserData.firstName ||
                 user.lastName !== extractedUserData.lastName ||
                 user.avatar !== extractedUserData.avatar ||
@@ -276,6 +300,7 @@ export class AuthService {
 
             if (needsUpdate) {
                 user = await this.userRepository.update(user.id, {
+                    emailConfirmed: true,
                     firstName: extractedUserData.firstName,
                     lastName: extractedUserData.lastName,
                     avatar: extractedUserData.avatar,
@@ -354,9 +379,14 @@ export class AuthService {
                 throw new InvalidCredentialsException();
             }
             const message = this.authErrorMapping[error.message as keyof typeof this.authErrorMapping] || error.message;
-            throw new AuthSupabaseMessageException(message);
+            const status = this.isValidHttpErrorStatus(error.status) ? error.status : HttpStatus.UNAUTHORIZED;
+            throw new AuthSupabaseMessageException(message, status);
         }
         this.logger.error(`Authentication ${operation} failed: ${String(error)}`);
         throw new AuthSupabaseMessageException(`Authentication ${operation} failed`);
+    }
+
+    private isValidHttpErrorStatus(status: number | undefined): status is HttpStatus {
+        return typeof status === 'number' && status >= HttpStatus.BAD_REQUEST.valueOf() && status < 600;
     }
 }

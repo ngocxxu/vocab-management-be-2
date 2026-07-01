@@ -5,3 +5,8 @@ export type SignInResponse = {
     accessToken: string;
     refreshToken: string;
 };
+
+export type SignUpServiceResponse = {
+    session: SessionDto | null;
+    message: string | null;
+};
