@@ -28,20 +28,27 @@ export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, 
         }
     }
 
-    public afterInit(): void {
+    public afterInit(server: Server): void {
         this.logger.log('Notification Gateway initialized');
+
+        server.use((socket: Socket, next: (err?: Error) => void) => {
+            this.wsAuthService
+                .authenticateSocket(socket)
+                .then((authUser) => {
+                    socket.data = { userId: authUser.id } as Record<string, unknown>;
+                    next();
+                })
+                .catch((error: unknown) => {
+                    const message = error instanceof Error ? error.message : 'Authentication failed';
+                    next(new Error(message));
+                });
+        });
     }
 
-    public async handleConnection(client: Socket): Promise<void> {
-        try {
-            const authUser = await this.wsAuthService.authenticateSocket(client);
-            client.data = { userId: authUser.id } as Record<string, unknown>;
-            this.logger.log(`Notification client connected: ${client.id} userId=${authUser.id}`);
-            client.emit('connected', { message: 'Connected to notifications', clientId: client.id });
-        } catch {
-            client.emit('auth_error', { message: 'Authentication failed', code: 'AUTH_FAILED' });
-            client.disconnect();
-        }
+    public handleConnection(client: Socket): void {
+        const userId = (client.data as Record<string, unknown>).userId as string | undefined;
+        this.logger.log(`Notification client connected: ${client.id} userId=${userId ?? 'unknown'}`);
+        client.emit('connected', { message: 'Connected to notifications', clientId: client.id });
     }
 
     public handleDisconnect(client: Socket): void {
