@@ -76,7 +76,7 @@ export class VocabTextTargetService {
             throw new TextTargetNotFoundException(id);
         }
 
-        const textTarget = await this.vocabRepository.updateTextTarget(id, {
+        const textTarget = await this.vocabRepository.updateTextTarget(vocabId, id, {
             wordTypeId: input.wordTypeId,
             textTarget: input.textTarget,
             grammar: input.grammar,

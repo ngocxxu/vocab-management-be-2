@@ -13,7 +13,7 @@ import { VocabMasteryService, VocabRelatedWordService, VocabService } from './se
 import { VocabTextTargetService } from './services/vocab-text-target.service';
 
 @Module({
-    imports: [PlanModule, SubjectModule, forwardRef(() => AiModule), EventsModule, BullModule.registerQueue({ name: EReminderType.VOCAB_GENERATE_TEXT_TARGET })],
+    imports: [PlanModule, forwardRef(() => SubjectModule), forwardRef(() => AiModule), EventsModule, BullModule.registerQueue({ name: EReminderType.VOCAB_GENERATE_TEXT_TARGET })],
     controllers: [VocabController, TextTargetController],
     providers: [
         VocabRepository,

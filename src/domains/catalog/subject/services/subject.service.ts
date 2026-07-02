@@ -1,3 +1,4 @@
+import { VocabRepository } from '@/domains/vocab/repositories/vocab.repository';
 import { SubjectGenerateProducer } from '@/queues/producers/subject-generate.producer';
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
@@ -17,6 +18,7 @@ export class SubjectService {
         private readonly subjectRepository: SubjectRepository,
         private readonly planQuotaService: PlanQuotaService,
         private readonly subjectGenerateProducer: SubjectGenerateProducer,
+        private readonly vocabRepository: VocabRepository,
     ) {}
 
     public async find(userId: string): Promise<IResponse<SubjectDto[]>> {
@@ -99,6 +101,10 @@ export class SubjectService {
         }
 
         const subject = await this.subjectRepository.update(id, this.subjectMapper.toUpdatePayload(updateSubjectData));
+
+        if (existingSubject.name !== updateSubjectData.name) {
+            await this.vocabRepository.clearListCaches();
+        }
 
         return this.subjectMapper.toResponse(subject);
     }

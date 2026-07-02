@@ -444,7 +444,7 @@ export class VocabRepository extends BaseRepository {
             vocabExamples?: { source: string; target: string }[];
         },
     ): Promise<Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }>> {
-        return this.prisma.textTarget.create({
+        const textTarget = await this.prisma.textTarget.create({
             data: {
                 vocabId,
                 wordTypeId: data.wordTypeId ?? null,
@@ -457,9 +457,14 @@ export class VocabRepository extends BaseRepository {
             },
             include: textTargetInclude,
         });
+
+        await Promise.all([this.clearCacheById(vocabId), this.clearListCaches()]);
+
+        return textTarget;
     }
 
     public async updateTextTarget(
+        vocabId: string,
         id: string,
         data: {
             wordTypeId?: string;
@@ -471,7 +476,7 @@ export class VocabRepository extends BaseRepository {
             vocabExamples?: { source: string; target: string }[];
         },
     ): Promise<Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }>> {
-        return this.runInTransaction(async (tx) => {
+        const textTarget = await this.runInTransaction(async (tx) => {
             if (data.subjectIds !== undefined) {
                 await tx.textTargetSubject.deleteMany({ where: { textTargetId: id } });
             }
@@ -493,6 +498,10 @@ export class VocabRepository extends BaseRepository {
                 include: textTargetInclude,
             });
         });
+
+        await Promise.all([this.clearCacheById(vocabId), this.clearListCaches()]);
+
+        return textTarget;
     }
 
     public async clearCache(): Promise<void> {
