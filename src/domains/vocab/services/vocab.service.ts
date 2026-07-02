@@ -136,7 +136,7 @@ export class VocabService {
 
         const resolvedTextTargets = await Promise.all(
             (createVocabData.textTargets ?? []).map(async (target): Promise<ResolvedTextTargetInput> => {
-                const subjectIds = await this.resolveSubjectRefs(target.subjects ?? [], targetLanguageCode, userId, role);
+                const subjectIds = await this.resolveSubjectRefs(target.subjects ?? [], userId, role);
                 return {
                     textTarget: target.textTarget,
                     grammar: target.grammar,
@@ -149,7 +149,7 @@ export class VocabService {
             }),
         );
 
-        const resolvedTopLevelSubjectIds = await this.resolveSubjectRefs(createVocabData.subjects ?? [], targetLanguageCode, userId, role);
+        const resolvedTopLevelSubjectIds = await this.resolveSubjectRefs(createVocabData.subjects ?? [], userId, role);
 
         const resolvedInput: ResolvedVocabInput = {
             ...createVocabData,
@@ -429,7 +429,7 @@ export class VocabService {
         const subjectMap = new Map<string, string>();
 
         if (subjectsInCsv.size > 0) {
-            const subjects = await this.vocabRepository.findSubjectsByNames(Array.from(subjectsInCsv), userId, targetLanguageCode);
+            const subjects = await this.vocabRepository.findSubjectsByNames(Array.from(subjectsInCsv), userId);
 
             // Create map: subjectName (lowercase) -> subjectId
             const foundSubjectNames = new Set<string>();
@@ -773,7 +773,7 @@ export class VocabService {
         }
     }
 
-    private async resolveSubjectRefs(refs: SubjectRefInput[], targetLanguageCode: string, userId: string, role?: UserRole): Promise<string[]> {
+    private async resolveSubjectRefs(refs: SubjectRefInput[], userId: string, role?: UserRole): Promise<string[]> {
         if (!refs.length) return [];
 
         const idRefs = refs.filter((r): r is { id: string } => Boolean(r.id));
@@ -794,7 +794,7 @@ export class VocabService {
             const upserted = await Promise.all(
                 nameRefs.map(async (r) => {
                     const normalized = normalizeSubjectName(r.name);
-                    const dto = await this.subjectService.upsertByName(normalized, targetLanguageCode, userId, role);
+                    const dto = await this.subjectService.upsertByName(normalized, userId, role);
                     return dto.id;
                 }),
             );

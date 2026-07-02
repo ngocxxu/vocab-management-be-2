@@ -331,11 +331,10 @@ export class VocabRepository extends BaseRepository {
         });
     }
 
-    public async findSubjectsByNames(names: string[], userId: string, targetLanguageCode: string): Promise<Array<{ id: string; name: string }>> {
+    public async findSubjectsByNames(names: string[], userId: string): Promise<Array<{ id: string; name: string }>> {
         return this.prisma.subject.findMany({
             where: {
                 userId,
-                targetLanguageCode,
                 OR: names.map((name) => ({
                     name: { equals: name, mode: 'insensitive' },
                 })),

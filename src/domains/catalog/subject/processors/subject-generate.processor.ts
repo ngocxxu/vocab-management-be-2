@@ -30,7 +30,7 @@ export class SubjectGenerateProcessor {
 
         const aiNames = await this.aiSubjectService.suggestSubjects(textTarget, targetLanguageCode, userId);
 
-        const existing = await this.subjectRepository.findByNamesInsensitive(aiNames, userId, targetLanguageCode);
+        const existing = await this.subjectRepository.findByNamesInsensitive(aiNames, userId);
         const existingLower = new Map(existing.map((s) => [s.name.toLowerCase(), s]));
 
         const matchingExisting: SubjectSuggestionDto[] = [];

@@ -44,9 +44,9 @@ export class SubjectService {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'subject');
         }
-        const { name, targetLanguageCode } = createSubjectData;
+        const { name } = createSubjectData;
 
-        const lastSubject = await this.subjectRepository.findLastOrder(userId, targetLanguageCode);
+        const lastSubject = await this.subjectRepository.findLastOrder(userId);
 
         const newOrder = lastSubject ? lastSubject.order + 1 : 1;
 
@@ -54,7 +54,6 @@ export class SubjectService {
             name,
             order: newOrder,
             userId,
-            targetLanguageCode,
         });
 
         return this.subjectMapper.toResponse(subject);
@@ -66,18 +65,17 @@ export class SubjectService {
         return new GenerateSubjectsJobDto(jobId);
     }
 
-    public async upsertByName(name: string, targetLanguageCode: string, userId: string, role?: UserRole): Promise<SubjectDto> {
+    public async upsertByName(name: string, userId: string, role?: UserRole): Promise<SubjectDto> {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'subject');
         }
 
-        const lastSubject = await this.subjectRepository.findLastOrder(userId, targetLanguageCode);
+        const lastSubject = await this.subjectRepository.findLastOrder(userId);
         const newOrder = lastSubject ? lastSubject.order + 1 : 1;
 
         const subject = await this.subjectRepository.upsertByName({
             name,
             userId,
-            targetLanguageCode,
             order: newOrder,
         });
 

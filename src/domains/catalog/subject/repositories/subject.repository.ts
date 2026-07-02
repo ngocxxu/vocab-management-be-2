@@ -71,30 +71,28 @@ export class SubjectRepository extends BaseRepository {
         return subject;
     }
 
-    public async findLastOrder(userId: string, targetLanguageCode: string): Promise<Subject | null> {
+    public async findLastOrder(userId: string): Promise<Subject | null> {
         return this.prisma.subject.findFirst({
-            where: { userId, targetLanguageCode },
+            where: { userId },
             orderBy: { order: 'desc' },
         });
     }
 
-    public async findByNamesInsensitive(names: string[], userId: string, targetLanguageCode: string): Promise<Subject[]> {
+    public async findByNamesInsensitive(names: string[], userId: string): Promise<Subject[]> {
         const lower = names.map((n) => n.toLowerCase());
         return this.prisma.$queryRaw<Subject[]>`
             SELECT * FROM "subject"
             WHERE "user_id" = ${userId}
-              AND "target_language_code" = ${targetLanguageCode}
               AND LOWER("name") = ANY(${lower}::text[])
         `;
     }
 
-    public async upsertByName(data: { name: string; userId: string; targetLanguageCode: string; order: number }, tx?: Prisma.TransactionClient): Promise<Subject> {
+    public async upsertByName(data: { name: string; userId: string; order: number }, tx?: Prisma.TransactionClient): Promise<Subject> {
         const client = this.client(tx);
 
         const existing = await client.subject.findFirst({
             where: {
                 userId: data.userId,
-                targetLanguageCode: data.targetLanguageCode,
                 name: { equals: data.name, mode: 'insensitive' },
             },
         });
@@ -112,7 +110,6 @@ export class SubjectRepository extends BaseRepository {
                 const race = await client.subject.findFirst({
                     where: {
                         userId: data.userId,
-                        targetLanguageCode: data.targetLanguageCode,
                         name: { equals: data.name, mode: 'insensitive' },
                     },
                 });
@@ -150,7 +147,7 @@ export class SubjectRepository extends BaseRepository {
         });
     }
 
-    public async create(data: { name: string; order: number; userId: string; targetLanguageCode: string }): Promise<Subject> {
+    public async create(data: { name: string; order: number; userId: string }): Promise<Subject> {
         const subject = await this.prisma.subject.create({
             data,
         });

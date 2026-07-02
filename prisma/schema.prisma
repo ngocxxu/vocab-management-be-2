@@ -92,8 +92,6 @@ model Language {
   sourceLanguageFolders LanguageFolder[] @relation("SourceLanguageFolders")
   targetLanguageFolders LanguageFolder[] @relation("TargetLanguageFolders")
 
-  subjects Subject[]
-
   @@index([name])
   @@index([code])
   @@map("language")
@@ -298,17 +296,15 @@ model Subject {
   id                 String              @id @default(cuid()) @map("id")
   name               String              @map("name")
   order              Int                 @map("order")
-  targetLanguageCode String?             @map("target_language_code")
-  targetLanguage     Language?           @relation(fields: [targetLanguageCode], references: [code], onDelete: SetNull)
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   textTargetSubjects TextTargetSubject[]
   userId             String              @map("user_id")
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Functional unique index (case-insensitive per user+language) is managed via raw SQL migration
+  // Functional unique index (case-insensitive per user) is managed via raw SQL migration
   @@index([order])
-  @@index([userId, targetLanguageCode])
+  @@index([userId])
   @@map("subject")
 }
 
