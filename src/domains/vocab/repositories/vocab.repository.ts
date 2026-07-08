@@ -440,9 +440,9 @@ export class VocabRepository extends BaseRepository {
         data: {
             wordTypeId?: string;
             textTarget: string;
-            grammar: string;
-            explanationSource: string;
-            explanationTarget: string;
+            grammar?: string;
+            explanationSource?: string;
+            explanationTarget?: string;
             subjectIds?: string[];
             vocabExamples?: { source: string; target: string }[];
         },

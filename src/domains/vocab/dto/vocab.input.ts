@@ -75,17 +75,20 @@ export class CreateTextTargetInput {
     @IsNotEmpty()
     public textTarget: string;
 
-    @ApiProperty({ description: 'Grammar information', example: 'interjection' })
+    @ApiPropertyOptional({ description: 'Grammar information', example: 'interjection' })
+    @IsOptional()
     @IsString()
-    public grammar: string;
+    public grammar?: string;
 
-    @ApiProperty({ description: 'Explanation in source language' })
+    @ApiPropertyOptional({ description: 'Explanation in source language' })
+    @IsOptional()
     @IsString()
-    public explanationSource: string;
+    public explanationSource?: string;
 
-    @ApiProperty({ description: 'Explanation in target language' })
+    @ApiPropertyOptional({ description: 'Explanation in target language' })
+    @IsOptional()
     @IsString()
-    public explanationTarget: string;
+    public explanationTarget?: string;
 
     @ApiPropertyOptional({
         description: 'Subject references (by id for existing, by name for auto-create)',

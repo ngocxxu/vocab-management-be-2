@@ -273,9 +273,9 @@ model TextTarget {
   wordTypeId         String?             @map("word_type_id")
   wordType           WordType?           @relation(fields: [wordTypeId], references: [id], onDelete: SetNull)
   textTarget         String              @map("text_target")
-  grammar            String              @map("grammar")
-  explanationSource  String              @map("explanation_source")
-  explanationTarget  String              @map("explanation_target")
+  grammar            String?             @map("grammar")
+  explanationSource  String?             @map("explanation_source")
+  explanationTarget  String?             @map("explanation_target")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   vocabExamples      VocabExample[]

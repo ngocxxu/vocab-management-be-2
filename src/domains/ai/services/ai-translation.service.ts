@@ -7,9 +7,9 @@ import { AI_CONFIG } from '../utils/const.util';
 
 export type TranslatedTextTargetResult = {
     textTarget: string;
-    grammar: string;
-    explanationSource: string;
-    explanationTarget: string;
+    grammar: string | null;
+    explanationSource: string | null;
+    explanationTarget: string | null;
     wordTypeId?: string;
     subjectIds: string[];
     vocabExamples?: Array<{ source: string; target: string }>;
@@ -46,6 +46,8 @@ export class AiTranslationService {
 
             return {
                 ...parsedResponse,
+                explanationSource: parsedResponse.explanationSource ?? null,
+                explanationTarget: parsedResponse.explanationTarget ?? null,
                 subjectIds: subjectIds || [],
             };
         } catch (error) {

@@ -15,14 +15,14 @@ export class TextTargetDto {
     @ApiProperty({ description: 'Target text (translation/definition)', example: 'Hello' })
     public textTarget: string;
 
-    @ApiProperty({ description: 'Grammar information', example: 'interjection' })
-    public grammar: string;
+    @ApiProperty({ description: 'Grammar information', example: 'interjection', required: false, nullable: true })
+    public grammar: string | null;
 
-    @ApiProperty({ description: 'Explanation in source language' })
-    public explanationSource: string;
+    @ApiProperty({ description: 'Explanation in source language', required: false, nullable: true })
+    public explanationSource: string | null;
 
-    @ApiProperty({ description: 'Explanation in target language' })
-    public explanationTarget: string;
+    @ApiProperty({ description: 'Explanation in target language', required: false, nullable: true })
+    public explanationTarget: string | null;
 
     @ApiProperty({ description: 'Date when the text target was created' })
     public readonly createdAt: Date;

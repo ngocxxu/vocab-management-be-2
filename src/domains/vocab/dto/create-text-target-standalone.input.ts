@@ -14,17 +14,20 @@ export class CreateTextTargetStandaloneInput {
     @IsNotEmpty()
     public textTarget: string;
 
-    @ApiProperty({ description: 'Grammar information', example: 'interjection' })
+    @ApiProperty({ description: 'Grammar information', example: 'interjection', required: false })
+    @IsOptional()
     @IsString()
-    public grammar: string;
+    public grammar?: string;
 
-    @ApiProperty({ description: 'Explanation in source language' })
+    @ApiProperty({ description: 'Explanation in source language', required: false })
+    @IsOptional()
     @IsString()
-    public explanationSource: string;
+    public explanationSource?: string;
 
-    @ApiProperty({ description: 'Explanation in target language' })
+    @ApiProperty({ description: 'Explanation in target language', required: false })
+    @IsOptional()
     @IsString()
-    public explanationTarget: string;
+    public explanationTarget?: string;
 
     @ApiProperty({ description: 'List of subject ids', type: [String], required: false })
     @IsOptional()
