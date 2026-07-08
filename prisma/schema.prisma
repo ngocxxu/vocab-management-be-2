@@ -16,6 +16,10 @@ enum UserRole {
   GUEST
 }
 
+enum ApiKeyScope {
+  QUICK_ADD_VOCAB
+}
+
 enum NotificationType {
   VOCAB
   VOCAB_TRAINER
@@ -107,7 +111,8 @@ model LanguageFolder {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  vocabs Vocab[]
+  vocabs  Vocab[]
+  apiKeys ApiKey[]
 
   sourceLanguageCode String   @map("source_language_code")
   sourceLanguage     Language @relation("SourceLanguageFolders", fields: [sourceLanguageCode], references: [code], onDelete: Cascade)
@@ -117,6 +122,26 @@ model LanguageFolder {
 
   @@index([name])
   @@map("language_folder")
+}
+
+model ApiKey {
+  id         String        @id @default(cuid()) @map("id")
+  name       String        @map("name")
+  keyHash    String        @unique @map("key_hash")
+  keyPrefix  String        @map("key_prefix")
+  scopes     ApiKeyScope[] @map("scopes")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  lastUsedAt DateTime?     @map("last_used_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  languageFolderId String?         @map("language_folder_id")
+  languageFolder   LanguageFolder? @relation(fields: [languageFolderId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([keyHash])
+  @@map("api_key")
 }
 
 model Vocab {
@@ -390,6 +415,7 @@ model User {
   vocabMasteries         VocabMastery[]
   reminderSchedules      ReminderSchedule[]
   chatMessages           ChatMessage[]
+  apiKeys                ApiKey[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])
@@ -577,7 +603,7 @@ model ChatMessage {
   id         String   @id @default(cuid()) @map("id")
   userId     String   @map("user_id")
   role       ChatRole @map("role")
-  message    String   @db.Text @map("message")
+  message    String   @map("message") @db.Text
   toolCalls  Json?    @map("tool_calls")
   tokenCount Int?     @map("token_count")
   latencyMs  Int?     @map("latency_ms")

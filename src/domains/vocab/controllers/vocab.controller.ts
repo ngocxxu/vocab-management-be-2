@@ -1,7 +1,8 @@
 import { VocabGenerateTextTargetProducer } from '@/queues/producers/vocab-generate-text-target.producer';
 import { LoggerService, RolesGuard } from '@/shared';
-import { CurrentUser, Roles } from '@/shared/decorators';
+import { CurrentUser, Public, Roles } from '@/shared/decorators';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
+import { ApiKeyGuard, RequestWithApiKey } from '@/shared/guards/api-key.guard';
 import {
     BadRequestException,
     Body,
@@ -35,6 +36,7 @@ import {
     MasteryDistributionDto,
     MasterySummaryDto,
     ProgressOverTimeDto,
+    QuickAddVocabInput,
     TopProblematicVocabDto,
     UpsertRelatedWordsInput,
     VocabAutocompleteDto,
@@ -172,6 +174,23 @@ export class VocabController {
     public async create(@Body() input: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
         const vocab = await this.vocabService.create(input, user.id, user.role);
         this.logger.info(`Created new vocab with ID ${vocab.id}`);
+        return vocab;
+    }
+
+    @Post('quick-add')
+    @HttpCode(HttpStatus.CREATED)
+    @Public()
+    @UseGuards(ApiKeyGuard)
+    @ApiOperation({ summary: 'Quick-add a vocab via personal API key. Language pair and folder come from the key, not the request body.' })
+    @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
+    public async quickAdd(@Body() input: QuickAddVocabInput, @CurrentUser() user: User, @Req() request: RequestWithApiKey): Promise<VocabDto> {
+        const apiKey = request.apiKey;
+        if (!apiKey) {
+            throw new BadRequestException('API key context missing');
+        }
+
+        const vocab = await this.vocabService.quickAdd(input.textSource, apiKey, user.id, user.role);
+        this.logger.info(`Quick-added new vocab with ID ${vocab.id} via API key ${apiKey.id}`);
         return vocab;
     }
 

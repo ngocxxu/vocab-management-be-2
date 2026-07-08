@@ -3,6 +3,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { AiModule } from '../ai';
 import { PlanModule } from '../catalog/plan';
 import { SubjectModule } from '../catalog/subject';
+import { ApiKeyModule } from '../identity/api-key';
 import { EventsModule } from '../platform/events/events.module';
 import { EReminderType } from '../reminder/utils';
 import { TextTargetController, VocabController } from './controllers';
@@ -13,7 +14,14 @@ import { VocabMasteryService, VocabRelatedWordService, VocabService } from './se
 import { VocabTextTargetService } from './services/vocab-text-target.service';
 
 @Module({
-    imports: [PlanModule, forwardRef(() => SubjectModule), forwardRef(() => AiModule), EventsModule, BullModule.registerQueue({ name: EReminderType.VOCAB_GENERATE_TEXT_TARGET })],
+    imports: [
+        PlanModule,
+        forwardRef(() => SubjectModule),
+        forwardRef(() => AiModule),
+        ApiKeyModule,
+        EventsModule,
+        BullModule.registerQueue({ name: EReminderType.VOCAB_GENERATE_TEXT_TARGET }),
+    ],
     controllers: [VocabController, TextTargetController],
     providers: [
         VocabRepository,

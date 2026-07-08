@@ -1,5 +1,6 @@
 import { SubjectService } from '@/domains/catalog/subject/services/subject.service';
 import { normalizeSubjectName } from '@/domains/catalog/subject/utils';
+import type { ApiKeyWithFolder } from '@/domains/identity/api-key/repositories';
 import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
@@ -200,6 +201,30 @@ export class VocabService {
         await this.vocabRepository.clearListCaches();
 
         return this.buildResponse(vocab);
+    }
+
+    /**
+     * Creates a vocab from an API key's language pair/folder (quick-add). textTargets is left
+     * empty to reuse the existing async AI-translation pipeline that `create()` already queues.
+     */
+    public async quickAdd(textSource: string, apiKey: ApiKeyWithFolder, userId: string, role: UserRole): Promise<VocabDto> {
+        if (!apiKey.languageFolder) {
+            throw new VocabBadRequestException('This API key has no language folder configured for quick-add');
+        }
+
+        const { languageFolder } = apiKey;
+
+        return this.create(
+            {
+                textSource,
+                sourceLanguageCode: languageFolder.sourceLanguageCode,
+                targetLanguageCode: languageFolder.targetLanguageCode,
+                languageFolderId: languageFolder.id,
+                textTargets: [],
+            },
+            userId,
+            role,
+        );
     }
 
     public async createBulk(createVocabData: VocabInput[], userId: string): Promise<VocabDto[]> {

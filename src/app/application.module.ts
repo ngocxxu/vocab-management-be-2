@@ -8,6 +8,7 @@ import { PlanModule } from '@/domains/catalog/plan';
 import { SubjectModule } from '@/domains/catalog/subject';
 import { WordTypeModule } from '@/domains/catalog/word-type';
 import { ChatModule } from '@/domains/chat';
+import { ApiKeyModule } from '@/domains/identity/api-key';
 import { AuthModule as IdentityAuthModule } from '@/domains/identity/auth';
 import { UserModule } from '@/domains/identity/user';
 import { CloudinaryModule } from '@/domains/media/cloudinary';
@@ -66,6 +67,7 @@ import { envConfigLoaders, validationSchema } from '../config';
         SharedModule,
         AppAuthModule,
         IdentityAuthModule,
+        ApiKeyModule,
         ConfigModule,
         CloudinaryModule,
         ChatModule,
