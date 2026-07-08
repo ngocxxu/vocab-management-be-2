@@ -384,9 +384,13 @@ export class VocabRepository extends BaseRepository {
         return this.runInTransaction(async (tx) => this.applyCsvBatchInTransaction(tx, params), transactionOptions);
     }
 
+    /**
+     * deleteMany (not delete) — this is called from job-retry/stalled-recovery paths where
+     * the row may already be gone from a prior attempt; a bare delete() throws P2025 in that race.
+     */
     public async deleteTextTargetById(id: string, tx?: Prisma.TransactionClient): Promise<void> {
         const client = tx ?? this.prisma;
-        await client.textTarget.delete({ where: { id } });
+        await client.textTarget.deleteMany({ where: { id } });
     }
 
     public async findTextTargetById(id: string): Promise<Prisma.TextTargetGetPayload<{ include: typeof textTargetInclude }> | null> {
