@@ -204,8 +204,10 @@ export class VocabService {
     }
 
     /**
-     * Creates a vocab from an API key's language pair/folder (quick-add). textTargets is left
-     * empty to reuse the existing async AI-translation pipeline that `create()` already queues.
+     * Creates a vocab from an API key's language pair/folder (quick-add). Sends one placeholder
+     * textTarget with an empty `textTarget` string — that's what VocabMapper.prepareCreate()'s
+     * `textTargets?.some(t => !t.textTarget)` checks for to queue the async AI-translation
+     * pipeline. A genuinely empty array would never trigger it (`.some()` on `[]` is always false).
      */
     public async quickAdd(textSource: string, apiKey: ApiKeyWithFolder, userId: string, role: UserRole): Promise<VocabDto> {
         if (!apiKey.languageFolder) {
@@ -220,7 +222,14 @@ export class VocabService {
                 sourceLanguageCode: languageFolder.sourceLanguageCode,
                 targetLanguageCode: languageFolder.targetLanguageCode,
                 languageFolderId: languageFolder.id,
-                textTargets: [],
+                textTargets: [
+                    {
+                        textTarget: '',
+                        grammar: '',
+                        explanationSource: '',
+                        explanationTarget: '',
+                    },
+                ],
             },
             userId,
             role,
