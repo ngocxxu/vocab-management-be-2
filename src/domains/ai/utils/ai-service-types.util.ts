@@ -31,6 +31,12 @@ export type QueueMultipleChoiceGenerationParams = QueueJobIdentity & {
     userId: string;
 };
 
+export type QueueFillInBlankChoiceGenerationParams = QueueJobIdentity & {
+    vocabTrainerId: string;
+    vocabList: VocabWithTextTargets[];
+    userId: string;
+};
+
 export type QueueFillInBlankEvaluationParams = QueueJobIdentity & {
     vocabTrainerId: string;
     evaluations: Array<{

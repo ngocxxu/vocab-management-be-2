@@ -21,6 +21,7 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
         @InjectQueue(DEAD_LETTER_QUEUE) private readonly deadLetterQueue: Queue,
         @InjectQueue(EReminderType.AUDIO_EVALUATION) qAudio: Queue,
         @InjectQueue(EReminderType.MULTIPLE_CHOICE_GENERATION) qMultipleChoice: Queue,
+        @InjectQueue(EReminderType.FILL_IN_BLANK_CHOICE_GENERATION) qFillInBlankChoice: Queue,
         @InjectQueue(EReminderType.FILL_IN_BLANK_EVALUATION) qFillInBlank: Queue,
         @InjectQueue(EReminderType.VOCAB_TRANSLATION) qVocab: Queue,
         @InjectQueue(EReminderType.EMAIL_REMINDER) qEmail: Queue,
@@ -30,6 +31,7 @@ export class QueueFailureListener implements OnModuleInit, OnModuleDestroy {
         const pairs: Array<[EReminderType, Queue]> = [
             [EReminderType.AUDIO_EVALUATION, qAudio],
             [EReminderType.MULTIPLE_CHOICE_GENERATION, qMultipleChoice],
+            [EReminderType.FILL_IN_BLANK_CHOICE_GENERATION, qFillInBlankChoice],
             [EReminderType.FILL_IN_BLANK_EVALUATION, qFillInBlank],
             [EReminderType.VOCAB_TRANSLATION, qVocab],
             [EReminderType.EMAIL_REMINDER, qEmail],

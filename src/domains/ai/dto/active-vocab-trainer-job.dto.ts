@@ -1,6 +1,6 @@
 import type { VocabTrainerQueueName } from '../constants/vocab-trainer-job.constants';
 
-export type VocabTrainerJobType = 'multiple-choice' | 'fill-in-blank' | 'audio';
+export type VocabTrainerJobType = 'multiple-choice' | 'fill-in-blank-choice' | 'fill-in-blank' | 'audio';
 
 export interface ActiveVocabTrainerJob {
     jobId: string;

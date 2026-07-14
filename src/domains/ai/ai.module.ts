@@ -9,6 +9,7 @@ import { ReminderModule } from '../reminder';
 import { VocabModule } from '../vocab';
 import { VocabTrainerModule } from '../vocab-trainer';
 import { AudioEvaluationProcessor } from './processors/audio-evaluation.processor';
+import { FillInBlankChoiceGenerationProcessor } from './processors/fill-in-blank-choice-generation.processor';
 import { FillInBlankEvaluationProcessor } from './processors/fill-in-blank-evaluation.processor';
 import { MultipleChoiceGenerationProcessor } from './processors/multiple-choice-generation.processor';
 import { AiProviderFactory } from './providers/ai-provider.factory';
@@ -18,6 +19,7 @@ import { GroqProvider } from './providers/groq.provider';
 import { OmniRouteProvider } from './providers/omniroute.provider';
 import { OpenRouterProvider } from './providers/openrouter.provider';
 import { AiAudioService } from './services/ai-audio.service';
+import { AiFillInBlankChoiceService } from './services/ai-fill-in-blank-choice.service';
 import { AiFillInBlankGradingService } from './services/ai-fill-in-blank-grading.service';
 import { AiLanguageNameService } from './services/ai-language-name.service';
 import { AiMultipleChoiceService } from './services/ai-multiple-choice.service';
@@ -50,6 +52,7 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         AiTranslationService,
         AiFillInBlankGradingService,
         AiMultipleChoiceService,
+        AiFillInBlankChoiceService,
         AiAudioService,
         AiTranslationEvaluationService,
         VocabTrainerJobLockService,
@@ -57,6 +60,7 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         AiService,
         AudioEvaluationProcessor,
         MultipleChoiceGenerationProcessor,
+        FillInBlankChoiceGenerationProcessor,
         FillInBlankEvaluationProcessor,
     ],
     exports: [AiService, AiProviderFactory],

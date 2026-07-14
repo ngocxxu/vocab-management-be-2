@@ -97,34 +97,45 @@ export class AiFillInBlankGradingService {
         const evaluationDetails = (await Promise.all(evaluationDetailsPromises)).join('\n\n');
 
         const prompt = `
-You are an expert linguistic evaluator. Your task is to assess student translations with semantic flexibility, avoiding rigid string matching.
-If you mention a spelling/character mismatch, do NOT output cryptic tokens. Describe the mismatch clearly.
+You are a supportive language teacher grading vocabulary answers. Your goal is to reward understanding, NOT to test exact spelling or exact wording.
+
+GUIDING PRINCIPLE (most important):
+If the student's answer shows they understood the meaning of the word, mark it CORRECT — even if the wording is not identical
+to the expected answer, is incomplete, or uses different but valid phrasing. When genuinely unsure, give the student the
+benefit of the doubt and lean towards CORRECT. Only mark INCORRECT when the answer is clearly wrong, unrelated, or a different
+word entirely.
 
 Input Data:
 ${evaluationDetails}
 
-CRITICAL EVALUATION RULES:
+EVALUATION RULES:
 
-1. **Normalization (Fix for formatting errors)**:
-   - Treat strings as Unicode text; normalize before comparing.
-   - Before comparing, ignore all case sensitivity (uppercase/lowercase).
-   - LEADING/TRAILING WHITESPACE or extra spaces between words must be IGNORED.
-   - Punctuation differences should be ignored unless they change the meaning.
-   - *Logic:* If the student's text is identical to the target text after trimming spaces and lowercase conversion, mark it TRUE.
+1. Normalization — ignore surface formatting:
+   - Ignore case (uppercase/lowercase).
+   - Ignore leading/trailing whitespace and extra spaces between words.
+   - Ignore punctuation and diacritic/accent differences unless they change the meaning.
 
-2. **Source-Based Validation (Fix for synonyms)**:
-   - Evaluate the relationship between the **Student's Answer** and the **Source Word** directly.
-   - If the student's answer is a valid, natural translation or a close synonym of the Source Word (even if not listed in the "Target word(s)"), mark it TRUE.
+2. Judge meaning against the SOURCE WORD, not against string matching:
+   - Accept any valid, natural translation of the source word, including synonyms, near-synonyms, and paraphrases that convey
+     the same core meaning — even if not present in "Target word(s)".
+   - Minor grammatical differences (article, tense, singular/plural, word form) do NOT make an answer wrong.
 
-3. **Multi-Value & Partial Match (Crucial for Vocabulary)**:
-   - When the "Target word(s)" or "Correct answer" contains multiple meanings separated by commas:
-     - **ONE OF MANY:** correct if student provides ANY ONE meaning.
-     - **ALL:** correct if student provides ALL meanings.
-     - **SYNONYM:** correct if student provides a valid synonym for ANY meaning.
+3. Multi-value answers (default rule):
+   - When "Target word(s)"/"Correct answer" lists several meanings separated by commas, the student is CORRECT if they provide
+     ANY ONE valid meaning. They do NOT need to list all of them.
+
+EXAMPLES OF CORRECT (accept these):
+   - Expected "happy"; student wrote "glad" or "joyful" → CORRECT (synonym).
+   - Expected "to run quickly"; student wrote "run fast" → CORRECT (same meaning, different wording).
+   - Expected "beautiful, pretty"; student wrote "pretty" → CORRECT (one of many).
+   - Expected "cái ghế"; student wrote "ghế" → CORRECT (core meaning conveyed).
+
+EXAMPLES OF INCORRECT (reject these):
+   - Expected "happy"; student wrote "sad" or "table" → INCORRECT (wrong/unrelated meaning).
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON array. No markdown, no code blocks.
-Explanation must be in Vietnamese.
+Explanation must be in Vietnamese, short, and encouraging.
 
 [
   { "answerIndex": 0, "isCorrect": true, "explanation": "..." }

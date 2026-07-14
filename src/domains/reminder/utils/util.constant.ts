@@ -4,6 +4,7 @@ export enum EReminderType {
     NOTIFICATION_FCM = 'notification_fcm',
     AUDIO_EVALUATION = 'audio-evaluation',
     MULTIPLE_CHOICE_GENERATION = 'multiple-choice-generation',
+    FILL_IN_BLANK_CHOICE_GENERATION = 'fill-in-blank-choice-generation',
     FILL_IN_BLANK_EVALUATION = 'fill-in-blank-evaluation',
     VOCAB_TRANSLATION = 'vocab-translation',
     SUBJECT_GENERATE = 'subject-generate',

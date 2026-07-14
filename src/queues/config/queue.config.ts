@@ -30,6 +30,15 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
             removeOnFail: 500,
         },
     },
+    [EReminderType.FILL_IN_BLANK_CHOICE_GENERATION]: {
+        concurrency: 2,
+        defaultJobOptions: {
+            attempts: 3,
+            backoff: exponentialBackoff,
+            removeOnComplete: 100,
+            removeOnFail: 500,
+        },
+    },
     [EReminderType.FILL_IN_BLANK_EVALUATION]: {
         concurrency: 1,
         defaultJobOptions: {

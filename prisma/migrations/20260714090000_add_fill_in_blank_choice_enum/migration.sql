@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "QuestionType" ADD VALUE 'FILL_IN_BLANK_CHOICE';

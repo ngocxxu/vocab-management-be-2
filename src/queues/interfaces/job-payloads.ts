@@ -28,6 +28,12 @@ export interface MultipleChoiceGenerationJobData extends VocabTrainerJobMetadata
     userId: string;
 }
 
+export interface FillInBlankChoiceGenerationJobData extends VocabTrainerJobMetadata {
+    vocabTrainerId: string;
+    vocabList: VocabWithTextTargets[];
+    userId: string;
+}
+
 export interface FillInBlankEvaluationJobData extends VocabTrainerJobMetadata {
     vocabTrainerId: string;
     evaluations: Array<{

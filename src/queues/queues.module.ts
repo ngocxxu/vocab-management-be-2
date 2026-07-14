@@ -10,6 +10,7 @@ import { QueueFailureListener } from './dlq/queue-failure.listener';
 import { AiChatProducer } from './producers/ai-chat.producer';
 import { AudioEvaluationProducer } from './producers/audio-evaluation.producer';
 import { EmailReminderProducer } from './producers/email-reminder.producer';
+import { FillInBlankChoiceGenerationProducer } from './producers/fill-in-blank-choice-generation.producer';
 import { FillInBlankEvaluationProducer } from './producers/fill-in-blank-evaluation.producer';
 import { MultipleChoiceGenerationProducer } from './producers/multiple-choice-generation.producer';
 import { NotificationFcmProducer } from './producers/notification-fcm.producer';
@@ -47,6 +48,7 @@ const producers = [
     AiChatProducer,
     AudioEvaluationProducer,
     MultipleChoiceGenerationProducer,
+    FillInBlankChoiceGenerationProducer,
     FillInBlankEvaluationProducer,
     VocabTranslationProducer,
     EmailReminderProducer,

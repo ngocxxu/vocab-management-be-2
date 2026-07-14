@@ -45,7 +45,7 @@ export class SubmitExamBodyInput extends SubmitExamInput {
         description: 'IDs of vocabs which user choose to exam (multiple choice)',
         type: [WordTestSelectItem],
     })
-    @ValidateIf((o: SubmitExamBodyInput) => o.questionType === QuestionType.MULTIPLE_CHOICE)
+    @ValidateIf((o: SubmitExamBodyInput) => o.questionType === QuestionType.MULTIPLE_CHOICE || o.questionType === QuestionType.FILL_IN_BLANK_CHOICE)
     @IsArray()
     @ArrayNotEmpty()
     @ValidateNested({ each: true })

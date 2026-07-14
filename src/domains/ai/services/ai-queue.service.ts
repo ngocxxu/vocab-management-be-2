@@ -1,10 +1,17 @@
-import type { AudioEvaluationJobData, FillInBlankEvaluationJobData, MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-payloads';
+import type { AudioEvaluationJobData, FillInBlankChoiceGenerationJobData, FillInBlankEvaluationJobData, MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-payloads';
 import { AudioEvaluationProducer } from '@/queues/producers/audio-evaluation.producer';
+import { FillInBlankChoiceGenerationProducer } from '@/queues/producers/fill-in-blank-choice-generation.producer';
 import { FillInBlankEvaluationProducer } from '@/queues/producers/fill-in-blank-evaluation.producer';
 import { MultipleChoiceGenerationProducer } from '@/queues/producers/multiple-choice-generation.producer';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { QueueAudioEvaluationParams, QueueFillInBlankEvaluationParams, QueueJobResult, QueueMultipleChoiceGenerationParams } from '../utils/ai-service-types.util';
+import {
+    QueueAudioEvaluationParams,
+    QueueFillInBlankChoiceGenerationParams,
+    QueueFillInBlankEvaluationParams,
+    QueueJobResult,
+    QueueMultipleChoiceGenerationParams,
+} from '../utils/ai-service-types.util';
 import { VocabTrainerJobLockService } from './vocab-trainer-job-lock.service';
 
 @Injectable()
@@ -12,6 +19,7 @@ export class AiQueueService {
     public constructor(
         private readonly audioEvaluationProducer: AudioEvaluationProducer,
         private readonly multipleChoiceProducer: MultipleChoiceGenerationProducer,
+        private readonly fillInBlankChoiceProducer: FillInBlankChoiceGenerationProducer,
         private readonly fillInBlankProducer: FillInBlankEvaluationProducer,
         private readonly vocabTrainerJobLockService: VocabTrainerJobLockService,
     ) {}
@@ -24,14 +32,17 @@ export class AiQueueService {
         return this.withUserActiveJobLock(params, async (jobData, opts) => this.multipleChoiceProducer.generateQuestions(jobData as MultipleChoiceGenerationJobData, opts));
     }
 
+    public async queueFillInBlankChoiceGeneration(params: QueueFillInBlankChoiceGenerationParams): Promise<QueueJobResult> {
+        return this.withUserActiveJobLock(params, async (jobData, opts) => this.fillInBlankChoiceProducer.generateQuestions(jobData as FillInBlankChoiceGenerationJobData, opts));
+    }
+
     public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
         return this.withUserActiveJobLock(params, async (jobData, opts) => this.fillInBlankProducer.evaluateAnswers(jobData as FillInBlankEvaluationJobData, opts));
     }
 
-    private async withUserActiveJobLock<T extends QueueAudioEvaluationParams | QueueMultipleChoiceGenerationParams | QueueFillInBlankEvaluationParams>(
-        params: T,
-        enqueue: (jobData: T & { jobId: string; lockToken: string }, opts: { jobId: string }) => Promise<{ jobId: string }>,
-    ): Promise<QueueJobResult> {
+    private async withUserActiveJobLock<
+        T extends QueueAudioEvaluationParams | QueueMultipleChoiceGenerationParams | QueueFillInBlankChoiceGenerationParams | QueueFillInBlankEvaluationParams,
+    >(params: T, enqueue: (jobData: T & { jobId: string; lockToken: string }, opts: { jobId: string }) => Promise<{ jobId: string }>): Promise<QueueJobResult> {
         const jobId = randomUUID();
         const acquireResult = await this.vocabTrainerJobLockService.acquireOrGetActive(params.userId, params.vocabTrainerId, params.queueName, params.jobType, jobId);
 

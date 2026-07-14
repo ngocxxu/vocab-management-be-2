@@ -3,6 +3,7 @@ export * from './vocab-trainer.dto';
 export * from './vocab-trainer-word.dto';
 export * from './vocab-trainer-result.dto';
 export * from './submit-multiple-choice.dto';
+export * from './submit-fill-in-blank-choice.dto';
 export * from './multiple-choice-question.dto';
 export * from './fill-in-blank-question.dto';
 export * from './submit-fill-in-blank.dto';

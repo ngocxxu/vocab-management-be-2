@@ -8,6 +8,7 @@ import { Throttle } from '@nestjs/throttler';
 import { QuestionType, User, UserRole } from '@prisma/client';
 import { VocabTrainerDeleteBulkInput, VocabTrainerDto, VocabTrainerInput, SubmitTranslationAudioResponseDto } from '../dto';
 import { SubmitExamBodyInput } from '../dto/submit-exam.dto';
+import { SubmitFillInBlankChoiceInput } from '../dto/submit-fill-in-blank-choice.dto';
 import { SubmitFillInBlankInput } from '../dto/submit-fill-in-blank.dto';
 import { SubmitMultipleChoiceInput } from '../dto/submit-multiple-choice.dto';
 import { SubmitTranslationAudioInput } from '../dto/submit-translation-audio.dto';
@@ -70,6 +71,8 @@ export class VocabTrainerController {
     public async submitExam(@Param('id') id: string, @Body() input: SubmitExamBodyInput, @CurrentUser() user: User): Promise<VocabTrainerDto | SubmitTranslationAudioResponseDto> {
         if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
             return this.vocabTrainerService.submitMultipleChoice(id, input as SubmitMultipleChoiceInput, user);
+        } else if (input.questionType === QuestionType.FILL_IN_BLANK_CHOICE) {
+            return this.vocabTrainerService.submitFillInBlankChoice(id, input as SubmitFillInBlankChoiceInput, user);
         } else if (input.questionType === QuestionType.FILL_IN_THE_BLANK) {
             return this.vocabTrainerService.submitFillInBlank(id, input as SubmitFillInBlankInput, user);
         } else if (input.questionType === QuestionType.TRANSLATION_AUDIO && user.role !== UserRole.GUEST) {

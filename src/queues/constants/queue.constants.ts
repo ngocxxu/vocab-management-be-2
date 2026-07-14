@@ -10,6 +10,7 @@ export const WORKLOAD_QUEUE_NAMES: EReminderType[] = [
     EReminderType.NOTIFICATION_FCM,
     EReminderType.AUDIO_EVALUATION,
     EReminderType.MULTIPLE_CHOICE_GENERATION,
+    EReminderType.FILL_IN_BLANK_CHOICE_GENERATION,
     EReminderType.FILL_IN_BLANK_EVALUATION,
     EReminderType.VOCAB_TRANSLATION,
     EReminderType.SUBJECT_GENERATE,
@@ -20,6 +21,7 @@ export const WORKLOAD_QUEUE_NAMES: EReminderType[] = [
 export const JOB_NAMES = {
     evaluateAudio: 'evaluate-audio',
     generateQuestions: 'generate-questions',
+    generateFillInBlankChoice: 'generate-fill-in-blank-choice',
     evaluateAnswers: 'evaluate-answers',
     translateVocab: 'translate-vocab',
     failedJobMirror: 'failed-job',

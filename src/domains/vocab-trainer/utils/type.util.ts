@@ -4,6 +4,7 @@ export enum EQuestionType {
     MULTIPLE_CHOICE = 'multiple-choice',
     FLIP_CARD = 'flip-card',
     FILL_IN_THE_BLANK = 'fill-in-blank',
+    FILL_IN_BLANK_CHOICE = 'fill-in-blank-choice',
     MATCHING = 'matching',
     TRUE_OR_FALSE = 'true-or-false',
     SHORT_ANSWER = 'short-answer',

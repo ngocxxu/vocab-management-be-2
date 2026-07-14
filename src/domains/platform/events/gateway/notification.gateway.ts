@@ -104,6 +104,21 @@ export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, 
         this.logger.log(`Multiple choice generation progress sent to user ${userId}: ${status}`);
     }
 
+    public emitFillInBlankChoiceGenerationProgress(
+        userId: string,
+        jobId: string,
+        status: 'generating' | 'completed' | 'failed',
+        data?: { questions?: MultipleChoiceQuestion[]; error?: string },
+    ): void {
+        this.server.to(`user-${userId}`).emit('fill-in-blank-choice-generation-progress', {
+            jobId,
+            status,
+            data,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`Fill-in-blank choice generation progress sent to user ${userId}: ${status}`);
+    }
+
     public emitSubjectGenerateResult(userId: string, jobId: string, textTarget: string, result: GenerateSubjectsDto): void {
         this.server.to(`user-${userId}`).emit('subject-generate-result', {
             jobId,

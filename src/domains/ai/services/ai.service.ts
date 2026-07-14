@@ -6,12 +6,14 @@ import { parseJsonOrThrow } from '../utils/ai-json.util';
 import {
     EvaluateTranslationParams,
     QueueAudioEvaluationParams,
+    QueueFillInBlankChoiceGenerationParams,
     QueueFillInBlankEvaluationParams,
     QueueJobResult,
     QueueMultipleChoiceGenerationParams,
 } from '../utils/ai-service-types.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../utils/type.util';
 import { AiAudioService } from './ai-audio.service';
+import { AiFillInBlankChoiceService } from './ai-fill-in-blank-choice.service';
 import { AiFillInBlankGradingService } from './ai-fill-in-blank-grading.service';
 import { AiLanguageNameService } from './ai-language-name.service';
 import { AiMultipleChoiceService } from './ai-multiple-choice.service';
@@ -27,6 +29,7 @@ export class AiService {
         private readonly providerFactory: AiProviderFactory,
         private readonly translationService: AiTranslationService,
         private readonly multipleChoiceService: AiMultipleChoiceService,
+        private readonly fillInBlankChoiceService: AiFillInBlankChoiceService,
         private readonly fillInBlankGradingService: AiFillInBlankGradingService,
         private readonly audioService: AiAudioService,
         private readonly translationEvaluationService: AiTranslationEvaluationService,
@@ -56,6 +59,13 @@ export class AiService {
     }
 
     /**
+     * Generate fill-in-the-blank (cloze) multiple choice questions for vocabulary training
+     */
+    public async generateFillInBlankChoiceQuestions(vocabList: VocabWithTextTargets[], userId?: string): Promise<MultipleChoiceQuestion[]> {
+        return this.fillInBlankChoiceService.generateFillInBlankChoiceQuestions(vocabList, userId);
+    }
+
+    /**
      * Evaluate all fill-in-blank answers in a single batch request
      */
     public async evaluateAllFillInBlankAnswers(
@@ -76,6 +86,10 @@ export class AiService {
 
     public async queueMultipleChoiceGeneration(params: QueueMultipleChoiceGenerationParams): Promise<QueueJobResult> {
         return this.queueService.queueMultipleChoiceGeneration(params);
+    }
+
+    public async queueFillInBlankChoiceGeneration(params: QueueFillInBlankChoiceGenerationParams): Promise<QueueJobResult> {
+        return this.queueService.queueFillInBlankChoiceGeneration(params);
     }
 
     public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
