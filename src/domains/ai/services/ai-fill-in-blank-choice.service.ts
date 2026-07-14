@@ -2,20 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/utils';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
-import { TextTargetRecord, VocabForTextTargets } from '../utils/ai-text-types.util';
+import { VocabForTextTargets } from '../utils/ai-text-types.util';
 import { AI_CONFIG } from '../utils/const.util';
 import { MultipleChoiceQuestion } from '../utils/type.util';
 import { AiLanguageNameService } from './ai-language-name.service';
 
 type PreparedGapItem = {
-    index: number;
-    vocab: VocabForTextTargets;
-    questionType: 'source' | 'target';
-    selectedTarget: string;
-    sourceLanguageName: string;
-    targetLanguageName: string;
     correctAnswer: string;
-    answerLanguageName: string;
+    languageName: string;
 };
 
 /**
@@ -54,40 +48,15 @@ export class AiFillInBlankChoiceService {
     }
 
     private async prepareVocabItems(vocabList: VocabWithTextTargets[]): Promise<PreparedGapItem[]> {
-        const vocabItems: Array<Omit<PreparedGapItem, 'sourceLanguageName' | 'targetLanguageName' | 'correctAnswer' | 'answerLanguageName'>> = [];
-
-        vocabList.forEach((vocabAny, index) => {
-            const vocab = vocabAny as unknown as VocabForTextTargets;
-            if (!vocab.textTargets || vocab.textTargets.length === 0) return;
-
-            const isAskingSource = Math.random() < AI_CONFIG.sourceQuestionProbability;
-            const textTargets = vocab.textTargets ?? [];
-            const selectedTarget = textTargets[Math.floor(Math.random() * textTargets.length)];
-
-            vocabItems.push({
-                index,
-                vocab,
-                questionType: isAskingSource ? 'source' : 'target',
-                selectedTarget: selectedTarget?.textTarget ?? '',
-            });
-        });
-
-        if (vocabItems.length === 0) return [];
+        const vocabs = vocabList as unknown as VocabForTextTargets[];
 
         return Promise.all(
-            vocabItems.map(async (item) => {
-                const sourceLanguageName = await this.languageNameService.getLanguageName(item.vocab.sourceLanguageCode);
-                const targetLanguageName = await this.languageNameService.getLanguageName(item.vocab.targetLanguageCode);
-                // question asks "source" => answer is the target translation; asks "target" => answer is the source word.
-                const correctAnswer = item.questionType === 'source' ? item.selectedTarget : item.vocab.textSource;
-                const answerLanguageName = item.questionType === 'source' ? targetLanguageName : sourceLanguageName;
+            vocabs.map(async (vocab) => {
+                const languageName = await this.languageNameService.getLanguageName(vocab.sourceLanguageCode);
 
                 return {
-                    ...item,
-                    sourceLanguageName,
-                    targetLanguageName,
-                    correctAnswer,
-                    answerLanguageName,
+                    correctAnswer: vocab.textSource,
+                    languageName,
                 };
             }),
         );
@@ -99,28 +68,22 @@ export class AiFillInBlankChoiceService {
         }
 
         const vocabDetails = vocabItems
-            .map((item, idx) => {
-                const targetTexts = (item.vocab.textTargets ?? []).map((tt: TextTargetRecord) => tt.textTarget).join(', ');
-                return JSON.stringify({
+            .map((item, idx) =>
+                JSON.stringify({
                     vocabIndex: idx,
-                    source: item.vocab.textSource,
-                    targets: targetTexts,
-                    questionType: item.questionType === 'source' ? 'textTarget' : 'textSource',
                     correctAnswer: item.correctAnswer,
-                    answerLanguage: item.answerLanguageName,
-                    sourceLanguage: item.sourceLanguageName,
-                    targetLanguage: item.targetLanguageName,
-                });
-            })
+                    language: item.languageName,
+                }),
+            )
             .join('\n');
 
         const prompt = `
 Return a JSON array only.
 Generate ${vocabItems.length} fill-in-the-blank (cloze) multiple choice questions from the items below.
-For each item, write ONE natural, meaningful sentence in the answer language that uses "correctAnswer" in context,
+For each item, write ONE natural, meaningful sentence in "language" that uses "correctAnswer" in context,
 then replace exactly that word/phrase with the placeholder "${AiFillInBlankChoiceService.GAP_PLACEHOLDER}".
 The sentence in "content" MUST contain the placeholder "${AiFillInBlankChoiceService.GAP_PLACEHOLDER}" exactly once.
-Provide exactly ${AI_CONFIG.questionCount} options per question: the correct answer plus plausible wrong words in the SAME answer language.
+Provide exactly ${AI_CONFIG.questionCount} options per question: the correct answer plus plausible wrong words in the SAME language.
 Each option must be a real answer string, not letters, placeholders, tags, XML, or variables.
 Do not use values like A/B/C/D, correct_answer, wrong_option_1, or <...>.
 Each option object must use the answer text for both "label" and "value".
@@ -137,7 +100,6 @@ Required output shape:
 [
   {
     "vocabIndex": 0,
-    "type": "textTarget",
     "content": "sentence with a ${AiFillInBlankChoiceService.GAP_PLACEHOLDER} gap",
     "options": [
       {"label": "answer text", "value": "answer text"}
@@ -155,7 +117,6 @@ Return JSON only. No prose. No markdown. No comments.
         const batchResponse = parseJsonOrThrow<
             Array<{
                 vocabIndex: number;
-                type: string;
                 content: string;
                 options: Array<{ label: string; value: string }>;
                 correctAnswer: string;
@@ -170,7 +131,7 @@ Return JSON only. No prose. No markdown. No comments.
 
                 questions.push({
                     correctAnswer: item.correctAnswer,
-                    type: item.type as 'textSource' | 'textTarget',
+                    type: 'textSource',
                     content: item.content,
                     options: shuffledOptions,
                 });
