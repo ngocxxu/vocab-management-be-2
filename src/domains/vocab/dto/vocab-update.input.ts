@@ -1,6 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { SubjectRefInput } from './subject-ref.input';
 import { CreateRelatedWordInput } from './upsert-related-words.input';
 
 // Cho phép empty string và read-only fields từ DB
@@ -70,6 +71,16 @@ export class UpdateTextTargetInput {
     @IsArray()
     @IsString({ each: true })
     public subjectIds?: string[];
+
+    @ApiPropertyOptional({
+        description: 'Subject references (by id for existing, by name for auto-create). Merged with subjectIds.',
+        type: () => [SubjectRefInput],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SubjectRefInput)
+    public readonly subjects?: SubjectRefInput[];
 
     @ApiProperty({ required: false })
     @IsOptional()

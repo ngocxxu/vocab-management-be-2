@@ -148,7 +148,7 @@ export class VocabMasteryService {
         return this.vocabMasteryRepository.getProgressOverTimeRaw(userId, startDate, endDate);
     }
 
-    public async getTopProblematicVocabs(userId: string, status: NeedsReviewStatusFilter = 'all', limit: number = 10, page: number = 1) {
+    public async getTopProblematicVocabs(userId: string, status: NeedsReviewStatusFilter = 'all', limit: number = 10, page: number = 1, sourceLanguageCode?: string) {
         if (!userId) {
             throw new VocabBadRequestException('User ID is required');
         }
@@ -166,7 +166,7 @@ export class VocabMasteryService {
         }
 
         const offset = (page - 1) * limit;
-        const rows = await this.vocabMasteryRepository.findNeedsReviewVocabs(userId, status, limit, offset);
+        const rows = await this.vocabMasteryRepository.findNeedsReviewVocabs(userId, status, limit, offset, sourceLanguageCode);
 
         if (rows.length === 0) {
             return [];
@@ -194,6 +194,14 @@ export class VocabMasteryService {
                 },
             ];
         });
+    }
+
+    public async getProblematicLanguages(userId: string) {
+        if (!userId) {
+            throw new VocabBadRequestException('User ID is required');
+        }
+
+        return this.vocabMasteryRepository.findProblematicLanguageCounts(userId);
     }
 
     public async getMasteryDistribution(userId: string) {

@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 import { ApiProperty } from '@nestjs/swagger';
 import { VocabMasteryHealthStatus } from '../utils/vocab-mastery-status.util';
 import { MasterySummaryTrendsDto } from './mastery-summary-trends.dto';
@@ -125,6 +126,31 @@ export class TopProblematicVocabDto {
         this.correctCount = data.correctCount;
         this.errorRate = Math.round(data.errorRate * 1000) / 1000;
         this.healthStatus = data.healthStatus;
+    }
+}
+
+export class ProblematicLanguageDto {
+    @ApiProperty({ description: 'Source language code', example: 'en' })
+    public sourceLanguageCode: string;
+
+    @ApiProperty({ description: 'Source language display name', example: 'English', nullable: true })
+    public sourceLanguageName: string | null;
+
+    @ApiProperty({ description: 'Vocabs with error rate at or above critical threshold', example: 5 })
+    public criticalCount: number;
+
+    @ApiProperty({ description: 'Vocabs with error rate at or above warning threshold but below critical', example: 3 })
+    public warningCount: number;
+
+    @ApiProperty({ description: 'Total problematic vocabs for this source language', example: 8 })
+    public total: number;
+
+    public constructor(data: { sourceLanguageCode: string; languageName: string | null; criticalCount: number; warningCount: number; total: number }) {
+        this.sourceLanguageCode = data.sourceLanguageCode;
+        this.sourceLanguageName = data.languageName;
+        this.criticalCount = data.criticalCount;
+        this.warningCount = data.warningCount;
+        this.total = data.total;
     }
 }
 

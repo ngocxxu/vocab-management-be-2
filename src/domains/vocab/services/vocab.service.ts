@@ -305,7 +305,7 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async update(id: string, updateVocabData: Partial<VocabUpdateInput>, userId: string): Promise<VocabDto> {
+    public async update(id: string, updateVocabData: Partial<VocabUpdateInput>, userId: string, role?: UserRole): Promise<VocabDto> {
         const existingVocab = await this.vocabRepository.findById(id, userId);
 
         if (!existingVocab) {
@@ -316,11 +316,13 @@ export class VocabService {
             throw new VocabBadRequestException('Source and target languages must be different');
         }
 
-        const relatedWords = updateVocabData.relatedWords;
+        const resolvedUpdateData = await this.resolveUpdateSubjects(updateVocabData, userId, role);
+
+        const relatedWords = resolvedUpdateData.relatedWords;
         const vocab =
             relatedWords !== undefined
-                ? await this.updateWithRelatedWords(updateVocabData.languageFolderId ?? existingVocab.languageFolderId, id, updateVocabData, userId)
-                : await this.vocabRepository.update(id, this.vocabMapper.buildUpdateInput(updateVocabData));
+                ? await this.updateWithRelatedWords(resolvedUpdateData.languageFolderId ?? existingVocab.languageFolderId, id, resolvedUpdateData, userId)
+                : await this.vocabRepository.update(id, this.vocabMapper.buildUpdateInput(resolvedUpdateData));
 
         await this.vocabRepository.clearListCaches();
 
@@ -805,6 +807,33 @@ export class VocabService {
         if (invalidFolderVocab) {
             throw new VocabNotFoundException(invalidFolderVocab.id);
         }
+    }
+
+    /**
+     * Resolves name-based subject refs on each text target of an update payload into
+     * subjectIds (auto-creating subjects as needed), merging with any ids already present.
+     * UpdateTextTargetInput accepts `subjects` for parity with create, but the mapper only
+     * reads `subjectIds`, so resolution must happen before buildUpdateInput.
+     */
+    private async resolveUpdateSubjects(updateVocabData: Partial<VocabUpdateInput>, userId: string, role?: UserRole): Promise<Partial<VocabUpdateInput>> {
+        if (!updateVocabData.textTargets?.length) {
+            return updateVocabData;
+        }
+
+        const resolvedTextTargets = await Promise.all(
+            updateVocabData.textTargets.map(async (target) => {
+                if (!target.subjects?.length) {
+                    return target;
+                }
+                const resolvedIds = await this.resolveSubjectRefs(target.subjects, userId, role);
+                return {
+                    ...target,
+                    subjectIds: [...new Set([...(target.subjectIds ?? []), ...resolvedIds])],
+                };
+            }),
+        );
+
+        return { ...updateVocabData, textTargets: resolvedTextTargets };
     }
 
     private async resolveSubjectRefs(refs: SubjectRefInput[], userId: string, role?: UserRole): Promise<string[]> {

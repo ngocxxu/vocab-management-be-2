@@ -35,6 +35,7 @@ import {
     MasteryBySubjectDto,
     MasteryDistributionDto,
     MasterySummaryDto,
+    ProblematicLanguageDto,
     ProgressOverTimeDto,
     QuickAddVocabInput,
     TopProblematicVocabDto,
@@ -271,7 +272,7 @@ export class VocabController {
     @ApiOperation({ summary: 'Update vocab' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     public async update(@Param('id') id: string, @Body() updateVocabData: VocabUpdateInput, @CurrentUser() user: User): Promise<VocabDto> {
-        const vocab = await this.vocabService.update(id, updateVocabData, user.id);
+        const vocab = await this.vocabService.update(id, updateVocabData, user.id, user.role);
         this.logger.info(`Updated vocab with ID ${id}`);
         return vocab;
     }
@@ -466,18 +467,30 @@ export class VocabController {
     @ApiQuery({ name: 'status', required: false, enum: ['critical', 'warning', 'all'], description: 'Filter by health status. Default: all (critical + warning)' })
     @ApiQuery({ name: 'limit', required: false, description: 'Max results per page (1-100). Default: 10' })
     @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based). Default: 1' })
+    @ApiQuery({ name: 'sourceLanguageCode', required: false, description: 'Filter to a single source language code (e.g. en). Default: all languages' })
     @ApiResponse({ status: HttpStatus.OK, type: [TopProblematicVocabDto] })
     public async getTopProblematicVocabs(
         @CurrentUser() user: User,
         @Query('status') status?: string,
         @Query('limit') limit?: number,
         @Query('page') page?: number,
+        @Query('sourceLanguageCode') sourceLanguageCode?: string,
     ): Promise<TopProblematicVocabDto[]> {
         const normalizedStatus = (status ?? 'all') as 'critical' | 'warning' | 'all';
         const lim = limit ? Number(limit) : 10;
         const pageNum = page ? Number(page) : 1;
-        const results = await this.vocabMasteryService.getTopProblematicVocabs(user.id, normalizedStatus, lim, pageNum);
+        const results = await this.vocabMasteryService.getTopProblematicVocabs(user.id, normalizedStatus, lim, pageNum, sourceLanguageCode);
         return results.map((r) => new TopProblematicVocabDto(r));
+    }
+
+    @Get('statistics/problematic/languages')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Get source languages that have problematic vocabs, with per-language critical/warning counts' })
+    @ApiResponse({ status: HttpStatus.OK, type: [ProblematicLanguageDto] })
+    public async getProblematicLanguages(@CurrentUser() user: User): Promise<ProblematicLanguageDto[]> {
+        const results = await this.vocabMasteryService.getProblematicLanguages(user.id);
+        return results.map((r) => new ProblematicLanguageDto(r));
     }
 
     @Get('statistics/distribution')

@@ -221,6 +221,7 @@ export class VocabMasteryRepository extends BaseRepository {
         status: 'critical' | 'warning' | 'all',
         limit: number,
         offset: number,
+        sourceLanguageCode?: string,
     ): Promise<
         Array<{
             vocabMasteryId: string;
@@ -242,6 +243,9 @@ export class VocabMasteryRepository extends BaseRepository {
                   ? Prisma.sql`AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${warningThreshold}
                       AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) < ${criticalThreshold}`
                   : Prisma.sql`AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${warningThreshold}`;
+
+        const sourceJoin = sourceLanguageCode ? Prisma.sql`INNER JOIN vocab v ON v.id = vm.vocab_id` : Prisma.empty;
+        const sourceCondition = sourceLanguageCode ? Prisma.sql`AND v.source_language_code = ${sourceLanguageCode}` : Prisma.empty;
 
         return this.prisma.$queryRaw<
             Array<{
@@ -266,14 +270,59 @@ export class VocabMasteryRepository extends BaseRepository {
                     ELSE 'WARNING'
                 END AS "healthStatus"
             FROM vocab_mastery vm
+            ${sourceJoin}
             WHERE vm.user_id = ${userId}
               AND (vm.correct_count + vm.incorrect_count) > 0
               ${statusCondition}
+              ${sourceCondition}
             ORDER BY
                 (vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count)) DESC,
                 vm.incorrect_count DESC
             LIMIT ${limit}
             OFFSET ${offset}
+        `;
+    }
+
+    public async findProblematicLanguageCounts(userId: string): Promise<
+        Array<{
+            sourceLanguageCode: string;
+            languageName: string | null;
+            criticalCount: number;
+            warningCount: number;
+            total: number;
+        }>
+    > {
+        const criticalThreshold = VOCAB_STATUS_THRESHOLDS.CRITICAL;
+        const warningThreshold = VOCAB_STATUS_THRESHOLDS.WARNING;
+
+        return this.prisma.$queryRaw<
+            Array<{
+                sourceLanguageCode: string;
+                languageName: string | null;
+                criticalCount: number;
+                warningCount: number;
+                total: number;
+            }>
+        >`
+            SELECT
+                v.source_language_code AS "sourceLanguageCode",
+                l.name AS "languageName",
+                COUNT(*) FILTER (
+                    WHERE vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${criticalThreshold}
+                )::int AS "criticalCount",
+                COUNT(*) FILTER (
+                    WHERE vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${warningThreshold}
+                      AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) < ${criticalThreshold}
+                )::int AS "warningCount",
+                COUNT(*)::int AS "total"
+            FROM vocab_mastery vm
+            INNER JOIN vocab v ON v.id = vm.vocab_id
+            LEFT JOIN language l ON l.code = v.source_language_code
+            WHERE vm.user_id = ${userId}
+              AND (vm.correct_count + vm.incorrect_count) > 0
+              AND vm.incorrect_count::float / (vm.correct_count + vm.incorrect_count) >= ${warningThreshold}
+            GROUP BY v.source_language_code, l.name
+            ORDER BY v.source_language_code ASC
         `;
     }
 
