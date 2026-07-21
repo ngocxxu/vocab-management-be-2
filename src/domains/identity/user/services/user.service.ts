@@ -120,6 +120,17 @@ export class UserService {
         });
     }
 
+    public async deleteSelf(id: string): Promise<UserDto> {
+        const existingUser = await this.userRepository.findById(id);
+        if (!existingUser) {
+            throw new UserNotFoundInDatabaseException();
+        }
+
+        const user = await this.userRepository.update(id, { isActive: false });
+
+        return new UserDto({ ...user });
+    }
+
     public async delete(id: string): Promise<UserDto> {
         const existingUser = await this.userRepository.findById(id);
         if (!existingUser) {

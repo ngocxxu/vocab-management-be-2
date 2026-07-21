@@ -123,6 +123,9 @@ export class AuthService {
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
         }
+        if (!user.isActive) {
+            throw new AuthUnauthorizedException('account_deactivated');
+        }
 
         return {
             session: new SessionDto(data.session, new UserDto(user)),
@@ -180,6 +183,9 @@ export class AuthService {
 
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
+        }
+        if (!user.isActive) {
+            throw new AuthUnauthorizedException('account_deactivated');
         }
 
         return {

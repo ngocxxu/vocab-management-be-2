@@ -1,5 +1,6 @@
 import type { AuthUser } from '../interfaces/auth-user.interface';
 import { PrismaService } from '@/shared/services/prisma.service';
+import { UnauthorizedException } from '@nestjs/common';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 
@@ -9,6 +10,11 @@ export async function bindAuthUserToRequest(prisma: PrismaService, request: Requ
             OR: [{ id: authUser.id }, { supabaseUserId: authUser.id }],
         },
     });
+
+    if (dbUser && !dbUser.isActive) {
+        throw new UnauthorizedException('This account has been deleted');
+    }
+
     request.authUser = dbUser && authUser.provider === 'supabase' ? { ...authUser, id: dbUser.id } : authUser;
     request.currentUser = dbUser ?? undefined;
 }

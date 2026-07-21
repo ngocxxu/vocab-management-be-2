@@ -1,9 +1,9 @@
 import { IResponse, LoggerService, RestrictedGuard, RolesGuard } from '@/shared';
-import { Roles } from '@/shared/decorators';
+import { CurrentUser, Roles } from '@/shared/decorators';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { UserRole } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 
 import { UserDto, UserInput } from '../dto';
 import { UserPipe } from '../pipes';
@@ -61,6 +61,16 @@ export class UserController {
         this.logger.info(`Updated user with ID ${updateUserData.id}`);
 
         return user;
+    }
+
+    @Delete('me')
+    @ApiOperation({ summary: 'Delete current user account (soft delete)' })
+    @ApiResponse({ status: HttpStatus.OK, type: UserDto })
+    public async deleteSelf(@CurrentUser() user: User): Promise<UserDto> {
+        const deletedUser = await this.userService.deleteSelf(user.id);
+        this.logger.info(`User deleted own account with ID ${user.id}`);
+
+        return deletedUser;
     }
 
     @Delete(':id')
