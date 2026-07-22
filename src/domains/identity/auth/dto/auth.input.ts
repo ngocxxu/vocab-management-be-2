@@ -96,6 +96,19 @@ export class ResetPasswordInput {
     public readonly email: string;
 }
 
+export class ChangePasswordInput {
+    @ApiPropertyOptional({ description: 'Current password, required unless the account has no password set yet', example: 'oldPassword123' })
+    @IsOptional()
+    @IsString()
+    public readonly currentPassword?: string;
+
+    @ApiProperty({ description: 'New password', example: 'newPassword123', minLength: 6 })
+    @IsString()
+    @MinLength(6)
+    @IsNotEmpty()
+    public readonly newPassword: string;
+}
+
 export class VerifyOtpInput {
     @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
     @IsEmail()

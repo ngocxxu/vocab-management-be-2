@@ -2,7 +2,7 @@ import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
 import { jwtDecode } from '@/shared/utils/jwt.util';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { Prisma, User, UserRole } from '@prisma/client';
 import { AuthError } from '@supabase/supabase-js';
 import { UserDto } from '../../user/dto';
 import { UserRepository } from '../../user/repositories';
@@ -98,7 +98,7 @@ export class AuthService {
         }
 
         return {
-            session: new SessionDto(data.session, new UserDto(user)),
+            session: new SessionDto(data.session, new UserDto(user, this.getProvidersFromToken(data.session.access_token))),
             message: null,
         };
     }
@@ -128,7 +128,7 @@ export class AuthService {
         }
 
         return {
-            session: new SessionDto(data.session, new UserDto(user)),
+            session: new SessionDto(data.session, new UserDto(user, this.getProvidersFromToken(data.session.access_token))),
             accessToken: data.session.access_token,
             refreshToken: data.session.refresh_token,
         };
@@ -162,7 +162,7 @@ export class AuthService {
             throw new AuthUnauthorizedException('user_not_found');
         }
 
-        return new UserDto(user);
+        return new UserDto(user, this.getProvidersFromToken(accessToken));
     }
 
     public async refreshSession(refreshToken: string): Promise<SignInResponse> {
@@ -189,9 +189,49 @@ export class AuthService {
         }
 
         return {
-            session: new SessionDto(data.session, new UserDto(user)),
+            session: new SessionDto(data.session, new UserDto(user, this.getProvidersFromToken(data.session.access_token))),
             accessToken: data.session.access_token,
             refreshToken: data.session.refresh_token,
+        };
+    }
+
+    public async changePassword(user: User, currentPassword: string | undefined, newPassword: string): Promise<{ message: string; session: SessionDto }> {
+        if (!user.supabaseUserId) {
+            throw new AuthUnauthorizedException('supabase_user_missing');
+        }
+
+        const { data: authUserData, error: getUserError } = await this.authAdmin.getUserById(user.supabaseUserId);
+        if (getUserError || !authUserData.user) {
+            this.raiseAuthError(getUserError, 'changePassword');
+        }
+
+        const hasPassword = (authUserData.user.identities ?? []).some((identity) => identity.provider === 'email');
+
+        if (hasPassword) {
+            if (!currentPassword) {
+                throw new AuthBadRequestException('current_password_required');
+            }
+            const { error: signInError } = await this.auth.signInWithPassword({ email: user.email, password: currentPassword });
+            if (signInError) {
+                throw new InvalidCredentialsException();
+            }
+        }
+
+        const { error: updateError } = await this.authAdmin.updateUserById(user.supabaseUserId, { password: newPassword });
+        if (updateError) {
+            this.raiseAuthError(updateError, 'changePassword');
+        }
+
+        // Supabase revokes every existing session (including the current one) when a password changes.
+        // Sign back in with the new password to mint a fresh session so the user isn't logged out.
+        const { data: freshSignIn, error: freshSignInError } = await this.auth.signInWithPassword({ email: user.email, password: newPassword });
+        if (freshSignInError || !freshSignIn.session) {
+            this.raiseAuthError(freshSignInError, 'changePassword');
+        }
+
+        return {
+            message: hasPassword ? 'Password changed successfully' : 'Password set successfully',
+            session: new SessionDto(freshSignIn.session, new UserDto(user, this.getProvidersFromToken(freshSignIn.session.access_token))),
         };
     }
 
@@ -239,7 +279,7 @@ export class AuthService {
             throw new AuthUnauthorizedException('user_not_found');
         }
 
-        return new SessionDto(data.session, new UserDto(user));
+        return new SessionDto(data.session, new UserDto(user, this.getProvidersFromToken(data.session.access_token)));
     }
 
     public async resendConfirmation(email: string) {
@@ -325,7 +365,7 @@ export class AuthService {
         }
 
         return {
-            session: new SessionDto(sessionData.session, new UserDto(user)),
+            session: new SessionDto(sessionData.session, new UserDto(user, this.getProvidersFromToken(sessionData.session.access_token))),
             accessToken: sessionData.session.access_token,
             refreshToken: sessionData.session.refresh_token,
         };
@@ -377,6 +417,10 @@ export class AuthService {
             avatar: avatar ? avatar.trim() : null,
             role,
         };
+    }
+
+    private getProvidersFromToken(accessToken: string): string[] | undefined {
+        return jwtDecode(accessToken)?.app_metadata?.providers;
     }
 
     private raiseAuthError(error: unknown, operation: string): never {

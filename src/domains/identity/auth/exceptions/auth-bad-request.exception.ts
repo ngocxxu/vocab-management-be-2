@@ -7,7 +7,8 @@ export type AuthBadRequestCode =
     | 'password_reset_failed'
     | 'otp_verification_failed'
     | 'resend_confirmation_failed'
-    | 'oauth_user_sync_failed';
+    | 'oauth_user_sync_failed'
+    | 'current_password_required';
 
 const MESSAGES: Record<AuthBadRequestCode, string> = {
     registration_failed: 'Registration failed',
@@ -17,6 +18,7 @@ const MESSAGES: Record<AuthBadRequestCode, string> = {
     otp_verification_failed: 'OTP verification failed',
     resend_confirmation_failed: 'Resend confirmation failed',
     oauth_user_sync_failed: 'OAuth user sync failed',
+    current_password_required: 'This account already has a password set. Please refresh the page and try again.',
 };
 
 export class AuthBadRequestException extends BadRequestException {

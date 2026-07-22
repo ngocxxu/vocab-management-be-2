@@ -13,6 +13,10 @@ export interface JWTPayload {
     user_metadata?: {
         [key: string]: string | boolean | number;
     };
+    app_metadata?: {
+        provider?: string;
+        providers?: string[];
+    };
 }
 
 /**

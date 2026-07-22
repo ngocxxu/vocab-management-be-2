@@ -1,11 +1,14 @@
 import { LoggerService } from '@/shared';
 import { CurrentUser, ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
-import { BadRequestException, Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
+import { jwtDecode } from '@/shared/utils/jwt.util';
+import { BadRequestException, Body, Controller, Get, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
+import { Request } from 'express';
 
 import { UserDto } from '../../user/dto';
 import {
+    ChangePasswordInput,
     OAuthInput,
     OAuthResponseDto,
     OAuthSyncInput,
@@ -19,7 +22,7 @@ import {
     VerifyOtpInput,
 } from '../dto';
 import { AuthUnauthorizedException } from '../exceptions';
-import { OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
+import { ChangePasswordPipe, OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
 import { AuthService } from '../services';
 
 const isProduction = (process.env.NODE_ENV ?? '') === 'production';
@@ -140,14 +143,15 @@ export class AuthController {
         status: HttpStatus.UNAUTHORIZED,
         description: 'Invalid or missing access token',
     })
-    public verifyToken(@CurrentUser() user: User): UserDto {
+    public verifyToken(@CurrentUser() user: User, @Req() request: Request): UserDto {
         if (!user) {
             throw new AuthUnauthorizedException('user_not_found');
         }
 
         this.logger.info(`Token verified successfully for user: ${user.email}`);
 
-        return new UserDto(user);
+        const accessToken = request.headers.authorization?.split(' ')[1] ?? '';
+        return new UserDto(user, jwtDecode(accessToken)?.app_metadata?.providers);
     }
 
     @Post('refresh')
@@ -174,6 +178,25 @@ export class AuthController {
         this.logger.info('Session refreshed successfully');
 
         return result.session;
+    }
+
+    @Post('change-password')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Change (or set) the current user password' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Password updated successfully',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: 'Current password is incorrect',
+    })
+    public async changePassword(@CurrentUser() user: User, @Body(ChangePasswordPipe) input: ChangePasswordInput): Promise<{ message: string; session: SessionDto }> {
+        const result = await this.authService.changePassword(user, input.currentPassword, input.newPassword);
+
+        this.logger.info(`Password updated for user: ${user.email}`);
+
+        return result;
     }
 
     @Post('signout')

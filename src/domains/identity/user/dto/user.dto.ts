@@ -59,7 +59,12 @@ export class UserDto {
     @IsString()
     public readonly supabaseUserId: string;
 
-    public constructor(entity: User) {
+    @ApiProperty({ description: 'Whether the account has an email/password credential set', example: false })
+    @Type(() => Boolean)
+    @IsBoolean()
+    public readonly hasPassword: boolean;
+
+    public constructor(entity: User, providers?: string[]) {
         this.id = entity.id;
         this.email = entity.email;
         this.phone = entity.phone ?? undefined;
@@ -71,5 +76,6 @@ export class UserDto {
         this.role = entity.role;
         this.isActive = entity.isActive;
         this.supabaseUserId = entity.supabaseUserId ?? '';
+        this.hasPassword = (providers ?? []).includes('email');
     }
 }

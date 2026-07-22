@@ -1,7 +1,7 @@
 /* eslint-disable max-classes-per-file */
 import { JoiValidationPipe } from '@/shared';
 import * as Joi from 'joi';
-import { SignInInput, OAuthInput, RefreshTokenInput, ResetPasswordInput, VerifyOtpInput, ResendConfirmationInput, SignUpInput, OAuthSyncInput } from '../dto';
+import { SignInInput, OAuthInput, RefreshTokenInput, ResetPasswordInput, VerifyOtpInput, ResendConfirmationInput, SignUpInput, OAuthSyncInput, ChangePasswordInput } from '../dto';
 
 export class SignUpPipe extends JoiValidationPipe {
     public buildSchema(): Joi.Schema {
@@ -85,6 +85,22 @@ export class RefreshTokenPipe extends JoiValidationPipe {
             refreshToken: Joi.string().required().messages({
                 'string.empty': 'Refresh token cannot be empty',
                 'any.required': 'Refresh token is required',
+            }),
+        });
+    }
+}
+
+export class ChangePasswordPipe extends JoiValidationPipe {
+    public buildSchema(): Joi.Schema {
+        return Joi.object<ChangePasswordInput>({
+            currentPassword: Joi.string().optional().messages({
+                'string.empty': 'Current password cannot be empty',
+            }),
+
+            newPassword: Joi.string().min(6).required().messages({
+                'string.empty': 'New password cannot be empty',
+                'string.min': 'New password must be at least 6 characters long',
+                'any.required': 'New password is required',
             }),
         });
     }
