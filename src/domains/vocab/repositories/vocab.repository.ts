@@ -143,13 +143,19 @@ export class VocabRepository extends BaseRepository {
         return result;
     }
 
-    public async findRandom(count: number, userId?: string, languageFolderId?: string): Promise<Vocab[]> {
+    public async findRandom(count: number, userId?: string, languageFolderId?: string, sourceLanguageCode?: string, targetLanguageCode?: string): Promise<Vocab[]> {
         const where: Prisma.VocabWhereInput = {};
         if (userId) {
             where.userId = userId;
         }
         if (languageFolderId) {
             where.languageFolderId = languageFolderId;
+        }
+        if (sourceLanguageCode) {
+            where.sourceLanguageCode = sourceLanguageCode;
+        }
+        if (targetLanguageCode) {
+            where.targetLanguageCode = targetLanguageCode;
         }
 
         const allIds = await this.prisma.vocab.findMany({

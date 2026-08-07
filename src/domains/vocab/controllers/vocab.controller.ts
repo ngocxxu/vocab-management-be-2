@@ -101,12 +101,16 @@ export class VocabController {
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
     @ApiQuery({ name: 'count', required: true, type: Number, example: 10 })
     @ApiQuery({ name: 'languageFolderId', required: false, type: String })
+    @ApiQuery({ name: 'sourceLanguageCode', required: false, type: String })
+    @ApiQuery({ name: 'targetLanguageCode', required: false, type: String })
     public async findRandom(
         @Query('count', ParseIntPipe) count: number,
         @Query('languageFolderId') languageFolderId: string | undefined,
+        @Query('sourceLanguageCode') sourceLanguageCode: string | undefined,
+        @Query('targetLanguageCode') targetLanguageCode: string | undefined,
         @CurrentUser() user: User,
     ): Promise<VocabDto[]> {
-        return this.vocabService.findRandom(count, user.id, languageFolderId);
+        return this.vocabService.findRandom(count, user.id, { languageFolderId, sourceLanguageCode, targetLanguageCode });
     }
 
     @Get(':id/related-words')

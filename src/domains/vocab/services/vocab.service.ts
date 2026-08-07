@@ -63,10 +63,12 @@ export class VocabService {
      * Find random vocabularies
      * @param count - The number of vocabularies to find
      * @param userId - Optional user ID to filter by
-     * @param languageFolderId - Optional language folder ID to filter by
+     * @param filters - Optional language folder id and language codes to filter by
      * @returns Promise<VocabDto[]> The random vocabularies DTOs
      */
-    public async findRandom(count: number, userId: string, languageFolderId?: string): Promise<VocabDto[]> {
+    public async findRandom(count: number, userId: string, filters?: { languageFolderId?: string; sourceLanguageCode?: string; targetLanguageCode?: string }): Promise<VocabDto[]> {
+        const { languageFolderId, sourceLanguageCode, targetLanguageCode } = filters ?? {};
+
         if (languageFolderId) {
             const folder = await this.vocabRepository.findLanguageFolderById(languageFolderId, userId);
             if (!folder) {
@@ -74,7 +76,7 @@ export class VocabService {
             }
         }
 
-        const vocabs = await this.vocabRepository.findRandom(count, userId, languageFolderId);
+        const vocabs = await this.vocabRepository.findRandom(count, userId, languageFolderId, sourceLanguageCode, targetLanguageCode);
 
         return this.buildResponseList(vocabs);
     }
