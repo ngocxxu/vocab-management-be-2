@@ -7,8 +7,12 @@ interface PackageJson {
     version?: unknown;
 }
 
-const DEFAULT_DEVELOPMENT_TRACES_SAMPLE_RATE = 1;
-const DEFAULT_PRODUCTION_TRACES_SAMPLE_RATE = 0.1;
+// Off by default on the Sentry free plan: tracing competes with error capture
+// for a quota that has no spike protection behind it. SENTRY_TRACES_SAMPLE_RATE
+// still overrides, so tracing can be switched on for a single investigation
+// without a code change.
+const DEFAULT_DEVELOPMENT_TRACES_SAMPLE_RATE = 0;
+const DEFAULT_PRODUCTION_TRACES_SAMPLE_RATE = 0;
 
 function getPackageVersion(): string | undefined {
     try {
