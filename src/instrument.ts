@@ -39,10 +39,35 @@ function getEnvironment(): string {
     return sentryEnvironment && sentryEnvironment.length > 0 ? sentryEnvironment : (process.env.NODE_ENV ?? 'development');
 }
 
+/**
+ * Capture switch. Only the exact string 'true' enables it — the DSN says WHERE
+ * events go, never WHETHER. Read from process.env directly because this module
+ * runs before the Nest container exists; that is the whole point of the file.
+ */
+const sentryEnabled = process.env.SENTRY_ENABLED === 'true';
+const sentryDsn = process.env.SENTRY_DSN ?? '';
+
+/**
+ * A switch turned on with no destination is a misconfiguration, not an off
+ * state: the SDK would initialise and then silently discard every event.
+ */
+if (sentryEnabled && !sentryDsn) {
+    // process.emitWarning rather than console.warn: this module runs before the
+    // Nest logger exists, and console is banned by lint in this repo.
+    process.emitWarning('[sentry] SENTRY_ENABLED=true but SENTRY_DSN is missing; capture disabled');
+}
+
+const sentryActive = sentryEnabled && sentryDsn.length > 0;
+
 const packageVersion = getPackageVersion();
 
 Sentry.init({
-    dsn: process.env.SENTRY_DSN,
+    dsn: sentryDsn,
+
+    // Carries the decision. The init call itself is unconditional: initialising
+    // with `enabled: false` still installs the SDK's async-context isolation, so
+    // scope behaviour is identical whether or not we are sending.
+    enabled: sentryActive,
     environment: getEnvironment(),
     release: packageVersion ? `vocab-management-be@${packageVersion}` : undefined,
     tracesSampleRate: getTracesSampleRate(),
