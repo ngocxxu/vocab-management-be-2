@@ -63,6 +63,19 @@ function createSwagger(app: INestApplication) {
     SwaggerModule.setup(process.env.SWAGGER_PREFIX || '/', app, document);
 }
 
+/**
+ * Reduce a request URL to its path, dropping the query string.
+ *
+ * Query strings carry tokens, signed URL parameters and search terms, and this
+ * value is attached to the Sentry scope for every event captured during the
+ * request. Named rather than inlined so it reads as a decision.
+ */
+function toPathWithoutQuery(url: string): string {
+    const queryStart = url.indexOf('?');
+
+    return queryStart === -1 ? url : url.slice(0, queryStart);
+}
+
 function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
     const header = req.headers['x-request-id'];
     const fromHeader = typeof header === 'string' ? header : Array.isArray(header) ? header[0] : undefined;
@@ -71,7 +84,7 @@ function requestIdMiddleware(req: Request, res: Response, next: NextFunction): v
     Sentry.setTag('request_id', req.requestId);
     Sentry.setContext('request_metadata', {
         method: req.method,
-        path: req.originalUrl,
+        path: toPathWithoutQuery(req.originalUrl),
         requestId: req.requestId,
     });
     next();
@@ -95,7 +108,7 @@ function createMulterMiddleware(maxFileSize: number, winstonLogger: WinstonLogge
                         winstonLogger.logWarn(`File size limit exceeded: ${req.method} ${req.path}`, {
                             statusCode: 413,
                             method: req.method,
-                            path: req.originalUrl,
+                            path: toPathWithoutQuery(req.originalUrl),
                             requestId: req.requestId,
                         });
                         const detail = `File size exceeds the maximum allowed limit of ${maxFileSize} bytes (${getFileSizeInMB(maxFileSize)}MB)`;
@@ -104,7 +117,7 @@ function createMulterMiddleware(maxFileSize: number, winstonLogger: WinstonLogge
                     winstonLogger.logError(`Multer error: ${err.code} - ${err.message}`, undefined, {
                         statusCode: 400,
                         method: req.method,
-                        path: req.originalUrl,
+                        path: toPathWithoutQuery(req.originalUrl),
                         requestId: req.requestId,
                     });
                     return res.status(400).json(buildHttpErrorBody(400, err.message, req));
@@ -112,7 +125,7 @@ function createMulterMiddleware(maxFileSize: number, winstonLogger: WinstonLogge
                 const errorMessage = err instanceof Error ? err.message : 'Unknown error';
                 winstonLogger.logError(`File upload error: ${errorMessage}`, undefined, {
                     method: req.method,
-                    path: req.originalUrl,
+                    path: toPathWithoutQuery(req.originalUrl),
                     requestId: req.requestId,
                 });
                 return next(err);
@@ -128,7 +141,7 @@ function createTimeoutMiddleware(timeoutMs: number, winstonLogger: WinstonLogger
             winstonLogger.logWarn(`Request timeout after ${timeoutMs}ms: ${req.method} ${req.path}`, {
                 statusCode: 408,
                 method: req.method,
-                path: req.originalUrl,
+                path: toPathWithoutQuery(req.originalUrl),
                 requestId: req.requestId,
             });
             if (!res.headersSent) {
