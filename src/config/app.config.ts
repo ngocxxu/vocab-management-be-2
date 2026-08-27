@@ -10,6 +10,8 @@ export default registerAs('app', () => ({
     swaggerUser: process.env.SWAGGER_USER as string,
     swaggerPassword: process.env.SWAGGER_PASSWORD as string,
     healthToken: process.env.HEALTH_TOKEN || '',
+    // Strict equality, never truthiness: 'false' must mean false.
+    sentryEnabled: process.env.SENTRY_ENABLED === 'true',
     sentryDsn: process.env.SENTRY_DSN || '',
     sentryEnvironment: process.env.SENTRY_ENVIRONMENT || '',
     sentryTracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE,
