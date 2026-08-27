@@ -1,6 +1,8 @@
 /// <reference path="./types/express.d.ts" />
 // eslint-disable-next-line import/no-unassigned-import
 import './instrument';
+// eslint-disable-next-line import/no-unassigned-import
+import './sentry-shutdown';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
