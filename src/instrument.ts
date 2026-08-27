@@ -33,6 +33,17 @@ function getTracesSampleRate(): number {
     return process.env.NODE_ENV === 'production' ? DEFAULT_PRODUCTION_TRACES_SAMPLE_RATE : DEFAULT_DEVELOPMENT_TRACES_SAMPLE_RATE;
 }
 
+/**
+ * Reduce a URL to its path, dropping the query string. Duplicated from
+ * server.ts deliberately: instrument.ts must not import application modules,
+ * because it runs before anything else is loaded.
+ */
+function toPathWithoutQuery(url: string): string {
+    const queryStart = url.indexOf('?');
+
+    return queryStart === -1 ? url : url.slice(0, queryStart);
+}
+
 function getEnvironment(): string {
     const sentryEnvironment = process.env.SENTRY_ENVIRONMENT?.trim();
 
@@ -59,6 +70,43 @@ if (sentryEnabled && !sentryDsn) {
 
 const sentryActive = sentryEnabled && sentryDsn.length > 0;
 
+/**
+ * Rebuild the outgoing event from named fields only. Anything not listed is
+ * dropped.
+ *
+ * An allowlist and not a denylist on purpose: a denylist silently leaks
+ * whatever field the next SDK version starts attaching.
+ */
+function applyAllowlist(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
+    const pathname = event.request?.url ? toPathWithoutQuery(event.request.url) : undefined;
+
+    return {
+        type: event.type,
+        event_id: event.event_id,
+        timestamp: event.timestamp,
+        platform: event.platform,
+        level: event.level,
+        environment: event.environment,
+        release: event.release,
+        server_name: event.server_name,
+        transaction: event.transaction,
+        fingerprint: event.fingerprint,
+        exception: event.exception,
+        tags: { ...event.tags, runtime: 'server' },
+        contexts: {
+            runtime: event.contexts?.runtime,
+            // A context, not a tag: per-record paths would exhaust the tag
+            // cardinality budget and fragment issue grouping.
+            request: pathname ? { pathname } : undefined,
+        },
+        request: event.request?.method ? { method: event.request.method } : undefined,
+        sdk: event.sdk,
+    } as Sentry.ErrorEvent;
+}
+
+/** Guards against an error thrown inside the capture path looping forever. */
+let capturing = false;
+
 const packageVersion = getPackageVersion();
 
 Sentry.init({
@@ -72,6 +120,18 @@ Sentry.init({
     release: packageVersion ? `vocab-management-be@${packageVersion}` : undefined,
     tracesSampleRate: getTracesSampleRate(),
     debug: process.env.SENTRY_DEBUG === 'true',
+    beforeSend(event) {
+        if (!sentryActive || capturing) {
+            return null;
+        }
+
+        capturing = true;
+        try {
+            return applyAllowlist(event);
+        } finally {
+            capturing = false;
+        }
+    },
     integrations: [
         Sentry.prismaIntegration({
             prismaInstrumentation: new PrismaInstrumentation(),
