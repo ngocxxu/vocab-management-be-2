@@ -98,9 +98,15 @@ function applyAllowlist(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
         exception: event.exception,
         tags: { ...event.tags, runtime: 'server' },
         contexts: {
-            runtime: event.contexts?.runtime,
-            // A context, not a tag: per-record paths would exhaust the tag
-            // cardinality budget and fragment issue grouping.
+            // Custom contexts pass through. The allowlist exists to stop the
+            // SDK auto-attaching fields we never inspected; contexts are only
+            // ever set by our own code at explicit call sites (queue_job,
+            // reminder_email_failure, request_metadata), so that risk does not
+            // apply and dropping them silently destroys debugging data.
+            ...event.contexts,
+            // Always overridden, never inherited: the scrubbed pathname wins.
+            // A context and not a tag, because per-record paths would exhaust
+            // the tag cardinality budget and fragment issue grouping.
             request: pathname ? { pathname } : undefined,
         },
         request: event.request?.method ? { method: event.request.method } : undefined,
