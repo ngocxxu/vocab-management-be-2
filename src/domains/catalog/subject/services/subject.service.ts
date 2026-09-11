@@ -4,7 +4,7 @@ import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PlanQuotaService } from '../../plan/services/plan-quota.service';
-import { GenerateSubjectsJobDto, GenerateSubjectsInput, ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
+import { GenerateSubjectsJobDto, GenerateSubjectsInput, ReorderSubjectInput, SubjectDto, SubjectInput, SubjectWithCountDto } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
 import { SubjectBadRequestException, SubjectInUseException, SubjectNotFoundException } from '../exceptions';
 import { SubjectMapper } from '../mappers';
@@ -21,11 +21,11 @@ export class SubjectService {
         private readonly vocabRepository: VocabRepository,
     ) {}
 
-    public async find(userId: string): Promise<IResponse<SubjectDto[]>> {
-        const subjects = await this.subjectRepository.findByUserId(userId);
+    public async find(userId: string): Promise<IResponse<SubjectWithCountDto[]>> {
+        const [subjects, vocabCounts] = await Promise.all([this.subjectRepository.findByUserId(userId), this.subjectRepository.countVocabsGroupedBySubject(userId)]);
 
         return {
-            items: this.subjectMapper.toResponseList(subjects),
+            items: this.subjectMapper.toResponseListWithCount(subjects, vocabCounts),
             statusCode: HttpStatus.OK,
         };
     }

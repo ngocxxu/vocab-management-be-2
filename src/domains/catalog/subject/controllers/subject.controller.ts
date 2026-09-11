@@ -4,7 +4,7 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { User, UserRole } from '@prisma/client';
-import { GenerateSubjectsJobDto, GenerateSubjectsInput, ReorderSubjectInput, SubjectDto, SubjectInput } from '../dto';
+import { GenerateSubjectsJobDto, GenerateSubjectsInput, ReorderSubjectInput, SubjectDto, SubjectInput, SubjectWithCountDto } from '../dto';
 import { CreateSubjectInput } from '../dto/create-subject.input';
 import { SubjectService } from '../services';
 
@@ -21,8 +21,8 @@ export class SubjectController {
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Find all subjects' })
-    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectDto })
-    public async find(@CurrentUser() user: User): Promise<IResponse<SubjectDto[]>> {
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: SubjectWithCountDto })
+    public async find(@CurrentUser() user: User): Promise<IResponse<SubjectWithCountDto[]>> {
         return this.subjectService.find(user.id);
     }
 

@@ -1,4 +1,4 @@
-import { SubjectDto, SubjectInput } from '../dto';
+import { SubjectDto, SubjectInput, SubjectWithCountDto } from '../dto';
 
 type SubjectEntity = ConstructorParameters<typeof SubjectDto>[0];
 
@@ -13,5 +13,13 @@ export class SubjectMapper {
 
     public toResponseList(entities: SubjectEntity[]): SubjectDto[] {
         return entities.map((e) => this.toResponse(e));
+    }
+
+    public toResponseWithCount(entity: SubjectEntity, vocabCount: number): SubjectWithCountDto {
+        return new SubjectWithCountDto(entity, vocabCount);
+    }
+
+    public toResponseListWithCount(entities: SubjectEntity[], countsBySubjectId: Map<string, number>): SubjectWithCountDto[] {
+        return entities.map((e) => this.toResponseWithCount(e, countsBySubjectId.get(e.id) ?? 0));
     }
 }

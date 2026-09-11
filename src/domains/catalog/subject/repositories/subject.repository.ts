@@ -253,6 +253,20 @@ export class SubjectRepository extends BaseRepository {
         }
     }
 
+    // Count distinct vocabs per subject for a user, in one query (not cached — invalidation on every vocab mutation isn't worth it here)
+    public async countVocabsGroupedBySubject(userId: string): Promise<Map<string, number>> {
+        const rows = await this.prisma.$queryRaw<Array<{ subjectId: string; count: bigint }>>`
+            SELECT tts."subject_id" AS "subjectId", COUNT(DISTINCT tt."vocab_id") AS count
+            FROM "text_target_subject" tts
+            INNER JOIN "text_target" tt ON tt."id" = tts."text_target_id"
+            INNER JOIN "subject" s ON s."id" = tts."subject_id"
+            WHERE s."user_id" = ${userId}
+            GROUP BY tts."subject_id"
+        `;
+
+        return new Map(rows.map((row) => [row.subjectId, Number(row.count)]));
+    }
+
     // Count the number of vocabs using this subject
     public async countVocabsBySubjectId(subjectId: string, userId: string): Promise<number> {
         return this.prisma.vocab.count({
