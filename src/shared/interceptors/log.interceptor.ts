@@ -6,6 +6,11 @@ import { catchError, map } from 'rxjs/operators';
 
 import { LoggerService } from '../services/logger.service';
 
+// Inclusive 4xx range. Plain numbers rather than HttpStatus members so the
+// comparison against a widened `number` status stays enum-safe.
+const CLIENT_ERROR_MIN_STATUS = 400;
+const CLIENT_ERROR_MAX_STATUS = 499;
+
 // Flow
 // 1. Interceptop start (before controller)
 //    ↓
@@ -32,7 +37,15 @@ export class LogInterceptor implements NestInterceptor {
                 // Log fomat inspired by the Squid docs
                 // See https://docs.trafficserver.apache.org/en/6.1.x/admin-guide/monitoring/logging/log-formats.en.html
                 const status = this.hasStatus(err) ? err.status : 'XXX';
-                this.logger.error(`${this.getTimeDelta(startTime)}ms ${request.ip} ${status} ${request.method} ${this.getUrl(request)}`);
+                const line = `${this.getTimeDelta(startTime)}ms ${request.ip} ${status} ${request.method} ${this.getUrl(request)}`;
+                // 4xx is the caller's fault, not an outage — log it at warn so
+                // error level stays a real signal. Unknown status ('XXX') stays
+                // error: we can't prove it was a client error.
+                if (this.isClientError(status)) {
+                    this.logger.warn(line);
+                } else {
+                    this.logger.error(line);
+                }
                 return throwError(err);
             }),
         );
@@ -44,6 +57,10 @@ export class LogInterceptor implements NestInterceptor {
 
     private getUrl(request: Request): string {
         return `${request.protocol}://${request.hostname}${request.originalUrl}`;
+    }
+
+    private isClientError(status: number | string): boolean {
+        return typeof status === 'number' && status >= CLIENT_ERROR_MIN_STATUS && status <= CLIENT_ERROR_MAX_STATUS;
     }
 
     private hasStatus(err: unknown): err is { status: number } {
