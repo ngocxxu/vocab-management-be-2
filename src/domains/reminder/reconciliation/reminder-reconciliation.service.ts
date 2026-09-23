@@ -1,7 +1,8 @@
 import type { ReminderScheduleEmailJobData } from '@/queues/interfaces/job-payloads';
 import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { LoggerService } from '@/shared';
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { ReminderScheduleStatus } from '@prisma/client';
 import { Job } from 'bullmq';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
@@ -9,8 +10,7 @@ import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
 import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 @Injectable()
-export class ReminderReconciliationService implements OnModuleInit, OnModuleDestroy {
-    private timer?: NodeJS.Timeout;
+export class ReminderReconciliationService implements OnModuleDestroy {
     private stopped = false;
 
     public constructor(
@@ -20,46 +20,43 @@ export class ReminderReconciliationService implements OnModuleInit, OnModuleDest
         private readonly logger: LoggerService,
     ) {}
 
-    public onModuleInit(): void {
+    @Interval('reminder-reconciliation', REMINDER_CONFIG.reconciliation.intervalMs)
+    public async tick(): Promise<void> {
         if (process.env.REMINDER_RECONCILIATION_ENABLED === 'false') {
             return;
         }
-        this.timer = setInterval(() => {
-            void this.run().catch((err: unknown) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                this.logger.error(`Reminder reconciliation failed: ${msg}`);
-            });
-        }, REMINDER_CONFIG.reconciliation.intervalMs);
+        if (this.stopped) {
+            return;
+        }
+        try {
+            const staleBefore = new Date(Date.now() - REMINDER_CONFIG.reconciliation.staleClaimedAfterMs);
+            const released = await this.reminderScheduleRepository.releaseStaleClaims(staleBefore);
+            if (released > 0) {
+                this.logger.info(`Reconciliation: released ${released} stale CLAIMED rows`);
+            }
+
+            const orphanedReset = await this.resetOrphanedQueued();
+            if (orphanedReset > 0) {
+                this.logger.info(`Reconciliation: reset ${orphanedReset} orphaned QUEUED rows`);
+            }
+
+            const collapsed = await this.reminderScheduleRepository.collapseOverdueEscalations();
+            if (collapsed > 0) {
+                this.logger.info(`Reconciliation: collapsed ${collapsed} overdue escalation rows`);
+            }
+
+            await this.repairMissingEscalations();
+        } catch (err: unknown) {
+            // @Interval does not await this method, so an uncaught rejection here
+            // would be an unhandled rejection (fatal on Node >= 15) rather than a
+            // log line.
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error(`Reminder reconciliation failed: ${msg}`);
+        }
     }
 
     public onModuleDestroy(): void {
         this.stopped = true;
-        if (this.timer) {
-            clearInterval(this.timer);
-        }
-    }
-
-    private async run(): Promise<void> {
-        if (this.stopped) {
-            return;
-        }
-        const staleBefore = new Date(Date.now() - REMINDER_CONFIG.reconciliation.staleClaimedAfterMs);
-        const released = await this.reminderScheduleRepository.releaseStaleClaims(staleBefore);
-        if (released > 0) {
-            this.logger.info(`Reconciliation: released ${released} stale CLAIMED rows`);
-        }
-
-        const orphanedReset = await this.resetOrphanedQueued();
-        if (orphanedReset > 0) {
-            this.logger.info(`Reconciliation: reset ${orphanedReset} orphaned QUEUED rows`);
-        }
-
-        const collapsed = await this.reminderScheduleRepository.collapseOverdueEscalations();
-        if (collapsed > 0) {
-            this.logger.info(`Reconciliation: collapsed ${collapsed} overdue escalation rows`);
-        }
-
-        await this.repairMissingEscalations();
     }
 
     private async resetOrphanedQueued(): Promise<number> {

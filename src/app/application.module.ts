@@ -28,6 +28,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
 import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
@@ -37,6 +38,7 @@ import { envConfigLoaders, validationSchema } from '../config';
     imports: [
         CommonModule,
         SentryModule.forRoot(),
+        ScheduleModule.forRoot(),
         NestConfigModule.forRoot({
             isGlobal: true,
             load: envConfigLoaders,

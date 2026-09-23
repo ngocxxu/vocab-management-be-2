@@ -1,6 +1,8 @@
+import { EMBEDDING_SPEC_ID } from '@/domains/ai/constants';
 import { isAiRateLimitError } from '@/domains/ai/utils/ai-rate-limit.util';
 import { LoggerService } from '@/shared';
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { createHash } from 'node:crypto';
 import { EmbeddingProvider } from '../../ai/providers/embedding.provider';
 import { ClaimedVocab, VocabEmbeddingRepository } from '../repositories';
@@ -25,9 +27,8 @@ const WORKER_CONFIG = {
 };
 
 @Injectable()
-export class VocabEmbeddingWorkerService implements OnModuleInit, OnModuleDestroy {
+export class VocabEmbeddingWorkerService implements OnModuleDestroy {
     private readonly instanceId = process.env.INSTANCE_ID ?? `pid-${process.pid}`;
-    private timer?: NodeJS.Timeout;
     private wakeTimer?: NodeJS.Timeout;
     private stopped = false;
     private processing = false;
@@ -39,18 +40,18 @@ export class VocabEmbeddingWorkerService implements OnModuleInit, OnModuleDestro
         private readonly logger: LoggerService,
     ) {}
 
-    public onModuleInit(): void {
+    @Interval('vocab-embedding-worker', WORKER_CONFIG.intervalMs)
+    private tick(): void {
         if (process.env.VOCAB_EMBEDDING_ENABLED === 'false') {
             return;
         }
-        this.timer = setInterval(() => this.tick(), WORKER_CONFIG.intervalMs);
+        void this.run().catch((error: unknown) => {
+            this.logger.error(`Vocab embedding worker failed: ${toMessage(error)}`);
+        });
     }
 
     public onModuleDestroy(): void {
         this.stopped = true;
-        if (this.timer) {
-            clearInterval(this.timer);
-        }
         if (this.wakeTimer) {
             clearTimeout(this.wakeTimer);
         }
@@ -72,12 +73,6 @@ export class VocabEmbeddingWorkerService implements OnModuleInit, OnModuleDestro
             clearTimeout(this.wakeTimer);
         }
         this.wakeTimer = setTimeout(() => this.tick(), WORKER_CONFIG.wakeDebounceMs);
-    }
-
-    private tick(): void {
-        void this.run().catch((error: unknown) => {
-            this.logger.error(`Vocab embedding worker failed: ${toMessage(error)}`);
-        });
     }
 
     private async run(): Promise<void> {
@@ -112,7 +107,7 @@ export class VocabEmbeddingWorkerService implements OnModuleInit, OnModuleDestro
     }
 
     private async embedDueBatch(): Promise<void> {
-        const claimed = await this.repository.claimDue(WORKER_CONFIG.batchSize, this.instanceId);
+        const claimed = await this.repository.claimDue(WORKER_CONFIG.batchSize, this.instanceId, EMBEDDING_SPEC_ID);
         if (claimed.length === 0) {
             return;
         }
@@ -153,17 +148,19 @@ export class VocabEmbeddingWorkerService implements OnModuleInit, OnModuleDestro
             // Empty text can never embed. Record the version so it stops being due
             // instead of failing forever behind exponential backoff.
             if (text.length === 0) {
-                await this.repository.markUnchanged(vocab.vocabId, vocab.sourceVersion);
+                await this.repository.markUnchanged(vocab.vocabId, vocab.sourceVersion, EMBEDDING_SPEC_ID);
                 return 'skipped';
             }
 
             const truncated = text.slice(0, WORKER_CONFIG.maxTextLength);
             const hash = createHash('sha256').update(truncated).digest('hex');
 
-            // Exact gate: the source changed but the embedded text did not (e.g. only
-            // `grammar` was edited), so no embedding call is warranted.
-            if (hash === vocab.contentHash) {
-                await this.repository.markUnchanged(vocab.vocabId, vocab.sourceVersion);
+            // Exact gate: skip only when NEITHER the text NOR the embedding model
+            // changed. A model change (EMBEDDING_SPEC_ID mismatch) forces a
+            // re-embed even though the text hash is identical, since the vector
+            // space itself is different.
+            if (hash === vocab.contentHash && vocab.embeddingSpec === EMBEDDING_SPEC_ID) {
+                await this.repository.markUnchanged(vocab.vocabId, vocab.sourceVersion, EMBEDDING_SPEC_ID);
                 return 'skipped';
             }
 
@@ -174,7 +171,7 @@ export class VocabEmbeddingWorkerService implements OnModuleInit, OnModuleDestro
                 languageFolderId: vocab.languageFolderId,
             });
 
-            await this.repository.markEmbedded(vocab.vocabId, vocab.sourceVersion, hash);
+            await this.repository.markEmbedded(vocab.vocabId, vocab.sourceVersion, hash, EMBEDDING_SPEC_ID);
             await sleep(WORKER_CONFIG.perItemDelayMs);
             return 'embedded';
         } catch (error) {

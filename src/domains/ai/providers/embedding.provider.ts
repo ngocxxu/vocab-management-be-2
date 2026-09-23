@@ -1,3 +1,4 @@
+import { EMBEDDING_SPEC } from '@/domains/ai/constants';
 import { EmbedContentRequest, GoogleGenerativeAI, TaskType } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
 import CircuitBreaker from 'opossum';
@@ -14,14 +15,6 @@ const BREAKER_OPTIONS = {
     resetTimeout: 30_000,
     volumeThreshold: 5,
 };
-
-const EMBEDDING_MODEL = 'gemini-embedding-001';
-
-// 768 (MRL truncation of the model's native 3072). Locked once vectors exist
-// in Qdrant — changing this requires re-embedding every row. Qdrant's
-// collection distance is Cosine, which is scale-invariant, so the truncated
-// vector needs no manual re-normalization.
-const OUTPUT_DIMENSIONALITY = 768;
 
 const TASK_TYPE_MAP: Record<EmbeddingTaskType, TaskType> = {
     RETRIEVAL_DOCUMENT: TaskType.RETRIEVAL_DOCUMENT,
@@ -71,12 +64,12 @@ export class EmbeddingProvider implements IEmbeddingProvider {
 
     private async callGemini(text: string, taskType: EmbeddingTaskType): Promise<number[]> {
         try {
-            const model = this.genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+            const model = this.genAI.getGenerativeModel({ model: EMBEDDING_SPEC.model });
 
             const request: EmbedContentRequestWithDimensionality = {
                 content: { role: 'user', parts: [{ text }] },
                 taskType: TASK_TYPE_MAP[taskType],
-                outputDimensionality: OUTPUT_DIMENSIONALITY,
+                outputDimensionality: EMBEDDING_SPEC.dimensions,
             };
 
             const result = await model.embedContent(request);

@@ -163,6 +163,12 @@ async function bootstrap(): Promise<void> {
     const winstonLogger = app.get(WinstonLogger);
     app.useLogger(winstonLogger);
 
+    // Docker sends SIGTERM on every rolling deploy. Without this, onModuleDestroy
+    // never runs (dead clearInterval / drain-loop code), and sentry-shutdown.ts's
+    // own SIGTERM listener becomes the only one — leaving Nest to rely on the
+    // default Node SIGTERM exit, which never comes because a listener now exists.
+    app.enableShutdownHooks();
+
     app.useGlobalPipes(
         new ValidationPipe({
             // whitelist: true, // TODO: Enable this once all endpoints are updated to properly use DTOs and validation decorators

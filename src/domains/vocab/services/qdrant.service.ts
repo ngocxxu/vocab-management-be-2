@@ -1,33 +1,14 @@
+import { EMBEDDING_SPEC } from '@/domains/ai/constants';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron } from '@nestjs/schedule';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import CircuitBreaker from 'opossum';
-
-const COLLECTION_NAME = 'vocab_embeddings';
-
-/** Locked once vectors exist — see embedding.provider.ts OUTPUT_DIMENSIONALITY. */
-const VECTOR_SIZE = 768;
 
 const SCROLL_PAGE_SIZE = 1_000;
 
 /** Payload fields `search()` filters on — Qdrant rejects filtering without an index. */
 const FILTERABLE_PAYLOAD_FIELDS = ['userId', 'languageFolderId'] as const;
-
-/**
- * Without this, Qdrant always returns the top-N nearest points in scope, no
- * matter how unrelated they are — a folder with only "hello" in it makes
- * "hello" the answer to every query, including "tired".
- *
- * Measured against real gemini-embedding-001 output (RETRIEVAL_DOCUMENT text
- * "word | translation", RETRIEVAL_QUERY single words), not guessed: genuinely
- * related pairs scored 0.67-0.80 (e.g. "exhausted" vs "tired | mệt" = 0.7174),
- * unrelated pairs scored 0.57-0.61 (e.g. "tired" vs "hello | Xin chào" =
- * 0.5985). 0.62 sits in that gap. This is a small-sample heuristic, not a
- * calibrated bound — recheck if real usage shows false negatives (a real
- * match scoring just under 0.62) or false positives (noise still getting
- * through above it).
- */
-const SEMANTIC_SCORE_THRESHOLD = 0.62;
 
 /**
  * Separate from the Gemini breaker on purpose: the two services fail
@@ -80,11 +61,29 @@ export class QdrantService {
         this.breaker.on('close', () => this.logger.log('Qdrant circuit closed'));
     }
 
+    /**
+     * Qdrant Cloud free tier clusters auto-suspend after 1 week of no usage and
+     * get deleted after 4 weeks. The docs don't define "usage", so this issues a
+     * real read (not just a ping) against the collection. Mon & Thu 03:00 keeps
+     * the longest gap under 4 days, well inside the 7-day suspend window even if
+     * one run is missed. Errors are swallowed — a failed keep-alive must never
+     * crash the process, and the next scheduled run tries again.
+     */
+    @Cron('0 3 * * 1,4', { name: 'qdrant-keep-alive' })
+    public async keepAlive(): Promise<void> {
+        try {
+            await this.ensureCollection();
+            await this.run(async () => this.client.count(EMBEDDING_SPEC.collection, { exact: false }));
+        } catch (error) {
+            this.logger.warn(`Qdrant keep-alive failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
     /** @param pointId UUID v5 from `toVocabPointId` — a raw cuid is rejected with 400. */
     public async upsert(pointId: string, vector: number[], payload: VocabPointPayload): Promise<void> {
         await this.ensureCollection();
         await this.run(async () =>
-            this.client.upsert(COLLECTION_NAME, {
+            this.client.upsert(EMBEDDING_SPEC.collection, {
                 wait: true,
                 points: [{ id: pointId, vector, payload }],
             }),
@@ -102,10 +101,10 @@ export class QdrantService {
         }
 
         const result = (await this.run(async () =>
-            this.client.query(COLLECTION_NAME, {
+            this.client.query(EMBEDDING_SPEC.collection, {
                 query: vector,
                 filter: { must },
-                score_threshold: SEMANTIC_SCORE_THRESHOLD,
+                score_threshold: EMBEDDING_SPEC.scoreThreshold,
                 limit,
                 with_payload: true,
             }),
@@ -133,12 +132,12 @@ export class QdrantService {
         await this.ensureCollection();
 
         const result = (await this.run(async () =>
-            this.client.queryGroups(COLLECTION_NAME, {
+            this.client.queryGroups(EMBEDDING_SPEC.collection, {
                 query: vector,
                 filter: { must: [{ key: 'userId', match: { value: userId } }] },
                 group_by: 'languageFolderId',
                 group_size: groupSize,
-                score_threshold: SEMANTIC_SCORE_THRESHOLD,
+                score_threshold: EMBEDDING_SPEC.scoreThreshold,
                 limit: groupCount,
                 with_payload: true,
             }),
@@ -164,7 +163,7 @@ export class QdrantService {
             return;
         }
         await this.ensureCollection();
-        await this.run(async () => this.client.delete(COLLECTION_NAME, { wait: true, points: pointIds }));
+        await this.run(async () => this.client.delete(EMBEDDING_SPEC.collection, { wait: true, points: pointIds }));
     }
 
     /**
@@ -183,7 +182,7 @@ export class QdrantService {
 
         do {
             const page = (await this.run(async () =>
-                this.client.scroll(COLLECTION_NAME, {
+                this.client.scroll(EMBEDDING_SPEC.collection, {
                     limit: SCROLL_PAGE_SIZE,
                     offset,
                     with_payload: true,
@@ -214,19 +213,41 @@ export class QdrantService {
         }
 
         const { collections } = (await this.run(async () => this.client.getCollections())) as { collections: { name: string }[] };
-        const exists = collections.some((collection) => collection.name === COLLECTION_NAME);
+        const exists = collections.some((collection) => collection.name === EMBEDDING_SPEC.collection);
 
         if (!exists) {
-            this.logger.log(`Creating Qdrant collection "${COLLECTION_NAME}" (size=${VECTOR_SIZE}, distance=Cosine)`);
+            this.logger.log(`Creating Qdrant collection "${EMBEDDING_SPEC.collection}" (size=${EMBEDDING_SPEC.dimensions}, distance=Cosine)`);
             await this.run(async () =>
-                this.client.createCollection(COLLECTION_NAME, {
-                    vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
+                this.client.createCollection(EMBEDDING_SPEC.collection, {
+                    vectors: { size: EMBEDDING_SPEC.dimensions, distance: 'Cosine' },
                 }),
             );
+        } else {
+            await this.assertDimensionsMatch();
         }
 
         await this.ensurePayloadIndexes();
         this.collectionEnsured = true;
+    }
+
+    /**
+     * Catches the case where EMBEDDING_SPEC.model/dimensions changed but
+     * `collection` was left pointing at an existing collection sized for the
+     * old model. Without this, upserts fail with a 400 from Qdrant and pile up
+     * behind the worker's retry backoff — silently, since nothing surfaces it.
+     */
+    private async assertDimensionsMatch(): Promise<void> {
+        const info = (await this.run(async () => this.client.getCollection(EMBEDDING_SPEC.collection))) as {
+            config: { params: { vectors: { size: number } } };
+        };
+        const actualSize = info.config.params.vectors.size;
+
+        if (actualSize !== EMBEDDING_SPEC.dimensions) {
+            throw new Error(
+                `Qdrant collection "${EMBEDDING_SPEC.collection}" has vector size ${actualSize}, but EMBEDDING_SPEC.dimensions is ${EMBEDDING_SPEC.dimensions}. ` +
+                    'Give EMBEDDING_SPEC.collection a new name for this model generation — see the upgrade runbook in docs/features/semantic-search.md.',
+            );
+        }
     }
 
     /**
@@ -244,7 +265,7 @@ export class QdrantService {
     private async ensurePayloadIndexes(): Promise<void> {
         for (const fieldName of FILTERABLE_PAYLOAD_FIELDS) {
             await this.run(async () =>
-                this.client.createPayloadIndex(COLLECTION_NAME, {
+                this.client.createPayloadIndex(EMBEDDING_SPEC.collection, {
                     field_name: fieldName,
                     field_schema: 'keyword',
                     wait: true,

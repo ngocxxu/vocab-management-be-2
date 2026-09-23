@@ -15,6 +15,8 @@ export interface ClaimedVocab {
     /** Computed in SQL at claim time — never recomputed in TS (formats differ). */
     sourceVersion: string;
     contentHash: string | null;
+    /** `EMBEDDING_SPEC_ID` at last successful embed — null if never embedded under a tracked spec. */
+    embeddingSpec: string | null;
     textTargets: string[];
 }
 
@@ -75,7 +77,7 @@ export class VocabEmbeddingRepository {
      * as ordinary data, which is what survives the slow network call. A crashed
      * worker's lease expires after {@link LEASE_MINUTES}.
      */
-    public async claimDue(limit: number, instanceId: string): Promise<ClaimedVocab[]> {
+    public async claimDue(limit: number, instanceId: string, specId: string): Promise<ClaimedVocab[]> {
         const candidates = await this.prisma.$queryRaw<{ vocab_id: string; new_version: string }[]>`
             SELECT v.id AS vocab_id, ${SOURCE_VERSION_SQL} AS new_version
             FROM vocab v
@@ -83,8 +85,9 @@ export class VocabEmbeddingRepository {
             JOIN vocab_embedding_state s ON s.vocab_id = v.id
             WHERE (s.next_attempt_at IS NULL OR s.next_attempt_at <= now())
               AND (s.locked_at IS NULL OR s.locked_at < now() - make_interval(mins => ${LEASE_MINUTES}::int))
-            GROUP BY v.id, v.updated_at, s.source_version
+            GROUP BY v.id, v.updated_at, s.source_version, s.embedding_spec
             HAVING s.source_version IS DISTINCT FROM (${SOURCE_VERSION_SQL})
+                OR s.embedding_spec IS DISTINCT FROM ${specId}
             ORDER BY v.updated_at ASC
             LIMIT ${limit}
         `;
@@ -95,12 +98,12 @@ export class VocabEmbeddingRepository {
 
         const candidateIds = candidates.map((row) => row.vocab_id);
 
-        const leased = await this.prisma.$queryRaw<{ vocab_id: string; content_hash: string | null }[]>`
+        const leased = await this.prisma.$queryRaw<{ vocab_id: string; content_hash: string | null; embedding_spec: string | null }[]>`
             UPDATE vocab_embedding_state
             SET locked_by = ${instanceId}, locked_at = now()
             WHERE vocab_id = ANY(${candidateIds})
               AND (locked_at IS NULL OR locked_at < now() - make_interval(mins => ${LEASE_MINUTES}::int))
-            RETURNING vocab_id, content_hash
+            RETURNING vocab_id, content_hash, embedding_spec
         `;
 
         if (leased.length === 0) {
@@ -109,8 +112,9 @@ export class VocabEmbeddingRepository {
 
         const versionById = new Map(candidates.map((row) => [row.vocab_id, row.new_version]));
         const hashById = new Map(leased.map((row) => [row.vocab_id, row.content_hash]));
+        const specById = new Map(leased.map((row) => [row.vocab_id, row.embedding_spec]));
 
-        return this.hydrate([...hashById.keys()], versionById, hashById);
+        return this.hydrate([...hashById.keys()], versionById, hashById, specById);
     }
 
     /**
@@ -137,12 +141,13 @@ export class VocabEmbeddingRepository {
     }
 
     /** Embedded successfully: store both gates, clear the lease and any failure. */
-    public async markEmbedded(vocabId: string, sourceVersion: string, contentHash: string): Promise<void> {
+    public async markEmbedded(vocabId: string, sourceVersion: string, contentHash: string, specId: string): Promise<void> {
         await this.prisma.vocabEmbeddingState.update({
             where: { vocabId },
             data: {
                 sourceVersion,
                 contentHash,
+                embeddingSpec: specId,
                 embeddedAt: new Date(),
                 attempt: 0,
                 nextAttemptAt: null,
@@ -156,12 +161,14 @@ export class VocabEmbeddingRepository {
     /**
      * Source changed but the embedded text did not — e.g. only `grammar` was
      * edited. Records the new version so the cheap gate stops re-selecting this
-     * row, without spending an embedding call.
+     * row, without spending an embedding call. Also stamps `specId`: the only
+     * way an empty-text row (which never calls markEmbedded) stops being due
+     * after an EMBEDDING_SPEC change.
      */
-    public async markUnchanged(vocabId: string, sourceVersion: string): Promise<void> {
+    public async markUnchanged(vocabId: string, sourceVersion: string, specId: string): Promise<void> {
         await this.prisma.vocabEmbeddingState.update({
             where: { vocabId },
-            data: { sourceVersion, attempt: 0, nextAttemptAt: null, lastError: null, lockedBy: null, lockedAt: null },
+            data: { sourceVersion, embeddingSpec: specId, attempt: 0, nextAttemptAt: null, lastError: null, lockedBy: null, lockedAt: null },
         });
     }
 
@@ -201,7 +208,12 @@ export class VocabEmbeddingRepository {
     }
 
     /** Loads the text needed to build the embedding input for already-leased rows. */
-    private async hydrate(vocabIds: string[], versionById: Map<string, string>, hashById: Map<string, string | null>): Promise<ClaimedVocab[]> {
+    private async hydrate(
+        vocabIds: string[],
+        versionById: Map<string, string>,
+        hashById: Map<string, string | null>,
+        specById: Map<string, string | null>,
+    ): Promise<ClaimedVocab[]> {
         const vocabs = await this.prisma.vocab.findMany({
             where: { id: { in: vocabIds } },
             select: {
@@ -226,6 +238,7 @@ export class VocabEmbeddingRepository {
                     languageFolderId: vocab.languageFolderId,
                     sourceVersion,
                     contentHash: hashById.get(vocab.id) ?? null,
+                    embeddingSpec: specById.get(vocab.id) ?? null,
                     textTargets: vocab.textTargets.map((target) => target.textTarget),
                 },
             ];

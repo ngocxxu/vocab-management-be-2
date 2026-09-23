@@ -1,12 +1,12 @@
 import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { LoggerService } from '@/shared';
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { ReminderSchedule, ReminderScheduleStatus } from '@prisma/client';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
 @Injectable()
-export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
-    private timer?: NodeJS.Timeout;
+export class SchedulerPollerService implements OnModuleDestroy {
     private stopped = false;
     private processing = false;
     private readonly instanceId = process.env.INSTANCE_ID ?? `pid-${process.pid}`;
@@ -17,30 +17,11 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
         private readonly logger: LoggerService,
     ) {}
 
-    public onModuleInit(): void {
+    @Interval('reminder-scheduler-poller', REMINDER_CONFIG.poller.intervalMs)
+    public async tick(): Promise<void> {
         if (process.env.REMINDER_POLLER_ENABLED === 'false') {
             return;
         }
-        this.timer = setInterval(() => {
-            void this.tick().catch((err: unknown) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                this.logger.error(`SchedulerPoller tick failed: ${msg}`);
-            });
-        }, REMINDER_CONFIG.poller.intervalMs);
-    }
-
-    public async onModuleDestroy(): Promise<void> {
-        this.stopped = true;
-        if (this.timer) {
-            clearInterval(this.timer);
-        }
-        const deadline = Date.now() + REMINDER_CONFIG.poller.lockTimeoutMs;
-        while (this.processing && Date.now() < deadline) {
-            await new Promise((r) => setTimeout(r, 50));
-        }
-    }
-
-    private async tick(): Promise<void> {
         if (this.stopped || this.processing) {
             return;
         }
@@ -50,8 +31,22 @@ export class SchedulerPollerService implements OnModuleInit, OnModuleDestroy {
             for (const row of batch) {
                 await this.enqueueOne(row);
             }
+        } catch (err: unknown) {
+            // @Interval does not await this method, so an uncaught rejection here
+            // would be an unhandled rejection (fatal on Node >= 15) rather than a
+            // log line. Same reasoning as the other two @Interval/@Cron methods.
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error(`SchedulerPoller tick failed: ${msg}`);
         } finally {
             this.processing = false;
+        }
+    }
+
+    public async onModuleDestroy(): Promise<void> {
+        this.stopped = true;
+        const deadline = Date.now() + REMINDER_CONFIG.poller.lockTimeoutMs;
+        while (this.processing && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 50));
         }
     }
 

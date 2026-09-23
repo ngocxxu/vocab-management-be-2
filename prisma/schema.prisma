@@ -198,6 +198,14 @@ model VocabEmbeddingState {
   /// this, so no embedding API call is made.
   contentHash String? @map("content_hash")
 
+  /// `EMBEDDING_SPEC_ID` (e.g. "gemini-embedding-001:768") observed at last
+  /// successful embed. Second exact gate alongside contentHash: a row is only
+  /// left un-re-embedded when BOTH the text hash AND this spec are unchanged,
+  /// so bumping EMBEDDING_SPEC in code makes every row due again without
+  /// touching sourceVersion. Null means "seeded but never embedded yet" or
+  /// "embedded before this column existed" — either way, due.
+  embeddingSpec String? @map("embedding_spec")
+
   /// Log only — never used to decide whether to re-embed.
   embeddedAt DateTime? @map("embedded_at")
 
