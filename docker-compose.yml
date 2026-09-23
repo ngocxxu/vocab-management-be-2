@@ -2,12 +2,20 @@ services:
   postgres:
     container_name: postgres_container
     image: postgres:17.5-alpine
+    # wal_level=logical is required for Sequin (or any logical-replication
+    # consumer) to read a publication. max_slot_wal_keep_size caps how much WAL
+    # a stalled slot can retain — mirrors the production config in
+    # infrastructure/clusters/mmo-vps/apps/shared/postgresql.yaml.
+    command: postgres -c wal_level=logical -c max_slot_wal_keep_size=256MB
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vocab_db}
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
     volumes:
       - postgres_vol:/data/postgres
+      # Sequin's own metadata DB (separate from vocab_db). Only runs against a
+      # fresh volume — see docker/init-sequin-db.sql for the manual fallback.
+      - ./docker/init-sequin-db.sql:/docker-entrypoint-initdb.d/init-sequin-db.sql:ro
     ports:
       - '5433:5432'
     restart: unless-stopped
@@ -42,6 +50,47 @@ services:
       - redis_data:/data
     depends_on:
       - postgres
+    restart: unless-stopped
+
+  # Mirrors clusters/mmo-vps/apps/shared/sequin.yaml for local testing.
+  # Env var names verified against Sequin's own docker/docker-compose.yaml
+  # (github.com/sequinstream/sequin) — not the Helm chart's abstraction over
+  # them, since the raw container is what's run here.
+  #
+  # vocab-be itself is expected to run on the host via `pnpm dev`, not in this
+  # compose file — that's why the webhook URL in sequin.local.yaml targets
+  # host.docker.internal rather than a compose service name.
+  sequin:
+    container_name: sequin_container
+    image: sequin/sequin:latest
+    pull_policy: always
+    environment:
+      PG_HOSTNAME: postgres
+      PG_DATABASE: sequin
+      PG_PORT: 5432
+      PG_USERNAME: ${POSTGRES_USER:-admin}
+      PG_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      PG_POOL_SIZE: 10
+      REDIS_URL: redis://redis:6379
+      CONFIG_FILE_PATH: /config/sequin.yaml
+      # Dev-only fixed values — production generates its own via Doppler.
+      # Never reuse these outside a local machine.
+      SECRET_KEY_BASE: 'local-dev-only-not-a-real-secret-000000000000000000000000000000'
+      VAULT_KEY: 'local-dev-only-not-a-real-key-AAAAAAAAAAAAAAAAAAAAAA='
+      # Must match CDC_WEBHOOK_TOKEN in vocab-be's own .env — read here so
+      # sequin.local.yaml's ${CDC_WEBHOOK_TOKEN} can resolve it.
+      CDC_WEBHOOK_TOKEN: ${CDC_WEBHOOK_TOKEN}
+    ports:
+      - '${SEQUIN_PORT:-7376}:7376'
+    volumes:
+      - ./docker/sequin.local.yaml:/config/sequin.yaml:ro
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

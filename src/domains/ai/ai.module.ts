@@ -14,6 +14,7 @@ import { FillInBlankEvaluationProcessor } from './processors/fill-in-blank-evalu
 import { MultipleChoiceGenerationProcessor } from './processors/multiple-choice-generation.processor';
 import { AiProviderFactory } from './providers/ai-provider.factory';
 import { CloudflareProvider } from './providers/cloudflare.provider';
+import { EmbeddingProvider } from './providers/embedding.provider';
 import { GeminiProvider } from './providers/gemini.provider';
 import { GroqProvider } from './providers/groq.provider';
 import { OmniRouteProvider } from './providers/omniroute.provider';
@@ -47,6 +48,7 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         GroqProvider,
         OmniRouteProvider,
         CloudflareProvider,
+        EmbeddingProvider,
         AiProviderFactory,
         AiLanguageNameService,
         AiTranslationService,
@@ -63,6 +65,6 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         FillInBlankChoiceGenerationProcessor,
         FillInBlankEvaluationProcessor,
     ],
-    exports: [AiService, AiProviderFactory],
+    exports: [AiService, AiProviderFactory, EmbeddingProvider],
 })
 export class AiModule {}

@@ -1,3 +1,5 @@
+import { EmbeddingProvider } from '@/domains/ai/providers/embedding.provider';
+import { LanguageFolderRepository } from '@/domains/catalog/language-folder/repositories';
 import { SubjectService } from '@/domains/catalog/subject/services/subject.service';
 import { normalizeSubjectName } from '@/domains/catalog/subject/utils';
 import type { ApiKeyWithFolder } from '@/domains/identity/api-key/repositories';
@@ -5,12 +7,26 @@ import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.producer';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { LoggerService } from '@/shared/services/logger.service';
+import { RedisService } from '@/shared/services/redis.service';
 import { getOrderBy, getPagination } from '@/shared/utils/pagination.util';
+import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { LanguageFolderNotFoundException } from '../../catalog/language-folder/exceptions';
 import { PlanQuotaService } from '../../catalog/plan/services/plan-quota.service';
-import { BulkDeleteInput, BulkGetInput, CsvImportErrorDto, CsvImportQueryDto, CsvImportResponseDto, CsvRowDto, VocabConflictBySubjectQuery, VocabDto, VocabInput } from '../dto';
+import {
+    BulkDeleteInput,
+    BulkGetInput,
+    CsvImportErrorDto,
+    CsvImportQueryDto,
+    CsvImportResponseDto,
+    CsvRowDto,
+    VocabConflictBySubjectQuery,
+    VocabDto,
+    VocabInput,
+    VocabSearchGroupDto,
+} from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { SubjectRefInput } from '../dto/subject-ref.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
@@ -20,6 +36,18 @@ import { ResolvedTextTargetInput, ResolvedVocabInput, VocabMapper, VocabRelatedW
 import { CsvImportExistingVocab, VocabRelatedWordRepository, VocabRepository } from '../repositories';
 import { type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
+import { QdrantService } from './qdrant.service';
+
+/** Deleted-but-still-indexed hits get filtered out, so ask for more than needed. */
+const SEMANTIC_OVERFETCH_FACTOR = 2;
+
+/** Bounded so the vector cache cannot crowd out the app's real Redis entries. */
+const QUERY_VECTOR_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/** opossum tags open-circuit rejections with this code (see circuit.js buildError). */
+function isCircuitOpen(error: unknown): boolean {
+    return error instanceof Error && (error as NodeJS.ErrnoException).code === 'EOPENBREAKER';
+}
 
 @Injectable()
 export class VocabService {
@@ -33,7 +61,105 @@ export class VocabService {
         private readonly planQuotaService: PlanQuotaService,
         private readonly vocabTranslationProducer: VocabTranslationProducer,
         private readonly vocabRelatedWordRepository: VocabRelatedWordRepository,
+        private readonly embeddingProvider: EmbeddingProvider,
+        private readonly qdrantService: QdrantService,
+        private readonly redisService: RedisService,
+        private readonly languageFolderRepository: LanguageFolderRepository,
     ) {}
+
+    /**
+     * Cross-language semantic search — complements find()'s substring match,
+     * which can never surface e.g. "cat" for a query of "con mèo".
+     *
+     * task_type MUST be RETRIEVAL_QUERY here, not the RETRIEVAL_DOCUMENT the
+     * worker uses. Using one value for both degrades ranking with no error.
+     *
+     * Degrades rather than fails: if either circuit breaker is open, this falls
+     * back to the substring search so the user still gets results, losing only
+     * cross-language matching.
+     */
+    public async searchSemantic(query: string, userId: string, limit: number, languageFolderId?: string): Promise<VocabDto[]> {
+        try {
+            const queryVector = await this.getQueryVector(query);
+
+            // Over-fetch: hits whose vocab has since been deleted are filtered out
+            // below, and asking for exactly `limit` would silently return fewer.
+            const hits = await this.qdrantService.search(queryVector, userId, limit * SEMANTIC_OVERFETCH_FACTOR, languageFolderId);
+
+            if (hits.length === 0) {
+                return [];
+            }
+
+            const vocabs = await this.vocabRepository.findByIds(
+                hits.map((hit) => hit.vocabId),
+                userId,
+            );
+            const vocabById = new Map(vocabs.map((vocab) => [vocab.id, vocab]));
+
+            // Reorder to Qdrant's ranking, dropping vocabs deleted since indexing
+            // (the worker's prune phase removes those points on its next tick).
+            const ordered = hits.map((hit) => vocabById.get(hit.vocabId)).filter((vocab): vocab is NonNullable<typeof vocab> => vocab !== undefined);
+
+            return this.vocabMapper.toResponseList(ordered.slice(0, limit));
+        } catch (error) {
+            if (!isCircuitOpen(error)) {
+                throw error;
+            }
+            this.logger.warn(`Semantic search unavailable, falling back to substring search: ${error instanceof Error ? error.message : String(error)}`);
+            return this.fallbackSubstringSearch(query, userId, limit, languageFolderId);
+        }
+    }
+
+    /**
+     * Cross-folder semantic search, bucketed per language folder.
+     *
+     * Same two-stage shape as {@link searchSemantic} — Qdrant ranks, Postgres
+     * hydrates — but every folder gets its own slice so one folder cannot take
+     * every slot (see QdrantService.searchGrouped for why that happens).
+     *
+     * All folders' ids are hydrated in ONE findByIds call, not one per group.
+     */
+    public async searchSemanticGrouped(query: string, userId: string, groupCount: number, groupSize: number): Promise<VocabSearchGroupDto[]> {
+        try {
+            const queryVector = await this.getQueryVector(query);
+            const groups = await this.qdrantService.searchGrouped(queryVector, userId, groupCount, groupSize);
+
+            if (groups.length === 0) {
+                return [];
+            }
+
+            const [vocabs, folders] = await Promise.all([
+                this.vocabRepository.findByIds(
+                    groups.flatMap((group) => group.hits.map((hit) => hit.vocabId)),
+                    userId,
+                ),
+                // One batch call for every folder name, not one per group —
+                // same reasoning as the findByIds call above.
+                this.languageFolderRepository.findNamesByIds(
+                    groups.map((group) => group.languageFolderId),
+                    userId,
+                ),
+            ]);
+            const vocabById = new Map(vocabs.map((vocab) => [vocab.id, vocab]));
+            const folderNameById = new Map(folders.map((folder) => [folder.id, folder.name]));
+
+            return groups.flatMap((group) => {
+                // Drop vocabs deleted since indexing, same as searchSemantic. A group
+                // can empty out entirely, in which case it should not be rendered.
+                const ordered = group.hits.map((hit) => vocabById.get(hit.vocabId)).filter((vocab): vocab is NonNullable<typeof vocab> => vocab !== undefined);
+
+                return ordered.length > 0
+                    ? [new VocabSearchGroupDto(group.languageFolderId, folderNameById.get(group.languageFolderId) ?? null, this.vocabMapper.toResponseList(ordered))]
+                    : [];
+            });
+        } catch (error) {
+            if (!isCircuitOpen(error)) {
+                throw error;
+            }
+            this.logger.warn(`Grouped semantic search unavailable, falling back to substring search: ${error instanceof Error ? error.message : String(error)}`);
+            return this.fallbackGroupedSubstringSearch(query, userId, groupCount * groupSize);
+        }
+    }
 
     /**
      * Find all vocabularies in the database (paginated)
@@ -699,6 +825,66 @@ export class VocabService {
         const vocabs = paginatedResult.items;
 
         return CsvParserUtil.generateCsvBuffer(vocabs);
+    }
+
+    /**
+     * A query vector is a pure function of (query text, model, dimensions) — it
+     * does not depend on vocab data, so adding or deleting vocabs can never make
+     * a cached entry wrong. Only changing the model or dimensions invalidates it,
+     * and that already forces a full re-embed.
+     *
+     * Stored as base64 Float32Array (~3KB) rather than JSON (~15KB): Gemini
+     * returns float32 anyway, so JSON spends ~17 significant digits on values
+     * carrying ~7, and this Redis is capped at 64Mi shared with BullMQ and the
+     * vocab cache.
+     */
+    private async getQueryVector(query: string): Promise<number[]> {
+        const cacheKey = `embed:${createHash('sha256').update(query.normalize('NFC')).digest('hex')}`;
+
+        const cached = await this.redisService.get(RedisPrefix.CACHE, cacheKey);
+        if (cached) {
+            const buffer = Buffer.from(cached, 'base64');
+            return Array.from(new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / Float32Array.BYTES_PER_ELEMENT));
+        }
+
+        const vector = await this.embeddingProvider.embed(query, 'RETRIEVAL_QUERY');
+        const encoded = Buffer.from(new Float32Array(vector).buffer).toString('base64');
+        await this.redisService.set(RedisPrefix.CACHE, cacheKey, encoded, QUERY_VECTOR_CACHE_TTL_SECONDS);
+
+        return vector;
+    }
+
+    private async fallbackSubstringSearch(query: string, userId: string, limit: number, languageFolderId?: string): Promise<VocabDto[]> {
+        const paginated = await this.find({ textSource: query, languageFolderId, page: 1, pageSize: limit } as VocabQueryParamsInput, userId);
+        return paginated.items;
+    }
+
+    /**
+     * Keeps the grouped response shape when the breaker is open, so the client
+     * renders a degraded result set instead of having to handle a second shape.
+     * Grouping happens here rather than in SQL — the fallback is already capped
+     * to one page, so there is nothing large to group.
+     */
+    private async fallbackGroupedSubstringSearch(query: string, userId: string, limit: number): Promise<VocabSearchGroupDto[]> {
+        const vocabs = await this.fallbackSubstringSearch(query, userId, limit);
+
+        const byFolder = new Map<string, VocabDto[]>();
+        for (const vocab of vocabs) {
+            const existing = byFolder.get(vocab.languageFolderId);
+            if (existing) {
+                existing.push(vocab);
+            } else {
+                byFolder.set(vocab.languageFolderId, [vocab]);
+            }
+        }
+
+        // Best-effort: a name lookup failure here means the breaker is ALREADY
+        // open for the primary path, so swallow rather than compound the outage
+        // with a second failure — the client falls back to the language label.
+        const folders = await this.languageFolderRepository.findNamesByIds([...byFolder.keys()], userId).catch(() => []);
+        const folderNameById = new Map(folders.map((folder) => [folder.id, folder.name]));
+
+        return [...byFolder].map(([languageFolderId, folderVocabs]) => new VocabSearchGroupDto(languageFolderId, folderNameById.get(languageFolderId) ?? null, folderVocabs));
     }
 
     private async buildResponse(vocab: ConstructorParameters<typeof VocabDto>[0]): Promise<VocabDto> {

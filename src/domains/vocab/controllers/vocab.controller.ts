@@ -45,6 +45,7 @@ import {
     VocabDto,
     VocabInput,
     VocabRelatedWordsDto,
+    VocabSearchGroupDto,
 } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VOCAB_FILTERS, VocabQueryParamsInput } from '../dto/vocab-query-params.input';
@@ -66,6 +67,47 @@ type MulterFile = {
 type RequestWithFile = Request & {
     file?: MulterFile;
 };
+
+const SEMANTIC_SEARCH_MAX_QUERY_LENGTH = 1_000;
+const SEMANTIC_SEARCH_DEFAULT_LIMIT = 10;
+const SEMANTIC_SEARCH_MAX_LIMIT = 100;
+
+/** Folders per grouped response, and rows shown inside each folder. */
+const SEMANTIC_SEARCH_DEFAULT_GROUP_COUNT = 10;
+const SEMANTIC_SEARCH_MAX_GROUP_COUNT = 50;
+const SEMANTIC_SEARCH_DEFAULT_GROUP_SIZE = 3;
+const SEMANTIC_SEARCH_MAX_GROUP_SIZE = 20;
+
+/**
+ * `parseInt('abc')` is NaN, which would otherwise travel straight into the
+ * Qdrant query, and an unbounded value would be doubled by the over-fetch.
+ */
+function parseBoundedInt(raw: string | undefined, fallback: number, max: number): number {
+    if (!raw) {
+        return fallback;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return fallback;
+    }
+    return Math.min(parsed, max);
+}
+
+function parseSemanticLimit(raw: string | undefined): number {
+    return parseBoundedInt(raw, SEMANTIC_SEARCH_DEFAULT_LIMIT, SEMANTIC_SEARCH_MAX_LIMIT);
+}
+
+/** Shared by both semantic routes — an empty or oversized query never reaches the model. */
+function assertSemanticQuery(q: string): void {
+    if (!q || q.trim().length === 0) {
+        throw new BadRequestException('q must not be empty');
+    }
+    // Bounded before it reaches the embedding model: an unbounded query would
+    // blow past the model's token ceiling and surface as a 500, not a 400.
+    if (q.length > SEMANTIC_SEARCH_MAX_QUERY_LENGTH) {
+        throw new BadRequestException(`q must be at most ${SEMANTIC_SEARCH_MAX_QUERY_LENGTH} characters`);
+    }
+}
 
 @Controller('vocabs')
 @ApiTags('vocab')
@@ -111,6 +153,57 @@ export class VocabController {
         @CurrentUser() user: User,
     ): Promise<VocabDto[]> {
         return this.vocabService.findRandom(count, user.id, { languageFolderId, sourceLanguageCode, targetLanguageCode });
+    }
+
+    // Must stay above `@Get(':id')` — Nest matches routes in declaration
+    // order, and 'search' would otherwise be captured as an :id value.
+    @Get('search/semantic')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Cross-language semantic search over the caller\'s vocab (e.g. "con mèo" matches a vocab stored as "cat")' })
+    @ApiQuery({ name: 'q', required: true, type: String, description: 'Search text, any supported language' })
+    @ApiQuery({ name: 'languageFolderId', required: false, type: String })
+    @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabDto })
+    public async searchSemantic(
+        @Query('q') q: string,
+        @Query('languageFolderId') languageFolderId: string | undefined,
+        @Query('limit') limit: string | undefined,
+        @CurrentUser() user: User,
+    ): Promise<VocabDto[]> {
+        assertSemanticQuery(q);
+
+        return this.vocabService.searchSemantic(q, user.id, parseSemanticLimit(limit), languageFolderId);
+    }
+
+    // Also above `@Get(':id')`, same reason as the route above.
+    @Get('search/semantic/grouped')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({
+        summary: "Cross-folder semantic search over the caller's vocab, bucketed per language folder",
+        description:
+            'Separate from the flat route because the response shape differs. Buckets exist because multilingual embeddings ' +
+            'rank same-language and English matches higher, so a merged list lets one folder take nearly every slot.',
+    })
+    @ApiQuery({ name: 'q', required: true, type: String, description: 'Search text, any supported language' })
+    @ApiQuery({ name: 'groupCount', required: false, type: Number, example: 10, description: 'Max language folders returned' })
+    @ApiQuery({ name: 'groupSize', required: false, type: Number, example: 3, description: 'Max vocabs per folder' })
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabSearchGroupDto })
+    public async searchSemanticGrouped(
+        @Query('q') q: string,
+        @Query('groupCount') groupCount: string | undefined,
+        @Query('groupSize') groupSize: string | undefined,
+        @CurrentUser() user: User,
+    ): Promise<VocabSearchGroupDto[]> {
+        assertSemanticQuery(q);
+
+        return this.vocabService.searchSemanticGrouped(
+            q,
+            user.id,
+            parseBoundedInt(groupCount, SEMANTIC_SEARCH_DEFAULT_GROUP_COUNT, SEMANTIC_SEARCH_MAX_GROUP_COUNT),
+            parseBoundedInt(groupSize, SEMANTIC_SEARCH_DEFAULT_GROUP_SIZE, SEMANTIC_SEARCH_MAX_GROUP_SIZE),
+        );
     }
 
     @Get(':id/related-words')

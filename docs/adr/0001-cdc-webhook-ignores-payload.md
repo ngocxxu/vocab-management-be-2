@@ -1,0 +1,5 @@
+# CDC webhook ignores its payload; SQL fingerprint owns correctness
+
+Sequin streams Postgres changes on `vocab`/`text_target` to a webhook, but the webhook handler discards the event body entirely — it never distinguishes insert/update/delete and never reads old-row values. Its only job is to call `requestWake()`, nudging the embedding worker's poll loop to run sooner (debounced ≥2s). Whether a vocab actually needs re-embedding is decided independently by the worker's own SQL fingerprint (`source_version` / `content_hash` in `vocab_embedding_state`), not by anything CDC reports.
+
+We chose this over parsing the CDC payload for precise diffing because it makes Sequin's correctness responsibility zero: if Sequin is down, misconfigured, or drops an event, search results only go stale for up to the worker's own poll interval (~30s) — never wrong or missing, since the SQL fingerprint re-derives truth from Postgres directly on every scan. The cost is giving up "know exactly what changed" in favor of "cheaply re-check everything that might have changed," which only works because that re-check is already indexed and fast.

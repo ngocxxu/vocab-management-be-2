@@ -175,6 +175,52 @@ model Vocab {
   @@map("vocab")
 }
 
+/// Embedding state for semantic search. Lives OUTSIDE the vocab table on purpose:
+/// vocab and text_target are inside the CDC publication, so writing embedding
+/// state onto them would emit WAL -> CDC -> mark stale -> write -> WAL, forever.
+///
+/// DO NOT add this table to `vocab_embedding_pub`.
+///
+/// Deliberately has NO foreign key to Vocab: when a vocab is deleted the state
+/// row survives as a tombstone, so the worker finds orphaned Qdrant points with a
+/// cheap anti-join instead of scrolling the whole collection.
+model VocabEmbeddingState {
+  /// Vocab.id — no FK, see above.
+  vocabId String @id @map("vocab_id")
+
+  /// Fingerprint of the source data observed at claim time:
+  /// GREATEST(vocab.updated_at, MAX(text_target.updated_at)) || ':' || COUNT(text_target.id)
+  /// Cheap gate: filters in SQL so a LIMIT returns rows that actually changed.
+  sourceVersion String @map("source_version")
+
+  /// sha256 of the NFC-normalized text actually sent to the embedding model.
+  /// Exact gate: an edit to `grammar`/`explanation` bumps sourceVersion but not
+  /// this, so no embedding API call is made.
+  contentHash String? @map("content_hash")
+
+  /// Log only — never used to decide whether to re-embed.
+  embeddedAt DateTime? @map("embedded_at")
+
+  /// Named to match ReminderSchedule's retry fields — same concept, same names.
+  /// No `maxAttempts` counterpart on purpose: a failed embed is a sync that fell
+  /// behind, not a message that expired, so it must stay retryable forever. The
+  /// capped exponential backoff keeps a permanently-broken row cheap instead.
+  attempt       Int       @default(0) @map("attempt")
+  nextAttemptAt DateTime? @map("next_attempt_at")
+  lastError     String?   @map("last_error")
+
+  /// Lease held across the (slow) embedding call, since a Postgres row lock ends
+  /// at COMMIT. Expires after a timeout so a crashed worker frees its rows.
+  lockedBy String?   @map("locked_by")
+  lockedAt DateTime? @map("locked_at")
+
+  // Composite, not two single-column indexes: claimDue's WHERE always filters
+  // both columns together (due for retry AND not currently leased). Neither
+  // column is ever queried alone anywhere in the repository.
+  @@index([nextAttemptAt, lockedAt])
+  @@map("vocab_embedding_state")
+}
+
 model VocabRelatedWord {
   id            String   @id @default(cuid()) @map("id")
   vocabId       String   @map("vocab_id")

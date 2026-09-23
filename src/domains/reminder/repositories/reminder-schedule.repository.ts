@@ -18,10 +18,16 @@ export class ReminderScheduleRepository extends BaseRepository {
         return this.prisma.reminderSchedule.findUnique({ where: { id } });
     }
 
+    /**
+     * Single-statement claim: the CTE locks eligible rows while the UPDATE runs,
+     * preventing concurrent workers from selecting the same rows.
+     * The UPDATE marks them CLAIMED in the same statement, so the follow-up read
+     * can safely fetch the claimed rows by ID without an interactive transaction.
+     */
     public async claimDueBatch(batchSize: number, instanceId: string): Promise<ReminderSchedule[]> {
         const now = new Date();
-        return this.runInTransaction(async (tx) => {
-            const picked = await tx.$queryRaw<Array<{ id: string }>>`
+        const claimed = await this.prisma.$queryRaw<Array<{ id: string }>>`
+            WITH due AS (
                 SELECT id FROM reminder_schedule
                 WHERE status = 'PENDING'::"ReminderScheduleStatus"
                   AND due_at <= ${now}
@@ -29,21 +35,20 @@ export class ReminderScheduleRepository extends BaseRepository {
                 ORDER BY due_at ASC, priority DESC
                 LIMIT ${batchSize}
                 FOR UPDATE SKIP LOCKED
-            `;
-            if (picked.length === 0) {
-                return [];
-            }
-            const ids = picked.map((p) => p.id);
-            await tx.reminderSchedule.updateMany({
-                where: { id: { in: ids } },
-                data: {
-                    status: ReminderScheduleStatus.CLAIMED,
-                    lockedBy: instanceId,
-                    lockedAt: now,
-                },
-            });
-            return tx.reminderSchedule.findMany({ where: { id: { in: ids } } });
-        });
+            )
+            UPDATE reminder_schedule s
+            SET status = 'CLAIMED'::"ReminderScheduleStatus",
+                locked_by = ${instanceId},
+                locked_at = ${now},
+                updated_at = ${now}
+            FROM due
+            WHERE s.id = due.id
+            RETURNING s.id
+        `;
+        if (claimed.length === 0) {
+            return [];
+        }
+        return this.prisma.reminderSchedule.findMany({ where: { id: { in: claimed.map((c) => c.id) } } });
     }
 
     public async transitionStatus(

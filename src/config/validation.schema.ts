@@ -37,10 +37,22 @@ export const validationSchema = Joi.object({
     INSTANCE_ID: Joi.string().allow(''),
     REMINDER_POLLER_ENABLED: Joi.string().valid('true', 'false').allow(''),
     REMINDER_RECONCILIATION_ENABLED: Joi.string().valid('true', 'false').allow(''),
+    VOCAB_EMBEDDING_ENABLED: Joi.string().valid('true', 'false').allow(''),
+    // Shared secret for the Sequin CDC webhook. Unset means the endpoint refuses
+    // every request rather than defaulting open.
+    CDC_WEBHOOK_TOKEN: Joi.string().allow(''),
 
     PASSENGERS_ALLOWED: Joi.string().valid('yes', 'no').required(),
 
     DATABASE_URL: Joi.string().required(),
+
+    // Not .required(): values live in Doppler, not the local .env, and both
+    // `pnpm dev` and `pnpm test` boot via `env-cmd -f .env` — a required var
+    // here would break local dev and every module-booting spec. Same pattern
+    // as the AI provider keys below; fail loudly at QdrantService construction
+    // instead, the way AiProviderFactory.validateApiKey does.
+    QDRANT_URL: Joi.string().allow(''),
+    QDRANT_API_KEY: Joi.string().allow(''),
 
     JWT_SECRET: Joi.string().required(),
     JWT_ISSUER: Joi.string().required(),

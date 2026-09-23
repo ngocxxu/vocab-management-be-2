@@ -17,6 +17,17 @@ export class LanguageFolderRepository extends BaseRepository {
         super(prismaService);
     }
 
+    /** Name + color only, scoped to one user — for labeling results that already carry a folder id (e.g. grouped semantic search). */
+    public async findNamesByIds(ids: string[], userId: string): Promise<{ id: string; name: string; folderColor: string }[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+        return this.prisma.languageFolder.findMany({
+            where: { id: { in: ids }, userId },
+            select: { id: true, name: true, folderColor: true },
+        });
+    }
+
     public async findByUserId(userId: string): Promise<LanguageFolder[]> {
         const cached = await this.redisService.jsonGet<LanguageFolder[]>(RedisPrefix.LANGUAGE_FOLDER, `user:${userId}`);
         if (cached) {

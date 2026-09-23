@@ -1,0 +1,43 @@
+# Local dev mirror of infrastructure/clusters/mmo-vps/apps/shared/sequin.yaml's
+# `configuration:` block — same shape, pointed at the local docker-compose
+# Postgres instead of the shared cluster one.
+#
+# ${VAR} is resolved by Sequin itself at container startup, from its own
+# process env (see https://sequinstream.com/docs/reference/sequin-yaml) — not
+# by docker-compose. The values come from docker-compose.yml's `environment:`
+# block on the sequin service, which docker-compose itself fills in from the
+# host's .env / shell env.
+databases:
+  - name: vocab
+    hostname: postgres
+    port: 5432
+    database: ${POSTGRES_DB:-vocab_db}
+    username: ${POSTGRES_USER:-admin}
+    password: ${POSTGRES_PASSWORD:-admin}
+    slot:
+      name: vocab_embedding_slot
+    publication:
+      name: vocab_embedding_pub
+
+http_endpoints:
+  - name: vocab-be-cdc
+    # host.docker.internal: vocab-be runs on the host via `pnpm dev`, not as a
+    # container in this compose file, so the Sequin container reaches it
+    # through Docker's host gateway rather than a compose service name.
+    url: http://host.docker.internal:${API_PORT:-3002}${API_PREFIX:-/api/v1}/internal/cdc/vocab-changed
+    encrypted_headers:
+      - key: Authorization
+        # Must equal CDC_WEBHOOK_TOKEN in vocab-be's own .env, or every webhook
+        # is rejected — the endpoint fails closed, not open, when unset.
+        value: Bearer ${CDC_WEBHOOK_TOKEN}
+
+sinks:
+  - name: vocab-changed
+    database: vocab
+    source:
+      include_tables:
+        - public.vocab
+        - public.text_target
+    destination:
+      type: webhook
+      http_endpoint: vocab-be-cdc

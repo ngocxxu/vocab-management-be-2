@@ -38,3 +38,19 @@ export interface IAiProvider {
 
     chat(params: ChatParams): Promise<ChatResponse>;
 }
+
+/**
+ * 'RETRIEVAL_DOCUMENT' when embedding content to be searched (a vocab),
+ * 'RETRIEVAL_QUERY' when embedding the user's search string. Using the same
+ * value for both silently degrades result quality — no error, no log.
+ */
+export type EmbeddingTaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY';
+
+/**
+ * Deliberately NOT part of IAiProvider — that interface demands
+ * generateContent/transcribeAudio/chat, none of which an embedding client
+ * implements.
+ */
+export interface IEmbeddingProvider {
+    embed(text: string, taskType: EmbeddingTaskType): Promise<number[]>;
+}
