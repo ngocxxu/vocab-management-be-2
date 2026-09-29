@@ -7,6 +7,15 @@
 # by docker-compose. The values come from docker-compose.yml's `environment:`
 # block on the sequin service, which docker-compose itself fills in from the
 # host's .env / shell env.
+# Sequin creates this account and console user on first start against a fresh `sequin` database
+# (production already has its own). Dev-only credentials: the console is only on localhost:7376.
+account:
+  name: local
+
+users:
+  - email: dev@example.com
+    password: local-dev-password
+
 databases:
   - name: vocab
     hostname: postgres
@@ -16,6 +25,8 @@ databases:
     password: ${POSTGRES_PASSWORD:-admin}
     slot:
       name: vocab_embedding_slot
+      # Sequin does not create a missing slot by default. Local only: production creates its own.
+      create_if_not_exists: true
     publication:
       name: vocab_embedding_pub
 

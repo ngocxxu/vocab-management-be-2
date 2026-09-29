@@ -25,6 +25,7 @@ npm-debug.log
 
 # environment
 .env
+.env.e2e
 
 .cursor
 
