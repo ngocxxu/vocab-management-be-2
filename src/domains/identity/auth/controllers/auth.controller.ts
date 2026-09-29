@@ -206,8 +206,9 @@ export class AuthController {
         status: HttpStatus.OK,
         description: 'User signed out successfully',
     })
-    public async signOut(): Promise<{ message: string }> {
-        const result = await this.authService.signOut();
+    public async signOut(@Req() request: Request): Promise<{ message: string }> {
+        const accessToken = request.headers.authorization?.split(' ')[1] ?? '';
+        const result = await this.authService.signOut(accessToken);
 
         this.logger.info('User signed out successfully');
 

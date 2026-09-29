@@ -20,23 +20,6 @@ services:
       - '5433:5432'
     restart: unless-stopped
 
-  pgadmin:
-    container_name: pgadmin_container
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@gmail.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
-    volumes:
-      - pgadmin_vol:/var/lib/pgadmin
-      - ./servers.json:/pgadmin4/servers.json
-    ports:
-      - '${PGADMIN_PORT:-5050}:80'
-    depends_on:
-      - postgres
-    restart: unless-stopped
-
   redis:
     container_name: redis_container
     image: redis/redis-stack:7.2.0-v18
@@ -62,8 +45,9 @@ services:
   # host.docker.internal rather than a compose service name.
   sequin:
     container_name: sequin_container
-    image: sequin/sequin:latest
-    pull_policy: always
+    # Pinned to the version production runs (infrastructure/clusters/mmo-vps/apps/shared/sequin.yaml)
+    # instead of `latest`, so a new release cannot change what local dev boots.
+    image: sequin/sequin:v0.14.6
     environment:
       PG_HOSTNAME: postgres
       PG_DATABASE: sequin
@@ -75,8 +59,8 @@ services:
       CONFIG_FILE_PATH: /config/sequin.yaml
       # Dev-only fixed values — production generates its own via Doppler.
       # Never reuse these outside a local machine.
-      SECRET_KEY_BASE: 'local-dev-only-not-a-real-secret-000000000000000000000000000000'
-      VAULT_KEY: 'local-dev-only-not-a-real-key-AAAAAAAAAAAAAAAAAAAAAA='
+      SECRET_KEY_BASE: 'local-dev-only-not-a-real-secret-0000000000000000000000000000000000000000'
+      VAULT_KEY: 'bG9jYWwtZGV2LW9ubHktdmF1bHQta2V5LTAxMjM0NTY='
       # Must match CDC_WEBHOOK_TOKEN in vocab-be's own .env — read here so
       # sequin.local.yaml's ${CDC_WEBHOOK_TOKEN} can resolve it.
       CDC_WEBHOOK_TOKEN: ${CDC_WEBHOOK_TOKEN}
@@ -95,5 +79,4 @@ services:
 
 volumes:
   postgres_vol:
-  pgadmin_vol:
   redis_data:

@@ -235,8 +235,10 @@ export class AuthService {
         };
     }
 
-    public async signOut() {
-        const { error } = await this.auth.signOut();
+    // Revoke the caller's own session. `this.auth` is a shared client whose in-memory session is
+    // whichever user signed in last, so signing out through it revoked the wrong user.
+    public async signOut(accessToken: string) {
+        const { error } = await this.authAdmin.signOut(accessToken, 'local');
 
         if (error) {
             this.raiseAuthError(error, 'signOut');
