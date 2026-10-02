@@ -62,6 +62,28 @@ enum QuestionType {
   TRANSLATION_AUDIO
 }
 
+/// How a trainer schedules its words. CLASSIC never touches FSRS state.
+enum TrainerMode {
+  CLASSIC
+  FSRS
+}
+
+/// FSRS card state (ts-fsrs `State`). See docs/features/fsrs.md.
+enum FsrsState {
+  NEW
+  LEARNING
+  REVIEW
+  RELEARNING
+}
+
+/// FSRS review rating (ts-fsrs `Rating`). AGAIN = forgot, the rest = remembered.
+enum FsrsRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
 enum ConfigScope {
   SYSTEM
   USER
@@ -165,6 +187,8 @@ model Vocab {
   vocabTrainerResults VocabTrainerResult[]
   relatedWords        VocabRelatedWord[]   @relation("VocabRelatedWords")
   linkedByWords       VocabRelatedWord[]   @relation("VocabLinkedWords")
+  fsrsCards           VocabFsrsCard[]
+  fsrsReviewLogs      VocabFsrsReviewLog[]
 
   @@unique([textSource, sourceLanguageCode, targetLanguageCode, languageFolderId])
   @@index([textSource])
@@ -267,8 +291,19 @@ model VocabTrainer {
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
+  mode TrainerMode @default(CLASSIC) @map("mode")
+
+  // FSRS settings (see docs/features/fsrs.md). Used only when mode = FSRS, read only via the FSRS settings mapper.
+  fsrsDesiredRetention Float   @default(0.9) @map("fsrs_desired_retention") // Target recall probability at review time, 0.70-0.97
+  fsrsMaximumInterval  Int     @default(36500) @map("fsrs_maximum_interval") // Longest gap between reviews, in days
+  fsrsNewPerDay        Int     @default(20) @map("fsrs_new_per_day") // Max NEW cards introduced per local day
+  fsrsReviewsPerDay    Int     @default(100) @map("fsrs_reviews_per_day") // Max reviews per local day
+  fsrsAllowReviewAhead Boolean @default(false) @map("fsrs_allow_review_ahead") // Allow reviewing cards before they are due
+
   vocabAssignments VocabTrainerWord[]
   results          VocabTrainerResult[]
+  fsrsCards        VocabFsrsCard[]
+  fsrsReviewLogs   VocabFsrsReviewLog[]
 
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -286,7 +321,9 @@ model VocabTrainerWord {
   vocabTrainerId String       @map("vocab_trainer_id")
   vocabTrainer   VocabTrainer @relation(fields: [vocabTrainerId], references: [id], onDelete: Cascade)
   vocabId        String       @map("vocab_id")
-  vocab          Vocab        @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+  // NoAction (not Restrict): deleting a vocab that is still in a trainer fails with a FK violation (P2003 -> 409),
+  // but deleting a whole trainer/user still works because the cascade from the trainer is resolved before the check.
+  vocab          Vocab        @relation(fields: [vocabId], references: [id], onDelete: NoAction)
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
@@ -471,6 +508,8 @@ model User {
   reminderSchedules      ReminderSchedule[]
   chatMessages           ChatMessage[]
   apiKeys                ApiKey[]
+  vocabFsrsCards         VocabFsrsCard[]
+  vocabFsrsReviewLogs    VocabFsrsReviewLog[]
 
   @@index([role, isActive])
   @@index([isActive, createdAt])
@@ -538,6 +577,77 @@ model VocabMastery {
   @@index([userId, incorrectCount])
   @@index([userId, masteryScore])
   @@map("vocab_mastery")
+}
+
+/// FSRS scheduling state of one word inside one FSRS trainer (see docs/features/fsrs.md).
+/// A trainer is one learning cycle: the same word in two trainers has two independent cards.
+/// A row exists only while the word is enrolled in the trainer; Classic code never reads or writes this table.
+/// The service must delete the card when the word is removed from the trainer. Field names follow ts-fsrs.
+///
+/// CHECK constraints (hand-written in migration 20261002101236_add_fsrs, Prisma cannot declare them; re-add if the migration is regenerated):
+///   stability >= 0, difficulty = 0 OR difficulty BETWEEN 1 AND 10, reps >= 0, lapses >= 0, scheduled_days >= 0, learning_steps >= 0
+///   (and on vocab_trainer) fsrs_desired_retention BETWEEN 0.70 AND 0.97, fsrs_maximum_interval >= 1,
+///   fsrs_new_per_day >= 0, fsrs_reviews_per_day >= 0
+model VocabFsrsCard {
+  id             String       @id @default(cuid()) @map("id")
+  vocabTrainerId String       @map("vocab_trainer_id")
+  vocabTrainer   VocabTrainer @relation(fields: [vocabTrainerId], references: [id], onDelete: Cascade)
+  vocabId        String       @map("vocab_id")
+  vocab          Vocab        @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+  userId         String       @map("user_id") // Denormalised owner, for the cross-trainer "due today" query
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state          FsrsState    @default(NEW) @map("state") // NEW = enrolled but never reviewed
+  due            DateTime     @map("due") @db.Timestamptz // Next review time
+  stability      Float        @default(0) @map("stability") // Days until recall probability falls to the desired retention
+  difficulty     Float        @default(0) @map("difficulty") // 1 (easy) to 10 (hard); 0 until the first review
+  reps           Int          @default(0) @map("reps") // Total reviews
+  lapses         Int          @default(0) @map("lapses") // Times forgotten after the card was learned
+  scheduledDays  Int          @default(0) @map("scheduled_days") // Interval chosen at the last review, in days
+  learningSteps  Int          @default(0) @map("learning_steps") // Index of the current (re)learning step, ts-fsrs `learning_steps`
+  lastReviewedAt DateTime?    @map("last_reviewed_at") @db.Timestamptz // Null until the first review
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@unique([vocabTrainerId, vocabId])
+  @@index([vocabTrainerId, due])
+  @@index([userId, due])
+  @@index([vocabId])
+  @@map("vocab_fsrs_card")
+}
+
+/// One append-only row per FSRS review of a card. Feeds daily limits, stats and (later) parameter optimisation.
+/// answerId is a client-generated idempotency key (no FK): insert the log first and treat P2002 as a duplicate request.
+/// Deleted together with its trainer (one trainer = one learning cycle).
+/// `*After` columns hold the card state produced by this review; prevState and elapsedDays describe the state before it.
+model VocabFsrsReviewLog {
+  id                       String       @id @default(cuid()) @map("id")
+  answerId                 String       @unique @map("answer_id")
+  userId                   String       @map("user_id")
+  user                     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabId                  String       @map("vocab_id")
+  vocab                    Vocab        @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+  vocabTrainerId           String       @map("vocab_trainer_id")
+  vocabTrainer             VocabTrainer @relation(fields: [vocabTrainerId], references: [id], onDelete: Cascade)
+  rating                   FsrsRating   @map("rating")
+  prevState                FsrsState    @map("prev_state") // State before this review; prevState = NEW counts toward fsrsNewPerDay
+  elapsedDays              Int          @map("elapsed_days") // Days since the previous review, computed from lastReviewedAt
+  stateAfter               FsrsState    @map("state_after")
+  dueAfter                 DateTime     @map("due_after") @db.Timestamptz // Next review time chosen by this review
+  stabilityAfter           Float        @map("stability_after")
+  difficultyAfter          Float        @map("difficulty_after")
+  scheduledDaysAfter       Int          @map("scheduled_days_after")
+  desiredRetentionAtReview Float        @map("desired_retention_at_review") // Snapshot of the trainer setting, it can change later
+  durationMs               Int?         @map("duration_ms") // Time from showing the card to rating it; null if not measured
+  questionType             QuestionType @map("question_type")
+  isAhead                  Boolean      @default(false) @map("is_ahead") // Reviewed before it was due
+  reviewedAt               DateTime     @map("reviewed_at") @db.Timestamptz // Server time
+  createdAt                DateTime     @default(now()) @map("created_at")
+
+  @@index([userId, reviewedAt])
+  @@index([vocabTrainerId, reviewedAt])
+  @@index([vocabTrainerId, vocabId, reviewedAt])
+  @@index([vocabId])
+  @@map("vocab_fsrs_review_log")
 }
 
 enum ReminderChannel {
