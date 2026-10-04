@@ -1,11 +1,12 @@
 import { LoggerService, PaginationDto } from '@/shared';
 import { getOrderBy, getPagination } from '@/shared/utils';
 import { Injectable } from '@nestjs/common';
-import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerMode, TrainerStatus, User, VocabTrainer } from '@prisma/client';
 import { AiService } from '../../ai/services/ai.service';
 import { NotificationService } from '../../notification/services';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
 import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
+import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import {
     SubmitExamBodyInput,
@@ -23,6 +24,7 @@ import { VocabTrainerBadRequestException, VocabTrainerNotFoundException } from '
 import { VocabTrainerMapper } from '../mappers';
 import { VocabTrainerRepository } from '../repositories';
 import { EQuestionType, EReminderRepeat, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
+import { assertTrainerUpdateAllowed, assertValidTrainerCreate } from '../utils/fsrs-trainer-rules';
 
 export interface FlipCardQuestion {
     frontText: string[];
@@ -42,6 +44,7 @@ export class VocabTrainerService {
         private readonly notificationService: NotificationService,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly logger: LoggerService,
+        private readonly fsrsRepository: FsrsRepository,
     ) {}
 
     /**
@@ -290,6 +293,7 @@ export class VocabTrainerService {
         if (!trainer) {
             throw new VocabTrainerNotFoundException(id);
         }
+        this.assertClassicTrainer(trainer);
 
         const { countTime, wordTestInputs } = input;
         if (!wordTestInputs?.length) {
@@ -461,6 +465,11 @@ export class VocabTrainerService {
      * Create a new vocab trainer
      */
     public async create(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        assertValidTrainerCreate(input);
+        if (input.mode === TrainerMode.FSRS) {
+            return this.createFsrsTrainer(input, userId);
+        }
+
         const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId));
 
         const trainerWithAssignments = await this.vocabTrainerRepository.findById(trainer.id);
@@ -481,6 +490,8 @@ export class VocabTrainerService {
             throw new VocabTrainerNotFoundException(id);
         }
 
+        assertTrainerUpdateAllowed(input, existing);
+
         const { vocabAssignmentIds, ...trainerData } = input;
 
         if (vocabAssignmentIds !== undefined) {
@@ -499,7 +510,12 @@ export class VocabTrainerService {
                     throw new VocabTrainerNotFoundException(id);
                 }
 
-                return this.vocabTrainerMapper.toResponse(trainerWithAssignments);
+                const trainerDto = this.vocabTrainerMapper.toResponse(trainerWithAssignments);
+                if (existing.mode === TrainerMode.FSRS) {
+                    trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainerWithAssignments, uniqueVocabIds);
+                }
+
+                return trainerDto;
             });
         }
 
@@ -533,6 +549,7 @@ export class VocabTrainerService {
         if (!trainer) {
             throw new VocabTrainerNotFoundException(id);
         }
+        this.assertClassicTrainer(trainer);
 
         const { countTime, wordTestSelects } = input;
         if (!wordTestSelects?.length) {
@@ -665,5 +682,39 @@ export class VocabTrainerService {
         );
 
         return this.vocabTrainerMapper.toResponse(result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+    }
+
+    /** The trainer and its cards are created together, so an FSRS trainer never exists without the cards of its words. */
+    private async createFsrsTrainer(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        return this.vocabTrainerRepository.inTransaction(async (tx) => {
+            const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId), tx);
+            const trainerDto = this.vocabTrainerMapper.toResponse(trainer);
+            trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainer, input.vocabAssignmentIds ?? []);
+
+            return trainerDto;
+        });
+    }
+
+    /**
+     * Creates the missing cards (one per word and direction) and returns the words that cannot have one yet because
+     * they have no translation. Cards that already exist are left alone, so this is safe to run on every update.
+     */
+    private async enrollFsrsCards(tx: Prisma.TransactionClient, trainer: VocabTrainer, vocabIds: string[]): Promise<string[]> {
+        const uniqueVocabIds = [...new Set(vocabIds)];
+        const enrollable = new Set(await this.fsrsRepository.findVocabIdsWithTranslation(tx, uniqueVocabIds));
+        const cards = [...enrollable].flatMap((vocabId) => trainer.fsrsDirections.map((direction) => ({ vocabTrainerId: trainer.id, vocabId, userId: trainer.userId, direction })));
+
+        if (cards.length > 0) {
+            await this.fsrsRepository.createCards(tx, cards);
+        }
+
+        return uniqueVocabIds.filter((vocabId) => !enrollable.has(vocabId));
+    }
+
+    /** FSRS trainers are reviewed card by card through the review API; the exam flow would delete or re-status them like a Classic trainer. */
+    private assertClassicTrainer(trainer: Pick<VocabTrainer, 'mode'>): void {
+        if (trainer.mode === TrainerMode.FSRS) {
+            throw new VocabTrainerBadRequestException('An FSRS trainer is reviewed through the FSRS review API, not submitted as an exam');
+        }
     }
 }

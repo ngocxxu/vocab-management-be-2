@@ -1,4 +1,4 @@
-import type { FsrsDirection, FsrsRating, FsrsState } from '@prisma/client';
+import type { FsrsDirection, FsrsRating, FsrsState, QuestionType } from '@prisma/client';
 
 /** Per-trainer FSRS settings. Stored in the `fsrs*` columns of VocabTrainer, always read through FsrsMapper.toSettings. */
 export type FsrsSettings = {
@@ -42,3 +42,24 @@ export type FsrsReviewOutcome = {
 
 /** What each of the 4 rating buttons would do, used to show the next interval on the button. */
 export type FsrsPreview = Record<FsrsRating, FsrsReviewOutcome>;
+
+/** One answer to a card. `answerId` is a client-generated id: sending the same one twice must not schedule twice. */
+export type FsrsReviewInput = {
+    cardId: string;
+    rating: FsrsRating;
+    questionType: QuestionType;
+    answerId: string;
+    durationMs?: number;
+};
+
+/** Result of recording a review. For a repeated `answerId` the values are those of the first review. */
+export type FsrsReviewResult = {
+    cardId: string;
+    rating: FsrsRating;
+    state: FsrsState;
+    due: Date;
+    stability: number;
+    difficulty: number;
+    scheduledDays: number;
+    isDuplicate: boolean;
+};

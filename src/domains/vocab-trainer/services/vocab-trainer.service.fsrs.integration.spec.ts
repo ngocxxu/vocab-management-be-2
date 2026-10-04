@@ -1,0 +1,219 @@
+import { PrismaService } from '@/shared/services/prisma.service';
+import { BadRequestException } from '@nestjs/common';
+import { QuestionType, TrainerStatus, User } from '@prisma/client';
+import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
+import { VocabTrainerInput } from '../dto';
+import { VocabTrainerRepository } from '../repositories';
+import { VocabTrainerService } from './vocab-trainer.service';
+
+// Runs against a real Postgres (cascades and composite keys cannot be mocked):
+//   FSRS_TEST_DATABASE_URL=postgresql://admin:admin@localhost:5433/vocab_fsrs_test?schema=public pnpm test vocab-trainer.service.fsrs
+const databaseUrl = process.env.FSRS_TEST_DATABASE_URL;
+const describeWithDb = databaseUrl ? describe : describe.skip;
+
+describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
+    // Built in beforeAll: the body of a skipped describe still runs, and there is no database URL then.
+    let prisma: PrismaService;
+    let service: VocabTrainerService;
+
+    let user: User;
+    let folderId: string;
+    let words: string[];
+    let wordWithoutTranslation: string;
+
+    const input = (overrides: Partial<VocabTrainerInput> = {}): VocabTrainerInput =>
+        ({
+            name: 'FSRS trainer',
+            status: TrainerStatus.PENDING,
+            questionType: QuestionType.FLIP_CARD,
+            mode: 'FSRS',
+            vocabAssignmentIds: words,
+            ...overrides,
+        }) as VocabTrainerInput;
+
+    const cardsOf = async (trainerId: string) => prisma.vocabFsrsCard.findMany({ where: { vocabTrainerId: trainerId }, orderBy: [{ vocabId: 'asc' }, { direction: 'asc' }] });
+
+    const createVocab = async (textSource: string, withTranslation: boolean): Promise<string> => {
+        const vocab = await prisma.vocab.create({
+            data: {
+                textSource,
+                sourceLanguageCode: 'en',
+                targetLanguageCode: 'vi',
+                userId: user.id,
+                languageFolderId: folderId,
+                ...(withTranslation ? { textTargets: { create: [{ textTarget: `${textSource}-vi` }] } } : {}),
+            },
+        });
+
+        return vocab.id;
+    };
+
+    beforeAll(async () => {
+        prisma = new PrismaService({ datasources: { db: { url: databaseUrl } } });
+        const unused = {} as never;
+        service = new VocabTrainerService(new VocabTrainerRepository(prisma), unused, unused, unused, unused, unused, new FsrsRepository(prisma));
+        await prisma.$connect();
+    });
+
+    afterAll(async () => {
+        await prisma.user.deleteMany({ where: { email: { startsWith: 'fsrs-trainer-spec' } } });
+        await prisma.$disconnect();
+    });
+
+    beforeEach(async () => {
+        await prisma.user.deleteMany({ where: { email: { startsWith: 'fsrs-trainer-spec' } } });
+        await prisma.language.upsert({ where: { code: 'en' }, update: {}, create: { code: 'en', name: 'English' } });
+        await prisma.language.upsert({ where: { code: 'vi' }, update: {}, create: { code: 'vi', name: 'Vietnamese' } });
+
+        user = await prisma.user.create({ data: { email: `fsrs-trainer-spec-${Date.now()}@example.com`, firstName: 'A', lastName: 'B' } });
+        const folder = await prisma.languageFolder.create({ data: { name: 'f', folderColor: '#000', userId: user.id, sourceLanguageCode: 'en', targetLanguageCode: 'vi' } });
+        folderId = folder.id;
+        words = [await createVocab('one', true), await createVocab('two', true), await createVocab('three', true)];
+        wordWithoutTranslation = await createVocab('four', false);
+    });
+
+    test('creates one card per word and direction (3 words, both directions = 6 cards)', async () => {
+        // Act
+        const trainer = await service.create(input(), user.id);
+
+        // Assert
+        const cards = await cardsOf(trainer.id);
+        expect(cards).toHaveLength(6);
+        expect(cards.every((c) => c.state === 'NEW' && c.userId === user.id)).toBe(true);
+        expect(trainer.mode).toBe('FSRS');
+        expect(trainer.fsrsDirections).toEqual(['SOURCE_TO_TARGET', 'TARGET_TO_SOURCE']);
+    });
+
+    test('creates one card per word for a single direction (3 cards)', async () => {
+        // Act
+        const trainer = await service.create(input({ fsrsDirections: ['TARGET_TO_SOURCE'] }), user.id);
+
+        // Assert
+        const cards = await cardsOf(trainer.id);
+        expect(cards).toHaveLength(3);
+        expect(new Set(cards.map((c) => c.direction))).toEqual(new Set(['TARGET_TO_SOURCE']));
+    });
+
+    test('skips a word without a translation and reports it', async () => {
+        // Act
+        const trainer = await service.create(input({ vocabAssignmentIds: [...words, wordWithoutTranslation] }), user.id);
+
+        // Assert
+        expect(await cardsOf(trainer.id)).toHaveLength(6);
+        expect(trainer.fsrsSkippedVocabIds).toEqual([wordWithoutTranslation]);
+        expect(trainer.vocabAssignments).toHaveLength(4);
+    });
+
+    test('a Classic trainer gets no cards', async () => {
+        // Act
+        const trainer = await service.create(input({ mode: 'CLASSIC', questionType: QuestionType.MULTIPLE_CHOICE }), user.id);
+
+        // Assert
+        expect(await cardsOf(trainer.id)).toHaveLength(0);
+        expect(trainer.mode).toBe('CLASSIC');
+    });
+
+    test('rejects FSRS settings on a Classic trainer', async () => {
+        // Act
+        const attempt = service.create(input({ mode: 'CLASSIC', questionType: QuestionType.MULTIPLE_CHOICE, fsrsDesiredRetention: 0.8 }), user.id);
+
+        // Assert
+        await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    test('rejects a question type FSRS cannot review', async () => {
+        // Act
+        const attempt = service.create(input({ questionType: QuestionType.MULTIPLE_CHOICE }), user.id);
+
+        // Assert
+        await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
+        expect(await prisma.vocabTrainer.count({ where: { userId: user.id } })).toBe(0);
+    });
+
+    test('removing a word deletes its cards, keeps its logs and leaves the other cards untouched', async () => {
+        // Arrange
+        const trainer = await service.create(input(), user.id);
+        const [kept, removed] = [words[0], words[1]];
+        const removedCard = await prisma.vocabFsrsCard.findFirstOrThrow({ where: { vocabTrainerId: trainer.id, vocabId: removed } });
+        await prisma.vocabFsrsReviewLog.create({
+            data: {
+                answerId: 'log-1',
+                userId: user.id,
+                vocabId: removed,
+                vocabTrainerId: trainer.id,
+                direction: removedCard.direction,
+                rating: 'GOOD',
+                prevState: 'NEW',
+                elapsedDays: 0,
+                stateAfter: 'REVIEW',
+                dueAfter: new Date(),
+                stabilityAfter: 3,
+                difficultyAfter: 5,
+                scheduledDaysAfter: 3,
+                desiredRetentionAtReview: 0.9,
+                questionType: 'FLIP_CARD',
+                reviewedAt: new Date(),
+            },
+        });
+        await prisma.vocabFsrsCard.updateMany({ where: { vocabTrainerId: trainer.id, vocabId: kept }, data: { reps: 4, state: 'REVIEW', stability: 12 } });
+
+        // Act
+        await service.update(trainer.id, input({ vocabAssignmentIds: [kept, words[2]] }), user.id);
+
+        // Assert
+        const cards = await cardsOf(trainer.id);
+        expect(cards).toHaveLength(4);
+        expect(cards.some((c) => c.vocabId === removed)).toBe(false);
+        expect(cards.filter((c) => c.vocabId === kept).map((c) => c.reps)).toEqual([4, 4]);
+        expect(await prisma.vocabFsrsReviewLog.count({ where: { vocabTrainerId: trainer.id, answerId: 'log-1' } })).toBe(1);
+    });
+
+    test('adding a word creates only its cards', async () => {
+        // Arrange
+        const trainer = await service.create(input({ vocabAssignmentIds: [words[0]] }), user.id);
+
+        // Act
+        await service.update(trainer.id, input({ vocabAssignmentIds: words }), user.id);
+
+        // Assert
+        expect(await cardsOf(trainer.id)).toHaveLength(6);
+    });
+
+    test('rejects changing mode or directions, accepts the same values and other settings', async () => {
+        // Arrange
+        const trainer = await service.create(input(), user.id);
+
+        // Act + Assert
+        await expect(service.update(trainer.id, input({ mode: 'CLASSIC' }), user.id)).rejects.toBeInstanceOf(BadRequestException);
+        await expect(service.update(trainer.id, input({ fsrsDirections: ['SOURCE_TO_TARGET'] }), user.id)).rejects.toBeInstanceOf(BadRequestException);
+        const sameDirectionsNewSettings = input({ fsrsDirections: ['TARGET_TO_SOURCE', 'SOURCE_TO_TARGET'], fsrsDesiredRetention: 0.85, fsrsNewPerDay: 5 });
+        const updated = await service.update(trainer.id, sameDirectionsNewSettings, user.id);
+        expect(updated.fsrsDesiredRetention).toBe(0.85);
+        expect(updated.fsrsNewPerDay).toBe(5);
+        expect(await cardsOf(trainer.id)).toHaveLength(6);
+    });
+
+    test('Classic submit endpoints refuse an FSRS trainer and leave it untouched', async () => {
+        // Arrange
+        const trainer = await service.create(input(), user.id);
+
+        // Act
+        const attempt = service.submitFillInBlank(trainer.id, { countTime: 1, wordTestInputs: [{ userAnswer: 'a', systemAnswer: 'b' }] } as never, user);
+
+        // Assert
+        await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
+        const row = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainer.id } });
+        expect(row.lastExamSubmittedAt).toBeNull();
+    });
+
+    test('deleting the user still works with words in a trainer', async () => {
+        // Arrange
+        await service.create(input(), user.id);
+
+        // Act
+        const deleted = await prisma.user.deleteMany({ where: { id: user.id } });
+
+        // Assert
+        expect(deleted.count).toBe(1);
+    });
+});

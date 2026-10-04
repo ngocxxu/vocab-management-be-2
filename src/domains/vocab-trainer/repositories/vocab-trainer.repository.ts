@@ -117,8 +117,8 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async create(data: Prisma.VocabTrainerCreateInput): Promise<VocabTrainer> {
-        return this.prisma.vocabTrainer.create({
+    public async create(data: Prisma.VocabTrainerCreateInput, tx?: Prisma.TransactionClient): Promise<VocabTrainer> {
+        return this.client(tx).vocabTrainer.create({
             data,
             include: {
                 vocabAssignments: true,
@@ -229,6 +229,10 @@ export class VocabTrainerRepository extends BaseRepository {
             reminderDisabled?: boolean;
             reminderRepeat?: number;
             reminderLastRemind?: Date;
+            fsrsDesiredRetention?: number;
+            fsrsMaximumInterval?: number;
+            fsrsNewPerDay?: number | null;
+            fsrsEndsAt?: Date | null;
         },
         existing: VocabTrainer,
         uniqueVocabIds: string[],
@@ -245,6 +249,10 @@ export class VocabTrainerRepository extends BaseRepository {
                 reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
                 reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
                 reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+                fsrsDesiredRetention: trainerData.fsrsDesiredRetention,
+                fsrsMaximumInterval: trainerData.fsrsMaximumInterval,
+                fsrsNewPerDay: trainerData.fsrsNewPerDay,
+                fsrsEndsAt: trainerData.fsrsEndsAt,
             },
             include: {
                 vocabAssignments: true,
@@ -252,8 +260,10 @@ export class VocabTrainerRepository extends BaseRepository {
             },
         });
 
+        // Only the words that left the trainer are deleted: deleting a word also deletes its FSRS cards (composite
+        // foreign key), so a delete-all-and-recreate would wipe the progress of the words that stay.
         await tx.vocabTrainerWord.deleteMany({
-            where: { vocabTrainerId: id },
+            where: { vocabTrainerId: id, vocabId: { notIn: uniqueVocabIds } },
         });
 
         if (uniqueVocabIds.length > 0) {

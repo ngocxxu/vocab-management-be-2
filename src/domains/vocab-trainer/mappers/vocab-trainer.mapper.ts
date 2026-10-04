@@ -1,5 +1,5 @@
 import { PaginationDto } from '@/shared/dto';
-import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { UpdateVocabTrainerInput, VocabTrainerDto, VocabTrainerInput } from '../dto';
 
 export type VocabTrainerScalarPatch = {
@@ -12,6 +12,11 @@ export type VocabTrainerScalarPatch = {
     reminderDisabled?: boolean;
     reminderRepeat?: number;
     reminderLastRemind?: Date;
+    // FSRS settings that can change after creation (undefined = keep, null = clear). Mode and directions are fixed at creation.
+    fsrsDesiredRetention?: number;
+    fsrsMaximumInterval?: number;
+    fsrsNewPerDay?: number | null;
+    fsrsEndsAt?: Date | null;
 };
 
 type VocabTrainerEntity = ConstructorParameters<typeof VocabTrainerDto>[0];
@@ -29,6 +34,12 @@ export class VocabTrainerMapper {
             reminderDisabled: trainerData.reminderDisabled ?? false,
             reminderRepeat: trainerData.reminderRepeat ?? 0,
             reminderLastRemind: trainerData.reminderLastRemind ?? new Date(),
+            mode: trainerData.mode ?? TrainerMode.CLASSIC,
+            fsrsDesiredRetention: trainerData.fsrsDesiredRetention,
+            fsrsMaximumInterval: trainerData.fsrsMaximumInterval,
+            fsrsNewPerDay: trainerData.fsrsNewPerDay,
+            fsrsDirections: trainerData.fsrsDirections,
+            fsrsEndsAt: trainerData.fsrsEndsAt,
             user: { connect: { id: userId } },
             vocabAssignments:
                 vocabAssignmentIds.length > 0
@@ -52,6 +63,10 @@ export class VocabTrainerMapper {
             reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
             reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
             reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+            fsrsDesiredRetention: trainerData.fsrsDesiredRetention,
+            fsrsMaximumInterval: trainerData.fsrsMaximumInterval,
+            fsrsNewPerDay: trainerData.fsrsNewPerDay,
+            fsrsEndsAt: trainerData.fsrsEndsAt,
         };
     }
 
@@ -67,6 +82,10 @@ export class VocabTrainerMapper {
             reminderDisabled: p.reminderDisabled,
             reminderRepeat: p.reminderRepeat,
             reminderLastRemind: p.reminderLastRemind,
+            fsrsDesiredRetention: p.fsrsDesiredRetention,
+            fsrsMaximumInterval: p.fsrsMaximumInterval,
+            fsrsNewPerDay: p.fsrsNewPerDay,
+            fsrsEndsAt: p.fsrsEndsAt,
         };
     }
 
