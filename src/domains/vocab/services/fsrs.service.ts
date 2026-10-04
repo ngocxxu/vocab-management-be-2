@@ -87,6 +87,11 @@ export class FsrsService {
         return Math.min(settings.maximumInterval, untilDeadline);
     }
 
+    /** The stable id of a card that `preview` / `schedule` take as `seed`: the same card always gets the same deadline spread. */
+    public cardSeed(card: { vocabTrainerId: string; vocabId: string; direction: string }): string {
+        return `${card.vocabTrainerId}:${card.vocabId}:${card.direction}`;
+    }
+
     /** True once the deadline of the cycle has passed. A trainer without a deadline never ends. */
     public isCycleEnded(settings: Pick<FsrsSettings, 'endsAt'>, now: Date): boolean {
         return settings.endsAt !== null && settings.endsAt.getTime() <= now.getTime();

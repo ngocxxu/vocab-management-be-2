@@ -1,5 +1,8 @@
-import type { VocabFsrsCard, VocabTrainer } from '@prisma/client';
+import type { Prisma, VocabFsrsCard, VocabTrainer } from '@prisma/client';
 import { FsrsCardState, FsrsSettings } from '../types';
+
+/** The settings that stay editable after the trainer is created (mode and directions do not). */
+export type FsrsSettingsPatch = Partial<Pick<FsrsSettings, 'desiredRetention' | 'maximumInterval' | 'newPerDay' | 'endsAt'>>;
 
 type FsrsTrainerColumns = Pick<VocabTrainer, 'fsrsDesiredRetention' | 'fsrsMaximumInterval' | 'fsrsNewPerDay' | 'fsrsDirections' | 'fsrsEndsAt'>;
 
@@ -15,6 +18,16 @@ export class FsrsMapper {
             newPerDay: trainer.fsrsNewPerDay,
             directions: trainer.fsrsDirections,
             endsAt: trainer.fsrsEndsAt,
+        };
+    }
+
+    /** Settings that can change after creation, as trainer columns. A key that is not in the patch is not in the result. */
+    public toColumns(patch: FsrsSettingsPatch): Prisma.VocabTrainerUpdateInput {
+        return {
+            ...(patch.desiredRetention !== undefined && { fsrsDesiredRetention: patch.desiredRetention }),
+            ...(patch.maximumInterval !== undefined && { fsrsMaximumInterval: patch.maximumInterval }),
+            ...(patch.newPerDay !== undefined && { fsrsNewPerDay: patch.newPerDay }),
+            ...(patch.endsAt !== undefined && { fsrsEndsAt: patch.endsAt }),
         };
     }
 

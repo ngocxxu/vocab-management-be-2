@@ -6,6 +6,7 @@ import { AiService } from '../../ai/services/ai.service';
 import { NotificationService } from '../../notification/services';
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
 import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
+import { FsrsMapper } from '../../vocab/mappers/fsrs.mapper';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import {
@@ -14,6 +15,7 @@ import {
     SubmitFillInBlankInput,
     SubmitMultipleChoiceInput,
     SubmitTranslationAudioInput,
+    UpdateFsrsSettingsInput,
     UpdateVocabTrainerInput,
     VocabTrainerDto,
     VocabTrainerInput,
@@ -36,6 +38,7 @@ export interface FlipCardQuestion {
 @Injectable()
 export class VocabTrainerService {
     private readonly vocabTrainerMapper = new VocabTrainerMapper();
+    private readonly fsrsMapper = new FsrsMapper();
 
     public constructor(
         private readonly vocabTrainerRepository: VocabTrainerRepository,
@@ -520,6 +523,28 @@ export class VocabTrainerService {
         }
 
         const trainer = await this.vocabTrainerRepository.update(id, this.vocabTrainerMapper.buildUpdateInput(trainerData, existing));
+
+        return this.vocabTrainerMapper.toResponse(trainer);
+    }
+
+    /** Changes the settings of an FSRS trainer that stay editable. Mode and directions are fixed at creation. */
+    public async updateFsrsSettings(id: string, input: UpdateFsrsSettingsInput, userId?: string): Promise<VocabTrainerDto> {
+        const existing = await this.vocabTrainerRepository.findById(id, userId);
+        if (!existing) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+        if (existing.mode !== TrainerMode.FSRS) {
+            throw new VocabTrainerBadRequestException('FSRS settings need mode FSRS');
+        }
+        if (input.mode !== undefined || input.directions !== undefined) {
+            throw new VocabTrainerBadRequestException('The mode and the directions of a trainer cannot be changed');
+        }
+        if (input.endsAt && input.endsAt.getTime() <= Date.now()) {
+            throw new VocabTrainerBadRequestException('The end of the cycle must be in the future');
+        }
+
+        const { desiredRetention, maximumInterval, newPerDay, endsAt } = input;
+        const trainer = await this.vocabTrainerRepository.update(id, this.fsrsMapper.toColumns({ desiredRetention, maximumInterval, newPerDay, endsAt }));
 
         return this.vocabTrainerMapper.toResponse(trainer);
     }

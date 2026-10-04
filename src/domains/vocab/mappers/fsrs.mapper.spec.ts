@@ -47,6 +47,29 @@ describe('FsrsMapper', () => {
         expect(settings.directions).toEqual(['SOURCE_TO_TARGET', 'TARGET_TO_SOURCE']);
     });
 
+    test('toColumns maps the changed settings to the fsrs* trainer columns and leaves the rest out', () => {
+        // Arrange
+        const endsAt = new Date('2026-11-12T16:59:59.000Z');
+
+        // Act
+        const columns = mapper.toColumns({ desiredRetention: 0.85, endsAt });
+
+        // Assert
+        expect(columns).toEqual({ fsrsDesiredRetention: 0.85, fsrsEndsAt: endsAt });
+    });
+
+    test('toColumns keeps null so "no limit" and "no deadline" can be set', () => {
+        // Act
+        const columns = mapper.toColumns({ newPerDay: null, endsAt: null });
+
+        // Assert
+        expect(columns).toEqual({ fsrsNewPerDay: null, fsrsEndsAt: null });
+    });
+
+    test('toColumns of an empty patch changes nothing', () => {
+        expect(mapper.toColumns({})).toEqual({});
+    });
+
     test('toCardState keeps only the scheduling columns of a VocabFsrsCard row', () => {
         // Arrange
         const due = new Date('2026-10-05T04:00:00.000Z');

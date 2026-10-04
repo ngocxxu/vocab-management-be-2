@@ -43,6 +43,45 @@ export type FsrsReviewOutcome = {
 /** What each of the 4 rating buttons would do, used to show the next interval on the button. */
 export type FsrsPreview = Record<FsrsRating, FsrsReviewOutcome>;
 
+/** What one rating button would do, for the label of the button. */
+export type FsrsPreviewButton = { due: Date; scheduledDays: number };
+
+/** One card of a review session. `direction` decides which side is the question. */
+export type FsrsReviewQueueItem = {
+    cardId: string;
+    vocabId: string;
+    direction: FsrsDirection;
+    state: FsrsState;
+    isNew: boolean;
+    frontText: string[];
+    /** Every answer accepted for a typed answer (a word can have several translations). */
+    acceptedAnswers: string[];
+    frontLanguageCode: string;
+    backLanguageCode: string;
+    preview: Record<FsrsRating, FsrsPreviewButton>;
+};
+
+/** A fixed session list plus the counts around it. An ended trainer has no items. */
+export type FsrsReviewQueue = {
+    ended: boolean;
+    items: FsrsReviewQueueItem[];
+    overdue: number;
+    dueToday: number;
+    newAvailable: number;
+    pendingAfterThisSession: number;
+};
+
+export type FsrsReviewSummary = {
+    overdue: number;
+    dueToday: number;
+    newAvailable: number;
+    mastered: number;
+    leech: number;
+    ended: boolean;
+    endsAt: Date | null;
+    estimatedDaysToClearBacklog: number;
+};
+
 /** One answer to a card. `answerId` is a client-generated id: sending the same one twice must not schedule twice. */
 export type FsrsReviewInput = {
     cardId: string;

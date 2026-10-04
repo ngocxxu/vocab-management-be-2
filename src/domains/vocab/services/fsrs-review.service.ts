@@ -42,8 +42,7 @@ export class FsrsReviewService {
                 throw new ConflictException('CycleEnded');
             }
 
-            const seed = `${card.vocabTrainerId}:${card.vocabId}:${card.direction}`;
-            const { card: next, log } = this.fsrsService.schedule(this.fsrsMapper.toCardState(card), input.rating, now, settings, seed);
+            const { card: next, log } = this.fsrsService.schedule(this.fsrsMapper.toCardState(card), input.rating, now, settings, this.fsrsService.cardSeed(card));
 
             await this.fsrsRepository.createLog(tx, {
                 ...log,

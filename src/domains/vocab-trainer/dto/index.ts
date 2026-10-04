@@ -13,3 +13,4 @@ export * from './vocab-trainer.input';
 export * from './update-vocab-trainer.input';
 export * from './vocab-trainer-query-params.input';
 export * from './vocab-trainer-delete-bulk.input';
+export * from './fsrs-review.dto';

@@ -1,5 +1,5 @@
 import { PrismaService } from '@/shared/services/prisma.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { QuestionType, TrainerStatus, User } from '@prisma/client';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabTrainerInput } from '../dto';
@@ -204,6 +204,58 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
         const row = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainer.id } });
         expect(row.lastExamSubmittedAt).toBeNull();
+    });
+
+    describe('updateFsrsSettings', () => {
+        const inDays = (days: number): Date => new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+        test('changes the settings that stay editable and keeps the rest', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+            const endsAt = inDays(30);
+
+            // Act
+            const updated = await service.updateFsrsSettings(trainer.id, { desiredRetention: 0.8, maximumInterval: 90, newPerDay: 7, endsAt }, user.id);
+
+            // Assert
+            expect(updated).toMatchObject({ fsrsDesiredRetention: 0.8, fsrsMaximumInterval: 90, fsrsNewPerDay: 7, mode: 'FSRS' });
+            expect(updated.fsrsEndsAt?.getTime()).toBe(endsAt.getTime());
+            expect(updated.fsrsDirections).toEqual(['SOURCE_TO_TARGET', 'TARGET_TO_SOURCE']);
+            expect(await cardsOf(trainer.id)).toHaveLength(6);
+        });
+
+        test('null clears the new-word limit and the deadline, and a missing key keeps the value', async () => {
+            // Arrange
+            const trainer = await service.create(input({ fsrsNewPerDay: 5, fsrsEndsAt: inDays(10) }), user.id);
+
+            // Act
+            const cleared = await service.updateFsrsSettings(trainer.id, { newPerDay: null, endsAt: null }, user.id);
+            const untouched = await service.updateFsrsSettings(trainer.id, { desiredRetention: 0.92 }, user.id);
+
+            // Assert
+            expect(cleared).toMatchObject({ fsrsNewPerDay: null, fsrsEndsAt: null });
+            expect(untouched).toMatchObject({ fsrsNewPerDay: null, fsrsEndsAt: null, fsrsDesiredRetention: 0.92 });
+        });
+
+        test('rejects mode, directions and a deadline in the past', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+
+            // Act + Assert
+            await expect(service.updateFsrsSettings(trainer.id, { mode: 'CLASSIC' }, user.id)).rejects.toBeInstanceOf(BadRequestException);
+            await expect(service.updateFsrsSettings(trainer.id, { directions: ['SOURCE_TO_TARGET'] }, user.id)).rejects.toBeInstanceOf(BadRequestException);
+            await expect(service.updateFsrsSettings(trainer.id, { endsAt: inDays(-1) }, user.id)).rejects.toBeInstanceOf(BadRequestException);
+        });
+
+        test('rejects a Classic trainer and a trainer of another user', async () => {
+            // Arrange
+            const classic = await service.create(input({ mode: 'CLASSIC', questionType: QuestionType.MULTIPLE_CHOICE }), user.id);
+            const fsrs = await service.create(input(), user.id);
+
+            // Act + Assert
+            await expect(service.updateFsrsSettings(classic.id, { desiredRetention: 0.8 }, user.id)).rejects.toBeInstanceOf(BadRequestException);
+            await expect(service.updateFsrsSettings(fsrs.id, { desiredRetention: 0.8 }, 'someone-else')).rejects.toBeInstanceOf(NotFoundException);
+        });
     });
 
     test('deleting the user still works with words in a trainer', async () => {

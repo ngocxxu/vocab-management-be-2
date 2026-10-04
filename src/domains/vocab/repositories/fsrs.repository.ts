@@ -1,7 +1,14 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { Injectable } from '@nestjs/common';
-import { Prisma, VocabFsrsCard, VocabFsrsReviewLog, VocabTrainer } from '@prisma/client';
+import { FsrsDirection, Prisma, VocabFsrsCard, VocabFsrsReviewLog, VocabTrainer } from '@prisma/client';
+
+const CARD_WORD_INCLUDE = {
+    trainerWord: { include: { vocab: { include: { textTargets: { orderBy: { createdAt: 'asc' } } } } } },
+} satisfies Prisma.VocabFsrsCardInclude;
+
+/** A card with the word it asks about and the word's translations. */
+export type FsrsCardWithWord = Prisma.VocabFsrsCardGetPayload<{ include: typeof CARD_WORD_INCLUDE }>;
 
 @Injectable()
 export class FsrsRepository extends BaseRepository {
@@ -40,6 +47,69 @@ export class FsrsRepository extends BaseRepository {
         const rows = await tx.vocab.findMany({ where: { id: { in: vocabIds }, textTargets: { some: {} } }, select: { id: true } });
 
         return rows.map((row) => row.id);
+    }
+
+    public async findTrainerOf(userId: string, trainerId: string): Promise<VocabTrainer | null> {
+        return this.prisma.vocabTrainer.findFirst({ where: { id: trainerId, userId } });
+    }
+
+    public async findCardWithWord(cardId: string): Promise<FsrsCardWithWord | null> {
+        return this.prisma.vocabFsrsCard.findUnique({ where: { id: cardId }, include: CARD_WORD_INCLUDE });
+    }
+
+    /** NEW cards are not "due": they are introduced through the daily new-card quota instead. */
+    public async findDueReviewCards(trainerId: string, dueBefore: Date): Promise<FsrsCardWithWord[]> {
+        return this.prisma.vocabFsrsCard.findMany({
+            where: { vocabTrainerId: trainerId, state: 'REVIEW', due: { lt: dueBefore } },
+            include: CARD_WORD_INCLUDE,
+            orderBy: { id: 'asc' },
+        });
+    }
+
+    /** In the order the words were added to the trainer, so the same words come first on every call. */
+    public async findNewCards(trainerId: string, take: number): Promise<FsrsCardWithWord[]> {
+        return this.prisma.vocabFsrsCard.findMany({
+            where: { vocabTrainerId: trainerId, state: 'NEW' },
+            include: CARD_WORD_INCLUDE,
+            orderBy: [{ trainerWord: { createdAt: 'asc' } }, { vocabId: 'asc' }, { direction: 'asc' }],
+            take,
+        });
+    }
+
+    public async countNewCards(trainerId: string): Promise<number> {
+        return this.prisma.vocabFsrsCard.count({ where: { vocabTrainerId: trainerId, state: 'NEW' } });
+    }
+
+    public async countReviewDue(trainerId: string, range: { from?: Date; before: Date }): Promise<number> {
+        return this.prisma.vocabFsrsCard.count({ where: { vocabTrainerId: trainerId, state: 'REVIEW', due: { gte: range.from, lt: range.before } } });
+    }
+
+    /** Cards first answered since `since`: a log row whose previous state was NEW is the moment a card is introduced. */
+    public async countIntroducedSince(trainerId: string, since: Date): Promise<number> {
+        return this.prisma.vocabFsrsReviewLog.count({ where: { vocabTrainerId: trainerId, prevState: 'NEW', reviewedAt: { gte: since } } });
+    }
+
+    public async findStableCards(trainerId: string, minStability: number): Promise<Array<{ vocabId: string; direction: FsrsDirection }>> {
+        return this.prisma.vocabFsrsCard.findMany({
+            where: { vocabTrainerId: trainerId, state: 'REVIEW', stability: { gte: minStability } },
+            select: { vocabId: true, direction: true },
+        });
+    }
+
+    public async countLeeches(trainerId: string, minLapses: number): Promise<number> {
+        return this.prisma.vocabFsrsCard.count({ where: { vocabTrainerId: trainerId, lapses: { gte: minLapses } } });
+    }
+
+    /** True when one of the last `window` reviews of the card was a lapse (a REVIEW card answered Again). */
+    public async hasRecentLapse(trainerId: string, vocabId: string, direction: FsrsDirection, window: number): Promise<boolean> {
+        const recent = await this.prisma.vocabFsrsReviewLog.findMany({
+            where: { vocabTrainerId: trainerId, vocabId, direction },
+            orderBy: { reviewedAt: 'desc' },
+            take: window,
+            select: { rating: true, prevState: true },
+        });
+
+        return recent.some((log) => log.prevState === 'REVIEW' && log.rating === 'AGAIN');
     }
 
     /** Existing cards are kept as they are (skipDuplicates), so calling this again for the same words changes nothing. */
