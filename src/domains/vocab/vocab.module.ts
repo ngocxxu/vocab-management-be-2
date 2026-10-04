@@ -12,7 +12,7 @@ import { CdcWebhookController } from './controllers/cdc-webhook.controller';
 import { VocabGenerateTextTargetProcessor } from './processors/vocab-generate-text-target.processor';
 import { VocabTranslationProcessor } from './processors/vocab-translation.processor';
 import { VocabEmbeddingRepository, VocabMasteryRepository, VocabRelatedWordRepository, VocabRepository } from './repositories';
-import { VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
+import { FsrsService, VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
 import { QdrantService } from './services/qdrant.service';
 import { VocabEmbeddingWorkerService } from './services/vocab-embedding-worker.service';
 import { VocabTextTargetService } from './services/vocab-text-target.service';
@@ -35,6 +35,7 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         VocabEmbeddingRepository,
         VocabService,
         VocabMasteryService,
+        FsrsService,
         VocabRelatedWordService,
         VocabTextTargetService,
         VocabTranslationProcessor,
@@ -42,6 +43,6 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         QdrantService,
         VocabEmbeddingWorkerService,
     ],
-    exports: [VocabService, VocabMasteryService, VocabRelatedWordService, VocabRepository, VocabRelatedWordRepository],
+    exports: [VocabService, VocabMasteryService, FsrsService, VocabRelatedWordService, VocabRepository, VocabRelatedWordRepository],
 })
 export class VocabModule {}
