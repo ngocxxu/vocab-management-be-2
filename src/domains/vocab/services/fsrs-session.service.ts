@@ -5,7 +5,7 @@ import { FsrsMapper } from '../mappers/fsrs.mapper';
 import { FsrsCardWithWord, FsrsRepository } from '../repositories/fsrs.repository';
 import { FsrsPreviewButton, FsrsReviewInput, FsrsReviewQueue, FsrsReviewQueueItem, FsrsReviewResult, FsrsReviewSummary, FsrsSettings } from '../types';
 import { AnswerCheck, checkAnswer } from '../utils/fsrs-answer-check.util';
-import { DEFAULT_SRS_TIMEZONE, endOfLocalDay, isValidTimezone, startOfLocalDay } from '../utils/fsrs-local-day.util';
+import { DEFAULT_SRS_TIMEZONE, endOfLocalDay, isValidTimezone, SRS_TIMEZONE_CONFIG_KEY, startOfLocalDay } from '../utils/fsrs-local-day.util';
 import { FsrsReviewService } from './fsrs-review.service';
 import { FsrsService } from './fsrs.service';
 
@@ -13,7 +13,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const RATINGS: FsrsRating[] = ['AGAIN', 'HARD', 'GOOD', 'EASY'];
 
 export const DEFAULT_SESSION_LIMIT = 20;
-const TIMEZONE_CONFIG_KEY = 'srs.timezone';
 
 // A card is mastered once its memory is stable for about 6 months and it was not forgotten in its last 3 reviews.
 const MASTERED_MIN_STABILITY_DAYS = 180;
@@ -139,7 +138,7 @@ export class FsrsSessionService {
     }
 
     private async localDay(userId: string, now: Date): Promise<{ start: Date; end: Date }> {
-        const configured = await this.configService.getConfig(userId, TIMEZONE_CONFIG_KEY);
+        const configured = await this.configService.getConfig(userId, SRS_TIMEZONE_CONFIG_KEY);
         const timeZone = typeof configured === 'string' && isValidTimezone(configured) ? configured : DEFAULT_SRS_TIMEZONE;
 
         return { start: startOfLocalDay(now, timeZone), end: endOfLocalDay(now, timeZone) };

@@ -1,5 +1,8 @@
 export const DEFAULT_SRS_TIMEZONE = 'Asia/Ho_Chi_Minh';
 
+/** Config (scope USER) key that holds the timezone of the user; the review queue reads it to find the end of the day. */
+export const SRS_TIMEZONE_CONFIG_KEY = 'srs.timezone';
+
 /** A review day starts at 04:00 local time, so cards studied after midnight still count for the day before. */
 const DAY_ROLLOVER_HOUR = 4;
 

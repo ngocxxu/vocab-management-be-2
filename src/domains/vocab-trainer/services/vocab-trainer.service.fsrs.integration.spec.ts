@@ -1,9 +1,12 @@
+import { ConfigRepository } from '@/domains/platform/config/repositories';
+import { ConfigService } from '@/domains/platform/config/services/config.service';
 import { PrismaService } from '@/shared/services/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { QuestionType, TrainerStatus, User } from '@prisma/client';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabTrainerInput } from '../dto';
 import { VocabTrainerRepository } from '../repositories';
+import { FsrsDefaultsService } from './fsrs-defaults.service';
 import { VocabTrainerService } from './vocab-trainer.service';
 
 // Runs against a real Postgres (cascades and composite keys cannot be mocked):
@@ -15,6 +18,7 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
     // Built in beforeAll: the body of a skipped describe still runs, and there is no database URL then.
     let prisma: PrismaService;
     let service: VocabTrainerService;
+    let defaults: FsrsDefaultsService;
 
     let user: User;
     let folderId: string;
@@ -51,7 +55,8 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
     beforeAll(async () => {
         prisma = new PrismaService({ datasources: { db: { url: databaseUrl } } });
         const unused = {} as never;
-        service = new VocabTrainerService(new VocabTrainerRepository(prisma), unused, unused, unused, unused, unused, new FsrsRepository(prisma));
+        defaults = new FsrsDefaultsService(new ConfigService(new ConfigRepository(prisma)));
+        service = new VocabTrainerService(new VocabTrainerRepository(prisma), unused, unused, unused, unused, unused, new FsrsRepository(prisma), defaults);
         await prisma.$connect();
     });
 
@@ -204,6 +209,56 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
         const row = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainer.id } });
         expect(row.lastExamSubmittedAt).toBeNull();
+    });
+
+    describe('defaults of the user', () => {
+        test('a trainer created without FSRS values copies the defaults of the user', async () => {
+            // Arrange
+            await defaults.updateSettings(user.id, { defaults: { desiredRetention: 0.85, directions: ['TARGET_TO_SOURCE'], reminderEnabled: false } });
+
+            // Act
+            const trainer = await service.create(input({ fsrsDirections: undefined }), user.id);
+
+            // Assert
+            expect(trainer).toMatchObject({ fsrsDesiredRetention: 0.85, fsrsDirections: ['TARGET_TO_SOURCE'], reminderDisabled: true });
+            expect(await cardsOf(trainer.id)).toHaveLength(3);
+        });
+
+        test('changing the defaults later does not change a trainer that already exists', async () => {
+            // Arrange
+            await defaults.updateSettings(user.id, { defaults: { desiredRetention: 0.85 } });
+            const trainer = await service.create(input(), user.id);
+
+            // Act
+            await defaults.updateSettings(user.id, { defaults: { desiredRetention: 0.75, directions: ['SOURCE_TO_TARGET'] } });
+
+            // Assert
+            const row = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainer.id } });
+            expect(row.fsrsDesiredRetention).toBe(0.85);
+            expect(row.fsrsDirections).toEqual(['SOURCE_TO_TARGET', 'TARGET_TO_SOURCE']);
+        });
+
+        test('what the create request carries wins over the defaults', async () => {
+            // Arrange
+            await defaults.updateSettings(user.id, { defaults: { desiredRetention: 0.85 } });
+
+            // Act
+            const trainer = await service.create(input({ fsrsDesiredRetention: 0.95, reminderDisabled: false }), user.id);
+
+            // Assert
+            expect(trainer).toMatchObject({ fsrsDesiredRetention: 0.95, reminderDisabled: false });
+        });
+
+        test('a Classic trainer ignores the defaults', async () => {
+            // Arrange
+            await defaults.updateSettings(user.id, { defaults: { desiredRetention: 0.85, reminderEnabled: false } });
+
+            // Act
+            const trainer = await service.create(input({ mode: 'CLASSIC', questionType: QuestionType.MULTIPLE_CHOICE }), user.id);
+
+            // Assert
+            expect(trainer).toMatchObject({ mode: 'CLASSIC', fsrsDesiredRetention: 0.9, reminderDisabled: false });
+        });
     });
 
     describe('updateFsrsSettings', () => {

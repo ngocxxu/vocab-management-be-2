@@ -27,6 +27,7 @@ import { VocabTrainerMapper } from '../mappers';
 import { VocabTrainerRepository } from '../repositories';
 import { EQuestionType, EReminderRepeat, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
 import { assertTrainerUpdateAllowed, assertValidTrainerCreate } from '../utils/fsrs-trainer-rules';
+import { FsrsDefaultsService } from './fsrs-defaults.service';
 
 export interface FlipCardQuestion {
     frontText: string[];
@@ -48,6 +49,7 @@ export class VocabTrainerService {
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly logger: LoggerService,
         private readonly fsrsRepository: FsrsRepository,
+        private readonly fsrsDefaultsService: FsrsDefaultsService,
     ) {}
 
     /**
@@ -711,8 +713,11 @@ export class VocabTrainerService {
 
     /** The trainer and its cards are created together, so an FSRS trainer never exists without the cards of its words. */
     private async createFsrsTrainer(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        // The trainer keeps its own copy of the defaults of the user, so changing them later does not touch it.
+        const inputWithDefaults = { ...input, ...(await this.fsrsDefaultsService.resolveForCreate(userId, input)) };
+
         return this.vocabTrainerRepository.inTransaction(async (tx) => {
-            const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId), tx);
+            const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(inputWithDefaults, userId), tx);
             const trainerDto = this.vocabTrainerMapper.toResponse(trainer);
             trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainer, input.vocabAssignmentIds ?? []);
 
