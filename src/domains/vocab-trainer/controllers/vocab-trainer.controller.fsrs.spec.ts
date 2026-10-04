@@ -6,12 +6,14 @@ import { Test } from '@nestjs/testing';
 import { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
+import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
 import { VocabTrainerService } from '../services';
 import { VocabTrainerController } from './vocab-trainer.controller';
 
 describe('VocabTrainerController FSRS routes', () => {
     let app: INestApplication;
     const fsrsSessionService = { getQueue: jest.fn(), getSummary: jest.fn(), recordAnswer: jest.fn(), checkAnswer: jest.fn() };
+    const fsrsStatsService = { getTrainerStats: jest.fn() };
     const vocabTrainerService = { updateFsrsSettings: jest.fn() };
 
     const validAnswer = { cardId: 'c1', answerId: 'a1', rating: 'GOOD', questionType: 'FLIP_CARD' };
@@ -23,6 +25,7 @@ describe('VocabTrainerController FSRS routes', () => {
                 { provide: LoggerService, useValue: { info: jest.fn() } },
                 { provide: VocabTrainerService, useValue: vocabTrainerService },
                 { provide: FsrsSessionService, useValue: fsrsSessionService },
+                { provide: FsrsStatsService, useValue: fsrsStatsService },
             ],
         })
             .overrideGuard(RolesGuard)
@@ -86,6 +89,20 @@ describe('VocabTrainerController FSRS routes', () => {
             // Assert
             expect(res.body).toEqual({ overdue: 1 });
             expect(fsrsSessionService.getSummary).toHaveBeenCalledWith('u1', 't1');
+        });
+    });
+
+    describe('GET :id/review-stats', () => {
+        test('returns the statistics of the trainer of the user', async () => {
+            // Arrange
+            fsrsStatsService.getTrainerStats.mockResolvedValue({ ended: false, mastered: 3 });
+
+            // Act
+            const res = await request(app.getHttpServer()).get('/vocab-trainers/t1/review-stats').expect(200);
+
+            // Assert
+            expect(res.body).toEqual({ ended: false, mastered: 3 });
+            expect(fsrsStatsService.getTrainerStats).toHaveBeenCalledWith('u1', 't1');
         });
     });
 

@@ -1,7 +1,29 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
-import { Injectable } from '@nestjs/common';
-import { FsrsDirection, Prisma, VocabFsrsCard, VocabFsrsReviewLog, VocabTrainer } from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { FsrsDirection, FsrsState, Prisma, TrainerMode, VocabFsrsCard, VocabFsrsReviewLog, VocabTrainer } from '@prisma/client';
+
+// A card is mastered once its memory is stable for about 6 months and it was not forgotten in its last 3 reviews.
+export const MASTERED_MIN_STABILITY_DAYS = 180;
+const MASTERED_LAPSE_WINDOW = 3;
+const LEECH_MIN_LAPSES = 8;
+
+// A lapse is a card that was already known and got Again. The condition is written for the alias `c` of vocab_fsrs_card.
+const MASTERED_CARD = Prisma.sql`
+    c.state = 'REVIEW'
+    AND c.stability >= ${MASTERED_MIN_STABILITY_DAYS}
+    AND NOT EXISTS (
+        SELECT 1
+        FROM (
+            SELECT l.rating, l.prev_state
+            FROM vocab_fsrs_review_log l
+            WHERE l.vocab_trainer_id = c.vocab_trainer_id AND l.vocab_id = c.vocab_id AND l.direction = c.direction
+            ORDER BY l.reviewed_at DESC
+            LIMIT ${MASTERED_LAPSE_WINDOW}
+        ) recent
+        WHERE recent.prev_state = 'REVIEW' AND recent.rating = 'AGAIN'
+    )
+`;
 
 const CARD_WORD_INCLUDE = {
     trainerWord: { include: { vocab: { include: { textTargets: { orderBy: { createdAt: 'asc' } } } } } },
@@ -53,6 +75,19 @@ export class FsrsRepository extends BaseRepository {
         return this.prisma.vocabTrainer.findFirst({ where: { id: trainerId, userId } });
     }
 
+    /** The FSRS trainer of the user. 404 when it does not exist or belongs to someone else, 400 when it is a Classic trainer. */
+    public async findFsrsTrainerOrThrow(userId: string, trainerId: string): Promise<VocabTrainer> {
+        const trainer = await this.findTrainerOf(userId, trainerId);
+        if (!trainer) {
+            throw new NotFoundException(`Vocab trainer ${trainerId} not found`);
+        }
+        if (trainer.mode !== TrainerMode.FSRS) {
+            throw new BadRequestException('This trainer is not an FSRS trainer');
+        }
+
+        return trainer;
+    }
+
     public async findCardWithWord(cardId: string): Promise<FsrsCardWithWord | null> {
         return this.prisma.vocabFsrsCard.findUnique({ where: { id: cardId }, include: CARD_WORD_INCLUDE });
     }
@@ -89,27 +124,104 @@ export class FsrsRepository extends BaseRepository {
         return this.prisma.vocabFsrsReviewLog.count({ where: { vocabTrainerId: trainerId, prevState: 'NEW', reviewedAt: { gte: since } } });
     }
 
-    public async findStableCards(trainerId: string, minStability: number): Promise<Array<{ vocabId: string; direction: FsrsDirection }>> {
-        return this.prisma.vocabFsrsCard.findMany({
-            where: { vocabTrainerId: trainerId, state: 'REVIEW', stability: { gte: minStability } },
-            select: { vocabId: true, direction: true },
-        });
+    public async countMastered(trainerId: string): Promise<number> {
+        const [row] = await this.prisma.$queryRaw<Array<{ count: number }>>`
+            SELECT COUNT(*)::int AS count FROM vocab_fsrs_card c WHERE c.vocab_trainer_id = ${trainerId} AND ${MASTERED_CARD}
+        `;
+
+        return row?.count ?? 0;
     }
 
-    public async countLeeches(trainerId: string, minLapses: number): Promise<number> {
-        return this.prisma.vocabFsrsCard.count({ where: { vocabTrainerId: trainerId, lapses: { gte: minLapses } } });
+    public async countMasteredByDirection(trainerId: string): Promise<Array<{ direction: FsrsDirection; count: number }>> {
+        return this.prisma.$queryRaw<Array<{ direction: FsrsDirection; count: number }>>`
+            SELECT c.direction AS direction, COUNT(*)::int AS count
+            FROM vocab_fsrs_card c
+            WHERE c.vocab_trainer_id = ${trainerId} AND ${MASTERED_CARD}
+            GROUP BY c.direction
+        `;
     }
 
-    /** True when one of the last `window` reviews of the card was a lapse (a REVIEW card answered Again). */
-    public async hasRecentLapse(trainerId: string, vocabId: string, direction: FsrsDirection, window: number): Promise<boolean> {
-        const recent = await this.prisma.vocabFsrsReviewLog.findMany({
-            where: { vocabTrainerId: trainerId, vocabId, direction },
-            orderBy: { reviewedAt: 'desc' },
-            take: window,
-            select: { rating: true, prevState: true },
+    /** Mastered cards of every trainer of the user, also those whose cycle has ended: what was learned stays learned. */
+    public async countMasteredForUser(userId: string): Promise<number> {
+        const [row] = await this.prisma.$queryRaw<Array<{ count: number }>>`
+            SELECT COUNT(*)::int AS count FROM vocab_fsrs_card c WHERE c.user_id = ${userId} AND ${MASTERED_CARD}
+        `;
+
+        return row?.count ?? 0;
+    }
+
+    /** Cards due before `dueBefore` in the trainers of the user whose cycle has not ended at `now`. Uses the (user_id, due) index. */
+    public async countDueForUser(userId: string, dueBefore: Date, now: Date): Promise<number> {
+        const [row] = await this.prisma.$queryRaw<Array<{ count: number }>>`
+            SELECT COUNT(*)::int AS count
+            FROM vocab_fsrs_card c
+            INNER JOIN vocab_trainer t ON t.id = c.vocab_trainer_id
+            WHERE c.user_id = ${userId}
+              AND c.state = 'REVIEW'
+              AND c.due < ${dueBefore}
+              AND (t.fsrs_ends_at IS NULL OR t.fsrs_ends_at > ${now})
+        `;
+
+        return row?.count ?? 0;
+    }
+
+    public async countLeeches(trainerId: string): Promise<number> {
+        return this.prisma.vocabFsrsCard.count({ where: { vocabTrainerId: trainerId, lapses: { gte: LEECH_MIN_LAPSES } } });
+    }
+
+    public async countLeechesByDirection(trainerId: string): Promise<Array<{ direction: FsrsDirection; count: number }>> {
+        const rows = await this.prisma.vocabFsrsCard.groupBy({
+            by: ['direction'],
+            where: { vocabTrainerId: trainerId, lapses: { gte: LEECH_MIN_LAPSES } },
+            _count: { _all: true },
         });
 
-        return recent.some((log) => log.prevState === 'REVIEW' && log.rating === 'AGAIN');
+        // eslint-disable-next-line no-underscore-dangle
+        return rows.map((row) => ({ direction: row.direction, count: row._count._all }));
+    }
+
+    public async countCardsByDirectionAndState(trainerId: string): Promise<Array<{ direction: FsrsDirection; state: FsrsState; count: number }>> {
+        const rows = await this.prisma.vocabFsrsCard.groupBy({ by: ['direction', 'state'], where: { vocabTrainerId: trainerId }, _count: { _all: true } });
+
+        // eslint-disable-next-line no-underscore-dangle
+        return rows.map((row) => ({ direction: row.direction, state: row.state, count: row._count._all }));
+    }
+
+    public async findReviewStabilities(trainerId: string): Promise<number[]> {
+        const rows = await this.prisma.vocabFsrsCard.findMany({ where: { vocabTrainerId: trainerId, state: 'REVIEW' }, select: { stability: true } });
+
+        return rows.map((row) => row.stability);
+    }
+
+    public async findReviewDueDates(trainerId: string, before: Date): Promise<Date[]> {
+        const rows = await this.prisma.vocabFsrsCard.findMany({ where: { vocabTrainerId: trainerId, state: 'REVIEW', due: { lt: before } }, select: { due: true } });
+
+        return rows.map((row) => row.due);
+    }
+
+    /** Reviews of cards that were already known (not the first answer of a NEW card) since `since`, and how many of them were Again. */
+    public async countReviewOutcomesSince(trainerId: string, since: Date): Promise<{ reviews: number; again: number }> {
+        const where = { vocabTrainerId: trainerId, prevState: 'REVIEW' as const, reviewedAt: { gte: since } };
+        const [reviews, again] = await Promise.all([
+            this.prisma.vocabFsrsReviewLog.count({ where }),
+            this.prisma.vocabFsrsReviewLog.count({ where: { ...where, rating: 'AGAIN' } }),
+        ]);
+
+        return { reviews, again };
+    }
+
+    public async findLeechCards(
+        trainerId: string,
+        take: number,
+    ): Promise<Array<{ cardId: string; vocabId: string; direction: FsrsDirection; textSource: string; lapses: number }>> {
+        const rows = await this.prisma.vocabFsrsCard.findMany({
+            where: { vocabTrainerId: trainerId, lapses: { gte: LEECH_MIN_LAPSES } },
+            include: { trainerWord: { include: { vocab: { select: { textSource: true } } } } },
+            orderBy: [{ lapses: 'desc' }, { id: 'asc' }],
+            take,
+        });
+
+        return rows.map((row) => ({ cardId: row.id, vocabId: row.vocabId, direction: row.direction, textSource: row.trainerWord.vocab.textSource, lapses: row.lapses }));
     }
 
     /** Existing cards are kept as they are (skipDuplicates), so calling this again for the same words changes nothing. */

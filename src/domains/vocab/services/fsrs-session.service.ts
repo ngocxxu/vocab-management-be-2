@@ -1,11 +1,11 @@
 import { ConfigService } from '@/domains/platform/config/services/config.service';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { FsrsRating, TrainerMode, VocabTrainer } from '@prisma/client';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { FsrsRating } from '@prisma/client';
 import { FsrsMapper } from '../mappers/fsrs.mapper';
 import { FsrsCardWithWord, FsrsRepository } from '../repositories/fsrs.repository';
 import { FsrsPreviewButton, FsrsReviewInput, FsrsReviewQueue, FsrsReviewQueueItem, FsrsReviewResult, FsrsReviewSummary, FsrsSettings } from '../types';
 import { AnswerCheck, checkAnswer } from '../utils/fsrs-answer-check.util';
-import { DEFAULT_SRS_TIMEZONE, endOfLocalDay, isValidTimezone, SRS_TIMEZONE_CONFIG_KEY, startOfLocalDay } from '../utils/fsrs-local-day.util';
+import { endOfLocalDay, resolveTimezone, SRS_TIMEZONE_CONFIG_KEY, startOfLocalDay } from '../utils/fsrs-local-day.util';
 import { FsrsReviewService } from './fsrs-review.service';
 import { FsrsService } from './fsrs.service';
 
@@ -13,11 +13,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const RATINGS: FsrsRating[] = ['AGAIN', 'HARD', 'GOOD', 'EASY'];
 
 export const DEFAULT_SESSION_LIMIT = 20;
-
-// A card is mastered once its memory is stable for about 6 months and it was not forgotten in its last 3 reviews.
-const MASTERED_MIN_STABILITY_DAYS = 180;
-const MASTERED_LAPSE_WINDOW = 3;
-const LEECH_MIN_LAPSES = 8;
 
 type Backlog = { overdue: number; dueToday: number; newAvailable: number; newQuota: number };
 
@@ -51,7 +46,7 @@ export class FsrsSessionService {
 
     /** One fixed session list: due cards (lowest recall probability first), then new cards, `limit` cards at most. */
     public async getQueue(userId: string, trainerId: string, options: { limit?: number; ahead?: number } = {}, now: Date = new Date()): Promise<FsrsReviewQueue> {
-        const trainer = await this.loadFsrsTrainer(userId, trainerId);
+        const trainer = await this.fsrsRepository.findFsrsTrainerOrThrow(userId, trainerId);
         const settings = this.fsrsMapper.toSettings(trainer);
         if (this.fsrsService.isCycleEnded(settings, now)) {
             return { ended: true, items: [], overdue: 0, dueToday: 0, newAvailable: 0, pendingAfterThisSession: 0 };
@@ -78,9 +73,9 @@ export class FsrsSessionService {
     }
 
     public async getSummary(userId: string, trainerId: string, now: Date = new Date()): Promise<FsrsReviewSummary> {
-        const trainer = await this.loadFsrsTrainer(userId, trainerId);
+        const trainer = await this.fsrsRepository.findFsrsTrainerOrThrow(userId, trainerId);
         const settings = this.fsrsMapper.toSettings(trainer);
-        const [mastered, leech] = await Promise.all([this.countMastered(trainerId), this.fsrsRepository.countLeeches(trainerId, LEECH_MIN_LAPSES)]);
+        const [mastered, leech] = await Promise.all([this.fsrsRepository.countMastered(trainerId), this.fsrsRepository.countLeeches(trainerId)]);
 
         if (this.fsrsService.isCycleEnded(settings, now)) {
             return { overdue: 0, dueToday: 0, newAvailable: 0, mastered, leech, ended: true, endsAt: settings.endsAt, estimatedDaysToClearBacklog: 0 };
@@ -116,18 +111,6 @@ export class FsrsSessionService {
         return this.fsrsReviewService.recordReview(userId, input, now);
     }
 
-    private async loadFsrsTrainer(userId: string, trainerId: string): Promise<VocabTrainer> {
-        const trainer = await this.fsrsRepository.findTrainerOf(userId, trainerId);
-        if (!trainer) {
-            throw new NotFoundException(`Vocab trainer ${trainerId} not found`);
-        }
-        if (trainer.mode !== TrainerMode.FSRS) {
-            throw new BadRequestException('This trainer is not an FSRS trainer');
-        }
-
-        return trainer;
-    }
-
     private async loadCardOf(userId: string, trainerId: string, cardId: string): Promise<FsrsCardWithWord> {
         const card = await this.fsrsRepository.findCardWithWord(cardId);
         if (!card || card.userId !== userId || card.vocabTrainerId !== trainerId) {
@@ -139,7 +122,7 @@ export class FsrsSessionService {
 
     private async localDay(userId: string, now: Date): Promise<{ start: Date; end: Date }> {
         const configured = await this.configService.getConfig(userId, SRS_TIMEZONE_CONFIG_KEY);
-        const timeZone = typeof configured === 'string' && isValidTimezone(configured) ? configured : DEFAULT_SRS_TIMEZONE;
+        const timeZone = resolveTimezone(configured);
 
         return { start: startOfLocalDay(now, timeZone), end: endOfLocalDay(now, timeZone) };
     }
@@ -155,13 +138,6 @@ export class FsrsSessionService {
         const newQuota = settings.newPerDay === null ? Number.POSITIVE_INFINITY : Math.max(0, settings.newPerDay - introducedToday);
 
         return { overdue, dueToday, newAvailable: Math.min(newCards, newQuota), newQuota };
-    }
-
-    private async countMastered(trainerId: string): Promise<number> {
-        const stable = await this.fsrsRepository.findStableCards(trainerId, MASTERED_MIN_STABILITY_DAYS);
-        const lapsed = await Promise.all(stable.map(async (card) => this.fsrsRepository.hasRecentLapse(trainerId, card.vocabId, card.direction, MASTERED_LAPSE_WINDOW)));
-
-        return lapsed.filter((hasLapse) => !hasLapse).length;
     }
 
     private lowestRecallFirst(cards: FsrsCardWithWord[], now: Date): FsrsCardWithWord[] {

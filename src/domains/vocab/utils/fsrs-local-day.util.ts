@@ -18,6 +18,18 @@ export function isValidTimezone(timeZone: string): boolean {
     }
 }
 
+/** The timezone to use for a value read from Config: the value when it is a valid IANA name, the default otherwise. */
+export function resolveTimezone(configured: unknown): string {
+    return typeof configured === 'string' && isValidTimezone(configured) ? configured : DEFAULT_SRS_TIMEZONE;
+}
+
+/** The local calendar date (YYYY-MM-DD) at `instant`. */
+export function localDateLabel(instant: Date, timeZone: string): string {
+    const { year, month, day } = localParts(instant, timeZone);
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 function localParts(instant: Date, timeZone: string): LocalParts {
     const parts = new Intl.DateTimeFormat('en-US', {
         timeZone,

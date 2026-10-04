@@ -82,6 +82,30 @@ export type FsrsReviewSummary = {
     estimatedDaysToClearBacklog: number;
 };
 
+export type FsrsStabilityBucket = { label: string; count: number };
+
+export type FsrsDirectionStats = { direction: FsrsDirection; cards: number; new: number; review: number; mastered: number; leeches: number };
+
+export type FsrsLeechCard = { cardId: string; vocabId: string; direction: FsrsDirection; textSource: string; lapses: number };
+
+/** Statistics of one FSRS trainer. They come from the cards and the review logs, never from VocabMastery. */
+export type FsrsReviewStats = {
+    ended: boolean;
+    cardsByState: { new: number; review: number };
+    mastered: number;
+    leeches: number;
+    byDirection: FsrsDirectionStats[];
+    /** Cards due on each of the next 30 days of the user (overdue cards count on the first one). Empty once the cycle has ended. */
+    forecast: Array<{ date: string; count: number }>;
+    /** Share of the reviews of known cards that were not Again, over the last `windowDays` days; null without any review. */
+    trueRetention: { value: number | null; reviews: number; windowDays: number };
+    stabilityBuckets: FsrsStabilityBucket[];
+    leechCards: FsrsLeechCard[];
+};
+
+/** FSRS numbers for the dashboard summary, across all the trainers of the user. */
+export type FsrsUserSummary = { fsrsDueToday: number; fsrsMastered: number };
+
 /** One answer to a card. `answerId` is a client-generated id: sending the same one twice must not schedule twice. */
 export type FsrsReviewInput = {
     cardId: string;

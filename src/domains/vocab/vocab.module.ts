@@ -13,7 +13,7 @@ import { CdcWebhookController } from './controllers/cdc-webhook.controller';
 import { VocabGenerateTextTargetProcessor } from './processors/vocab-generate-text-target.processor';
 import { VocabTranslationProcessor } from './processors/vocab-translation.processor';
 import { FsrsRepository, VocabEmbeddingRepository, VocabMasteryRepository, VocabRelatedWordRepository, VocabRepository } from './repositories';
-import { FsrsReviewService, FsrsService, FsrsSessionService, VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
+import { FsrsReviewService, FsrsService, FsrsSessionService, FsrsStatsService, VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
 import { QdrantService } from './services/qdrant.service';
 import { VocabEmbeddingWorkerService } from './services/vocab-embedding-worker.service';
 import { VocabTextTargetService } from './services/vocab-text-target.service';
@@ -41,6 +41,7 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         FsrsService,
         FsrsReviewService,
         FsrsSessionService,
+        FsrsStatsService,
         VocabRelatedWordService,
         VocabTextTargetService,
         VocabTranslationProcessor,
@@ -54,6 +55,7 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         FsrsService,
         FsrsReviewService,
         FsrsSessionService,
+        FsrsStatsService,
         FsrsRepository,
         VocabRelatedWordService,
         VocabRepository,

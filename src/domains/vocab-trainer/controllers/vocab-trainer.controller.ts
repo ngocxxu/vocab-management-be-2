@@ -1,4 +1,4 @@
-import type { FsrsReviewQueue, FsrsReviewResult, FsrsReviewSummary } from '@/domains/vocab/types';
+import type { FsrsReviewQueue, FsrsReviewResult, FsrsReviewStats, FsrsReviewSummary } from '@/domains/vocab/types';
 import type { AnswerCheck } from '@/domains/vocab/utils/fsrs-answer-check.util';
 import { LoggerService, RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
@@ -9,6 +9,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { Throttle } from '@nestjs/throttler';
 import { QuestionType, User, UserRole } from '@prisma/client';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
+import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
 import {
     FsrsReviewAnswerInput,
     FsrsReviewCheckInput,
@@ -37,6 +38,7 @@ export class VocabTrainerController {
         private readonly logger: LoggerService,
         private readonly vocabTrainerService: VocabTrainerService,
         private readonly fsrsSessionService: FsrsSessionService,
+        private readonly fsrsStatsService: FsrsStatsService,
     ) {}
 
     @Get()
@@ -149,6 +151,16 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
     public async getReviewSummary(@Param('id') id: string, @CurrentUser() user: User): Promise<FsrsReviewSummary> {
         return this.fsrsSessionService.getSummary(user.id, id);
+    }
+
+    @Get(':id/review-stats')
+    @Throttle({ default: { limit: 30, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Statistics of an FSRS trainer: cards by state and direction, mastered, leeches, 30-day forecast, true retention, stability' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
+    public async getReviewStats(@Param('id') id: string, @CurrentUser() user: User): Promise<FsrsReviewStats> {
+        return this.fsrsStatsService.getTrainerStats(user.id, id);
     }
 
     @Post(':id/review-answer')
