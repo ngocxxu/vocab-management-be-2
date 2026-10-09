@@ -8,6 +8,12 @@ export const REMINDER_CONFIG = {
         intervalDays: 1,
         enabledTemplates: ['exam_reminder'] as const,
     },
+    fsrs: {
+        // Stop after this many reminders in a row without a review; the next review starts them again.
+        maxIgnoredInRow: 3,
+        // The review day starts at 04:00 local time; the email goes out this many hours later (09:00).
+        sendHoursAfterDayStart: 5,
+    },
     poller: {
         intervalMs: 10_000,
         batchSize: 30,

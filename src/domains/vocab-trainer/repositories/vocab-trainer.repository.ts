@@ -2,7 +2,7 @@ import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { buildPrismaWhere } from '@/shared/utils/query-builder.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { VocabTrainerQueryParamsInput } from '../dto/vocab-trainer-query-params.input';
 
 @Injectable()
@@ -181,10 +181,10 @@ export class VocabTrainerRepository extends BaseRepository {
         return this.client(tx).vocabTrainer.findUnique({ where: { id } });
     }
 
-    public async findLastExamSubmittedAt(id: string): Promise<{ lastExamSubmittedAt: Date | null } | null> {
+    public async findLastExamSubmittedAt(id: string): Promise<{ lastExamSubmittedAt: Date | null; mode: TrainerMode } | null> {
         return this.prisma.vocabTrainer.findUnique({
             where: { id },
-            select: { lastExamSubmittedAt: true },
+            select: { lastExamSubmittedAt: true, mode: true },
         });
     }
 

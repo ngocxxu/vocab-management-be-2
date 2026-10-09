@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerMode, TrainerStatus, User, VocabTrainer } from '@prisma/client';
 import { AiService } from '../../ai/services/ai.service';
 import { NotificationService } from '../../notification/services';
-import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
+import { FsrsReminderService, VocabTrainerReminderAfterExamService } from '../../reminder/services';
 import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { FsrsMapper } from '../../vocab/mappers/fsrs.mapper';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
@@ -51,6 +51,7 @@ export class VocabTrainerService {
         private readonly logger: LoggerService,
         private readonly fsrsRepository: FsrsRepository,
         private readonly fsrsDefaultsService: FsrsDefaultsService,
+        private readonly fsrsReminderService: FsrsReminderService,
     ) {}
 
     /**
@@ -503,7 +504,7 @@ export class VocabTrainerService {
         if (vocabAssignmentIds !== undefined) {
             const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
 
-            return this.vocabTrainerRepository.inTransaction(async (tx) => {
+            const updated = await this.vocabTrainerRepository.inTransaction(async (tx) => {
                 const trainerWithAssignments = await this.vocabTrainerRepository.replaceVocabTrainerWordAssignments(
                     tx,
                     id,
@@ -523,9 +524,13 @@ export class VocabTrainerService {
 
                 return trainerDto;
             });
+            await this.syncFsrsReminder(existing);
+
+            return updated;
         }
 
         const trainer = await this.vocabTrainerRepository.update(id, this.vocabTrainerMapper.buildUpdateInput(trainerData, existing));
+        await this.syncFsrsReminder(existing);
 
         return this.vocabTrainerMapper.toResponse(trainer);
     }
@@ -548,6 +553,8 @@ export class VocabTrainerService {
 
         const { desiredRetention, maximumInterval, newPerDay, endsAt } = input;
         const trainer = await this.vocabTrainerRepository.update(id, this.fsrsMapper.toColumns({ desiredRetention, maximumInterval, newPerDay, endsAt }));
+        // A longer deadline brings the reminders back; a shorter one can bring the next one forward.
+        await this.syncFsrsReminder(existing);
 
         return this.vocabTrainerMapper.toResponse(trainer);
     }
@@ -594,6 +601,10 @@ export class VocabTrainerService {
      */
     public async delete(id: string, userId?: string): Promise<VocabTrainerDto> {
         const trainer = await this.vocabTrainerRepository.delete(id, userId);
+        if (trainer.mode === TrainerMode.FSRS) {
+            await this.fsrsReminderService.cancelForTrainer(id, 'trainer_deleted');
+        }
+
         return this.vocabTrainerMapper.toResponse(trainer);
     }
 
@@ -759,13 +770,23 @@ export class VocabTrainerService {
 
     /** Writes a trainer whose settings are complete, with the cards of its words, in one transaction. */
     private async persistFsrsTrainer(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
-        return this.vocabTrainerRepository.inTransaction(async (tx) => {
+        const created = await this.vocabTrainerRepository.inTransaction(async (tx) => {
             const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId), tx);
             const trainerDto = this.vocabTrainerMapper.toResponse(trainer);
             trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainer, input.vocabAssignmentIds ?? []);
 
             return trainerDto;
         });
+        await this.fsrsReminderService.sync(userId, created.id);
+
+        return created;
+    }
+
+    /** The reminder of an FSRS trainer follows its cards and settings; Classic reminders are planned after an exam instead. */
+    private async syncFsrsReminder(trainer: Pick<VocabTrainer, 'id' | 'userId' | 'mode'>): Promise<void> {
+        if (trainer.mode === TrainerMode.FSRS) {
+            await this.fsrsReminderService.sync(trainer.userId, trainer.id);
+        }
     }
 
     /**

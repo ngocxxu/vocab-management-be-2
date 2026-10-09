@@ -32,6 +32,7 @@ export enum EEmailTemplate {
     PASSWORD_RESET = 'password_reset',
     REMINDER = 'reminder',
     EXAM_REMINDER = 'exam_reminder',
+    FSRS_DUE_REMINDER = 'fsrs_due_reminder',
 }
 
 export const EXPIRES_AT_30_DAYS = 1000 * 60 * 60 * 24 * 30; // 30 days

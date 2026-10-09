@@ -193,6 +193,19 @@ export class FsrsRepository extends BaseRepository {
         return rows.map((row) => row.stability);
     }
 
+    /** The earliest due date among the cards that are already being learned (overdue ones included), or null when there are none. */
+    public async findEarliestReviewDue(trainerId: string): Promise<Date | null> {
+        const card = await this.prisma.vocabFsrsCard.findFirst({ where: { vocabTrainerId: trainerId, state: 'REVIEW' }, orderBy: { due: 'asc' }, select: { due: true } });
+
+        return card?.due ?? null;
+    }
+
+    public async hasReviewSince(trainerId: string, since: Date): Promise<boolean> {
+        const log = await this.prisma.vocabFsrsReviewLog.findFirst({ where: { vocabTrainerId: trainerId, reviewedAt: { gt: since } }, select: { id: true } });
+
+        return log !== null;
+    }
+
     public async findReviewDueDates(trainerId: string, before: Date): Promise<Date[]> {
         const rows = await this.prisma.vocabFsrsCard.findMany({ where: { vocabTrainerId: trainerId, state: 'REVIEW', due: { lt: before } }, select: { due: true } });
 

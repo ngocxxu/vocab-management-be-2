@@ -8,6 +8,7 @@ import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards,
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { QuestionType, User, UserRole } from '@prisma/client';
+import { FsrsReminderService } from '../../reminder/services';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
 import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
 import {
@@ -40,6 +41,7 @@ export class VocabTrainerController {
         private readonly vocabTrainerService: VocabTrainerService,
         private readonly fsrsSessionService: FsrsSessionService,
         private readonly fsrsStatsService: FsrsStatsService,
+        private readonly fsrsReminderService: FsrsReminderService,
     ) {}
 
     @Get()
@@ -172,7 +174,11 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Card not found in this trainer' })
     @ApiResponse({ status: HttpStatus.CONFLICT, description: 'CycleEnded: the cycle of this trainer is over' })
     public async answerReview(@Param('id') id: string, @Body() input: FsrsReviewAnswerInput, @CurrentUser() user: User): Promise<FsrsReviewResult> {
-        return this.fsrsSessionService.recordAnswer(user.id, id, input);
+        const result = await this.fsrsSessionService.recordAnswer(user.id, id, input);
+        // The next email depends on when the cards are due now, and a review is what starts the reminders again.
+        await this.fsrsReminderService.sync(user.id, id);
+
+        return result;
     }
 
     @Post(':id/review-check')

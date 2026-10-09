@@ -1,10 +1,11 @@
 import 'reflect-metadata';
 
 import { LoggerService, RolesGuard } from '@/shared';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConflictException, INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
+import { FsrsReminderService } from '../../reminder/services';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
 import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
 import { VocabTrainerService } from '../services';
@@ -15,6 +16,7 @@ describe('VocabTrainerController FSRS routes', () => {
     const fsrsSessionService = { getQueue: jest.fn(), getSummary: jest.fn(), recordAnswer: jest.fn(), checkAnswer: jest.fn() };
     const fsrsStatsService = { getTrainerStats: jest.fn() };
     const vocabTrainerService = { updateFsrsSettings: jest.fn(), clone: jest.fn() };
+    const fsrsReminderService = { sync: jest.fn() };
 
     const validAnswer = { cardId: 'c1', answerId: 'a1', rating: 'GOOD', questionType: 'FLIP_CARD' };
 
@@ -26,6 +28,7 @@ describe('VocabTrainerController FSRS routes', () => {
                 { provide: VocabTrainerService, useValue: vocabTrainerService },
                 { provide: FsrsSessionService, useValue: fsrsSessionService },
                 { provide: FsrsStatsService, useValue: fsrsStatsService },
+                { provide: FsrsReminderService, useValue: fsrsReminderService },
             ],
         })
             .overrideGuard(RolesGuard)
@@ -119,6 +122,28 @@ describe('VocabTrainerController FSRS routes', () => {
 
             // Assert
             expect(fsrsSessionService.recordAnswer).toHaveBeenCalledWith('u1', 't1', expect.objectContaining({ ...validAnswer, durationMs: 1500 }));
+        });
+
+        test('plans the next reminder after the answer was recorded', async () => {
+            // Arrange
+            fsrsSessionService.recordAnswer.mockResolvedValue({ cardId: 'c1', isDuplicate: false });
+
+            // Act
+            await request(app.getHttpServer()).post('/vocab-trainers/t1/review-answer').send(validAnswer).expect(201);
+
+            // Assert
+            expect(fsrsReminderService.sync).toHaveBeenCalledWith('u1', 't1');
+        });
+
+        test('does not touch the reminders when the answer is refused', async () => {
+            // Arrange
+            fsrsSessionService.recordAnswer.mockRejectedValue(new ConflictException('CycleEnded'));
+
+            // Act
+            await request(app.getHttpServer()).post('/vocab-trainers/t1/review-answer').send(validAnswer).expect(409);
+
+            // Assert
+            expect(fsrsReminderService.sync).not.toHaveBeenCalled();
         });
 
         test.each([

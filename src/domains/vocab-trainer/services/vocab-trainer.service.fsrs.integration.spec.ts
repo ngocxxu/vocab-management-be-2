@@ -24,6 +24,7 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
     let folderId: string;
     let words: string[];
     let wordWithoutTranslation: string;
+    const reminders = { sync: jest.fn(), cancelForTrainer: jest.fn() };
 
     const input = (overrides: Partial<VocabTrainerInput> = {}): VocabTrainerInput =>
         ({
@@ -56,7 +57,7 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         prisma = new PrismaService({ datasources: { db: { url: databaseUrl } } });
         const unused = {} as never;
         defaults = new FsrsDefaultsService(new ConfigService(new ConfigRepository(prisma)));
-        service = new VocabTrainerService(new VocabTrainerRepository(prisma), unused, unused, unused, unused, unused, new FsrsRepository(prisma), defaults);
+        service = new VocabTrainerService(new VocabTrainerRepository(prisma), unused, unused, unused, unused, unused, new FsrsRepository(prisma), defaults, reminders as never);
         await prisma.$connect();
     });
 
@@ -452,6 +453,73 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
             // Assert
             expect(extended.fsrsEndsAt?.getTime()).toBeGreaterThan(Date.now());
             expect(await cardsOf(ended.id)).toEqual(cardsBefore);
+        });
+    });
+
+    describe('reminders', () => {
+        beforeEach(() => {
+            reminders.sync.mockClear();
+            reminders.cancelForTrainer.mockClear();
+        });
+
+        test('a new FSRS trainer plans its first reminder after it was saved', async () => {
+            // Act
+            const trainer = await service.create(input(), user.id);
+
+            // Assert
+            expect(reminders.sync).toHaveBeenCalledWith(user.id, trainer.id);
+        });
+
+        test('a new cycle plans its own reminder', async () => {
+            // Arrange
+            const source = await service.create(input(), user.id);
+            reminders.sync.mockClear();
+
+            // Act
+            const cycle = await service.clone(source.id, { name: 'Second round' }, user.id);
+
+            // Assert
+            expect(reminders.sync).toHaveBeenCalledTimes(1);
+            expect(reminders.sync).toHaveBeenCalledWith(user.id, cycle.id);
+        });
+
+        test('changing the settings or the words of an FSRS trainer plans the reminder again', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+            reminders.sync.mockClear();
+
+            // Act
+            await service.updateFsrsSettings(trainer.id, { newPerDay: 5 }, user.id);
+            await service.update(trainer.id, input({ vocabAssignmentIds: [words[0]] }), user.id);
+            await service.update(trainer.id, input({ name: 'Renamed' }), user.id);
+
+            // Assert
+            expect(reminders.sync).toHaveBeenCalledTimes(3);
+            expect(reminders.sync).toHaveBeenCalledWith(user.id, trainer.id);
+        });
+
+        test('a Classic trainer never touches the FSRS reminders', async () => {
+            // Arrange
+            const classic = await service.create(input({ mode: 'CLASSIC' }), user.id);
+
+            // Act
+            await service.update(classic.id, input({ name: 'Renamed', mode: 'CLASSIC' }), user.id);
+            await service.delete(classic.id, user.id);
+
+            // Assert
+            expect(reminders.sync).not.toHaveBeenCalled();
+            expect(reminders.cancelForTrainer).not.toHaveBeenCalled();
+        });
+
+        test('deleting an FSRS trainer cancels its reminders', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+
+            // Act
+            await service.delete(trainer.id, user.id);
+
+            // Assert
+            expect(reminders.cancelForTrainer).toHaveBeenCalledWith(trainer.id, 'trainer_deleted');
         });
     });
 
