@@ -14,7 +14,7 @@ describe('VocabTrainerController FSRS routes', () => {
     let app: INestApplication;
     const fsrsSessionService = { getQueue: jest.fn(), getSummary: jest.fn(), recordAnswer: jest.fn(), checkAnswer: jest.fn() };
     const fsrsStatsService = { getTrainerStats: jest.fn() };
-    const vocabTrainerService = { updateFsrsSettings: jest.fn() };
+    const vocabTrainerService = { updateFsrsSettings: jest.fn(), clone: jest.fn() };
 
     const validAnswer = { cardId: 'c1', answerId: 'a1', rating: 'GOOD', questionType: 'FLIP_CARD' };
 
@@ -205,6 +205,39 @@ describe('VocabTrainerController FSRS routes', () => {
 
             // Assert
             expect(vocabTrainerService.updateFsrsSettings.mock.calls[0][1]).toMatchObject({ mode: 'CLASSIC', directions: ['SOURCE_TO_TARGET'] });
+        });
+    });
+    describe('POST :id/clone', () => {
+        test('hands the name, the deadline, the trainer and the user to the service', async () => {
+            // Arrange
+            vocabTrainerService.clone.mockResolvedValue({ id: 't2' });
+
+            // Act
+            const res = await request(app.getHttpServer()).post('/vocab-trainers/t1/clone').send({ name: 'Round 2', endsAt: '2099-01-01T00:00:00.000Z' }).expect(201);
+
+            // Assert
+            expect(res.body).toEqual({ id: 't2' });
+            expect(vocabTrainerService.clone).toHaveBeenCalledWith('t1', expect.objectContaining({ name: 'Round 2', endsAt: new Date('2099-01-01T00:00:00.000Z') }), 'u1');
+        });
+
+        test('accepts a missing or null deadline', async () => {
+            // Arrange
+            vocabTrainerService.clone.mockResolvedValue({ id: 't2' });
+
+            // Act + Assert
+            await request(app.getHttpServer()).post('/vocab-trainers/t1/clone').send({ name: 'Round 2' }).expect(201);
+            await request(app.getHttpServer()).post('/vocab-trainers/t1/clone').send({ name: 'Round 2', endsAt: null }).expect(201);
+        });
+
+        test.each([
+            ['no name', {}],
+            ['an empty name', { name: '' }],
+            ['a name that is too long', { name: 'x'.repeat(201) }],
+            ['a deadline that is not a date', { name: 'Round 2', endsAt: 'tomorrow' }],
+        ])('rejects %s', async (_name, body) => {
+            // Act + Assert
+            await request(app.getHttpServer()).post('/vocab-trainers/t1/clone').send(body).expect(400);
+            expect(vocabTrainerService.clone).not.toHaveBeenCalled();
         });
     });
 });

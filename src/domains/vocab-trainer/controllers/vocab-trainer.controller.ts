@@ -11,6 +11,7 @@ import { QuestionType, User, UserRole } from '@prisma/client';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
 import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
 import {
+    CloneVocabTrainerInput,
     FsrsReviewAnswerInput,
     FsrsReviewCheckInput,
     FsrsReviewQueueQueryInput,
@@ -182,6 +183,20 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Card not found in this trainer' })
     public async checkReviewAnswer(@Param('id') id: string, @Body() input: FsrsReviewCheckInput, @CurrentUser() user: User): Promise<AnswerCheck> {
         return this.fsrsSessionService.checkAnswer(user.id, id, input);
+    }
+
+    @Post(':id/clone')
+    @Throttle({ default: { limit: 10, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Start a new cycle: a new FSRS trainer with the same words, directions and settings. The original is not changed.' })
+    @ApiResponse({ status: HttpStatus.CREATED, type: VocabTrainerDto })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Not an FSRS trainer, or the end of the cycle is not in the future' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
+    public async clone(@Param('id') id: string, @Body() input: CloneVocabTrainerInput, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+        const trainer = await this.vocabTrainerService.clone(id, input, user.id);
+        this.logger.info(`Started a new cycle of vocab trainer ${id} as ${trainer.id}`);
+        return trainer;
     }
 
     @Delete(':id')

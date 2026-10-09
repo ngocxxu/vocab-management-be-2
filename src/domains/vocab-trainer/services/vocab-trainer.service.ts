@@ -10,6 +10,7 @@ import { FsrsMapper } from '../../vocab/mappers/fsrs.mapper';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import {
+    CloneVocabTrainerInput,
     SubmitExamBodyInput,
     SubmitFillInBlankChoiceInput,
     SubmitFillInBlankInput,
@@ -552,6 +553,43 @@ export class VocabTrainerService {
     }
 
     /**
+     * Starts a new cycle from an FSRS trainer: a new trainer with the same words, directions and settings, a new name and an
+     * optional new deadline. Its cards start as NEW; the original trainer, its cards and its logs are not touched.
+     */
+    public async clone(id: string, input: CloneVocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        const source = (await this.vocabTrainerRepository.findById(id, userId)) as (VocabTrainer & { vocabAssignments: Array<{ vocabId: string }> }) | null;
+        if (!source) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+        if (source.mode !== TrainerMode.FSRS) {
+            throw new VocabTrainerBadRequestException('Only an FSRS trainer can start a new cycle');
+        }
+        if (input.endsAt && input.endsAt.getTime() <= Date.now()) {
+            throw new VocabTrainerBadRequestException('The end of the cycle must be in the future');
+        }
+
+        const settings = this.fsrsMapper.toSettings(source);
+
+        return this.persistFsrsTrainer(
+            {
+                name: input.name,
+                status: TrainerStatus.PENDING,
+                questionType: source.questionType,
+                setCountTime: source.setCountTime,
+                reminderDisabled: source.reminderDisabled,
+                vocabAssignmentIds: source.vocabAssignments.map((assignment) => assignment.vocabId),
+                mode: TrainerMode.FSRS,
+                fsrsDesiredRetention: settings.desiredRetention,
+                fsrsMaximumInterval: settings.maximumInterval,
+                fsrsNewPerDay: settings.newPerDay,
+                fsrsDirections: settings.directions,
+                fsrsEndsAt: input.endsAt ?? null,
+            },
+            userId,
+        );
+    }
+
+    /**
      * Delete a vocab trainer
      */
     public async delete(id: string, userId?: string): Promise<VocabTrainerDto> {
@@ -716,8 +754,13 @@ export class VocabTrainerService {
         // The trainer keeps its own copy of the defaults of the user, so changing them later does not touch it.
         const inputWithDefaults = { ...input, ...(await this.fsrsDefaultsService.resolveForCreate(userId, input)) };
 
+        return this.persistFsrsTrainer(inputWithDefaults, userId);
+    }
+
+    /** Writes a trainer whose settings are complete, with the cards of its words, in one transaction. */
+    private async persistFsrsTrainer(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
         return this.vocabTrainerRepository.inTransaction(async (tx) => {
-            const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(inputWithDefaults, userId), tx);
+            const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId), tx);
             const trainerDto = this.vocabTrainerMapper.toResponse(trainer);
             trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainer, input.vocabAssignmentIds ?? []);
 

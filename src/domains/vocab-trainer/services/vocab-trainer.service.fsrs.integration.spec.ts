@@ -313,6 +313,148 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         });
     });
 
+    describe('clone (a new cycle)', () => {
+        const inDays = (days: number): Date => new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+        test('copies the words, directions and settings into a new trainer with its own NEW cards', async () => {
+            // Arrange
+            const settings = { fsrsDirections: ['TARGET_TO_SOURCE'], fsrsDesiredRetention: 0.85, fsrsMaximumInterval: 90, fsrsNewPerDay: 4, fsrsEndsAt: inDays(5) } as const;
+            const original = await service.create(input({ ...settings, fsrsDirections: [...settings.fsrsDirections], reminderDisabled: true }), user.id);
+
+            // Act
+            const copy = await service.clone(original.id, { name: 'Second round' }, user.id);
+
+            // Assert
+            expect(copy.id).not.toBe(original.id);
+            expect(copy).toMatchObject({
+                name: 'Second round',
+                mode: 'FSRS',
+                questionType: QuestionType.FLIP_CARD,
+                fsrsDirections: ['TARGET_TO_SOURCE'],
+                fsrsDesiredRetention: 0.85,
+                fsrsMaximumInterval: 90,
+                fsrsNewPerDay: 4,
+                fsrsEndsAt: null,
+                reminderDisabled: true,
+            });
+            expect((copy.vocabAssignments ?? []).map((assignment) => assignment.vocabId).sort()).toEqual([...words].sort());
+            const cards = await cardsOf(copy.id);
+            expect(cards).toHaveLength(3);
+            expect(cards.every((card) => card.state === 'NEW' && card.reps === 0 && card.lastReviewedAt === null)).toBe(true);
+        });
+
+        test('takes the new deadline, and a trainer without one stays open-ended', async () => {
+            // Arrange
+            const original = await service.create(input(), user.id);
+            const endsAt = inDays(20);
+
+            // Act
+            const withDeadline = await service.clone(original.id, { name: 'With a deadline', endsAt }, user.id);
+            const withoutDeadline = await service.clone(original.id, { name: 'Open', endsAt: null }, user.id);
+
+            // Assert
+            expect(withDeadline.fsrsEndsAt?.getTime()).toBe(endsAt.getTime());
+            expect(withoutDeadline.fsrsEndsAt).toBeNull();
+        });
+
+        test('leaves the original trainer, its cards and its logs untouched', async () => {
+            // Arrange
+            const original = await service.create(input(), user.id);
+            const card = await prisma.vocabFsrsCard.findFirstOrThrow({ where: { vocabTrainerId: original.id } });
+            await prisma.vocabFsrsCard.update({ where: { id: card.id }, data: { state: 'REVIEW', reps: 3, stability: 12, lastReviewedAt: new Date() } });
+            await prisma.vocabFsrsReviewLog.create({
+                data: {
+                    answerId: 'clone-log-1',
+                    userId: user.id,
+                    vocabId: card.vocabId,
+                    vocabTrainerId: original.id,
+                    direction: card.direction,
+                    rating: 'GOOD',
+                    prevState: 'NEW',
+                    elapsedDays: 0,
+                    stateAfter: 'REVIEW',
+                    dueAfter: new Date(),
+                    stabilityAfter: 12,
+                    difficultyAfter: 5,
+                    scheduledDaysAfter: 12,
+                    desiredRetentionAtReview: 0.9,
+                    questionType: 'FLIP_CARD',
+                    reviewedAt: new Date(),
+                },
+            });
+            const cardsBefore = await cardsOf(original.id);
+
+            // Act
+            const copy = await service.clone(original.id, { name: 'Second round' }, user.id);
+
+            // Assert
+            expect(await cardsOf(original.id)).toEqual(cardsBefore);
+            expect(await prisma.vocabFsrsReviewLog.count({ where: { vocabTrainerId: original.id } })).toBe(1);
+            expect(await prisma.vocabFsrsReviewLog.count({ where: { vocabTrainerId: copy.id } })).toBe(0);
+            expect((await cardsOf(copy.id)).every((c) => c.state === 'NEW')).toBe(true);
+        });
+
+        test('works on an ended trainer, which is how a new cycle usually starts', async () => {
+            // Arrange
+            const ended = await service.create(input({ fsrsEndsAt: inDays(-2) }), user.id);
+
+            // Act
+            const copy = await service.clone(ended.id, { name: 'Again', endsAt: inDays(14) }, user.id);
+
+            // Assert
+            expect(await cardsOf(copy.id)).toHaveLength(6);
+            expect(await cardsOf(ended.id)).toHaveLength(6);
+        });
+
+        test('reports the words that still have no translation', async () => {
+            // Arrange
+            const original = await service.create(input({ vocabAssignmentIds: [...words, wordWithoutTranslation] }), user.id);
+
+            // Act
+            const copy = await service.clone(original.id, { name: 'Second round' }, user.id);
+
+            // Assert
+            expect(copy.fsrsSkippedVocabIds).toEqual([wordWithoutTranslation]);
+            expect(await cardsOf(copy.id)).toHaveLength(6);
+        });
+
+        test('rejects a deadline in the past without creating anything', async () => {
+            // Arrange
+            const original = await service.create(input(), user.id);
+
+            // Act
+            const attempt = service.clone(original.id, { name: 'Late', endsAt: inDays(-1) }, user.id);
+
+            // Assert
+            await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
+            expect(await prisma.vocabTrainer.count({ where: { userId: user.id } })).toBe(1);
+        });
+
+        test('rejects a Classic trainer and a trainer of another user', async () => {
+            // Arrange
+            const classic = await service.create(input({ mode: 'CLASSIC', questionType: QuestionType.MULTIPLE_CHOICE }), user.id);
+            const fsrs = await service.create(input(), user.id);
+
+            // Act + Assert
+            await expect(service.clone(classic.id, { name: 'x' }, user.id)).rejects.toBeInstanceOf(BadRequestException);
+            await expect(service.clone(fsrs.id, { name: 'x' }, 'someone-else')).rejects.toBeInstanceOf(NotFoundException);
+            expect(await prisma.vocabTrainer.count({ where: { userId: user.id } })).toBe(2);
+        });
+
+        test('extending an ended trainer makes it active again with the cards it already has', async () => {
+            // Arrange
+            const ended = await service.create(input({ fsrsEndsAt: inDays(-2) }), user.id);
+            const cardsBefore = await cardsOf(ended.id);
+
+            // Act
+            const extended = await service.updateFsrsSettings(ended.id, { endsAt: inDays(10) }, user.id);
+
+            // Assert
+            expect(extended.fsrsEndsAt?.getTime()).toBeGreaterThan(Date.now());
+            expect(await cardsOf(ended.id)).toEqual(cardsBefore);
+        });
+    });
+
     test('deleting the user still works with words in a trainer', async () => {
         // Arrange
         await service.create(input(), user.id);
