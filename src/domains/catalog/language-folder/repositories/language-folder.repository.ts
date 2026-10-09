@@ -201,6 +201,17 @@ export class LanguageFolderRepository extends BaseRepository {
         return folder;
     }
 
+    /** Words of the folder that are still in a trainer, with the trainer ids. Deleting the folder would delete them. */
+    public async findVocabsInTrainers(folderId: string): Promise<Array<{ vocabId: string; textSource: string; trainerId: string }>> {
+        const rows = await this.prisma.vocabTrainerWord.findMany({
+            where: { vocab: { languageFolderId: folderId } },
+            select: { vocabId: true, vocabTrainerId: true, vocab: { select: { textSource: true } } },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        return rows.map((row) => ({ vocabId: row.vocabId, textSource: row.vocab.textSource, trainerId: row.vocabTrainerId }));
+    }
+
     public async delete(id: string, userId?: string): Promise<LanguageFolder> {
         const where: Prisma.LanguageFolderWhereUniqueInput & Prisma.LanguageFolderWhereInput = {
             id,

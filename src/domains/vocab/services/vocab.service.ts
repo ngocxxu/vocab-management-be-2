@@ -31,7 +31,7 @@ import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { SubjectRefInput } from '../dto/subject-ref.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
-import { VocabBadRequestException, VocabNotFoundException } from '../exceptions';
+import { type TVocabInUse, VocabBadRequestException, VocabInUseException, VocabNotFoundException } from '../exceptions';
 import { ResolvedTextTargetInput, ResolvedVocabInput, VocabMapper, VocabRelatedWordMapper } from '../mappers';
 import { CsvImportExistingVocab, VocabRelatedWordRepository, VocabRepository } from '../repositories';
 import { type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
@@ -470,8 +470,10 @@ export class VocabService {
         if (!existingVocab) {
             throw new VocabNotFoundException(id);
         }
+        await this.assertNotInTrainers([id]);
+
         const deletedSnapshot = await this.buildResponse(existingVocab);
-        const vocab = await this.vocabRepository.delete(id, userId);
+        const vocab = await this.deleteOrRefuse(id, existingVocab.textSource, userId);
 
         await this.vocabRepository.clearListCaches();
 
@@ -484,6 +486,9 @@ export class VocabService {
         if (!ids.length) {
             throw new VocabBadRequestException('Ids are required');
         }
+
+        // All or nothing: one word in use blocks the whole request, so the user sees every blocked word and nothing is deleted.
+        await this.assertNotInTrainers(ids);
 
         const vocabDtos = await Promise.all(ids.map(async (id) => this.delete(id, userId)));
 
@@ -1053,5 +1058,43 @@ export class VocabService {
         }
 
         return resolvedIds;
+    }
+
+    /** Refuses with VocabInUse when any of the words is still in a trainer. Lists the first 3 trainers of each blocked word. */
+    private async assertNotInTrainers(vocabIds: string[]): Promise<void> {
+        const usage = await this.vocabRepository.findTrainerUsage(vocabIds);
+        if (usage.length === 0) {
+            return;
+        }
+
+        const blocked = new Map<string, TVocabInUse>();
+        for (const row of usage) {
+            const entry = blocked.get(row.vocabId) ?? { vocabId: row.vocabId, textSource: row.textSource, trainerCount: 0, sampleTrainers: [] };
+            blocked.set(row.vocabId, {
+                ...entry,
+                trainerCount: entry.trainerCount + 1,
+                sampleTrainers: entry.sampleTrainers.length < 3 ? [...entry.sampleTrainers, { id: row.trainerId, name: row.trainerName }] : entry.sampleTrainers,
+            });
+        }
+
+        throw new VocabInUseException(Array.from(blocked.values()));
+    }
+
+    /**
+     * The database refuses to delete a word that is still in a trainer (foreign key NO ACTION). A trainer can be assigned
+     * between the check above and the delete, so that P2003 is turned into the same conflict instead of a generic 409.
+     */
+    private async deleteOrRefuse(id: string, textSource: string, userId?: string): Promise<Awaited<ReturnType<VocabRepository['delete']>>> {
+        try {
+            return await this.vocabRepository.delete(id, userId);
+        } catch (error: unknown) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+                await this.assertNotInTrainers([id]);
+
+                throw new VocabInUseException([{ vocabId: id, textSource, trainerCount: 1, sampleTrainers: [] }]);
+            }
+
+            throw error;
+        }
     }
 }

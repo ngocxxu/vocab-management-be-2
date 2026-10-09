@@ -314,6 +314,22 @@ export class VocabRepository extends BaseRepository {
         return vocab;
     }
 
+    /** Every trainer that still has one of these words, oldest first. Used to refuse deleting a word that is in use. */
+    public async findTrainerUsage(vocabIds: string[]): Promise<Array<{ vocabId: string; trainerId: string; trainerName: string; textSource: string }>> {
+        const rows = await this.prisma.vocabTrainerWord.findMany({
+            where: { vocabId: { in: vocabIds } },
+            select: { vocabId: true, vocabTrainerId: true, vocabTrainer: { select: { name: true } }, vocab: { select: { textSource: true } } },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        return rows.map((row) => ({
+            vocabId: row.vocabId,
+            trainerId: row.vocabTrainerId,
+            trainerName: row.vocabTrainer.name,
+            textSource: row.vocab.textSource,
+        }));
+    }
+
     public async findByIds(ids: string[], userId: string): Promise<Vocab[]> {
         return this.findByIdsWithClient(ids, userId, this.prisma);
     }

@@ -213,6 +213,7 @@ export class VocabController {
     @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabRelatedWordsDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'VocabInUse: the vocab is still in a trainer' })
     @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to access this resource' })
     public async findRelatedWords(@Param('id') id: string, @CurrentUser() user: User): Promise<VocabRelatedWordsDto> {
@@ -325,6 +326,7 @@ export class VocabController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete multiple vocabs' })
     @ApiResponse({ status: HttpStatus.OK, type: VocabDto })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'VocabInUse: a vocab is still in a trainer; nothing is deleted' })
     public async deleteBulk(@Body() input: BulkDeleteInput, @CurrentUser() user: User): Promise<VocabDto[]> {
         return this.vocabService.deleteBulk(input, user.id);
     }
