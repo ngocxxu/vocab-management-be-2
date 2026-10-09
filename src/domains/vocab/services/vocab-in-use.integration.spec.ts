@@ -81,4 +81,31 @@ describeWithDb('vocab and folder delete while a word is in a trainer (real Postg
         expect(await prisma.languageFolder.findUnique({ where: { id: folderId } })).not.toBeNull();
         expect(await prisma.vocab.count({ where: { languageFolderId: folderId } })).toBe(2);
     });
+
+    describe('findTrainerConflicts', () => {
+        test('lists the trainers of each word in the order asked, and free words with none', async () => {
+            // Arrange
+            const free = (await prisma.vocab.create({ data: { textSource: 'window', sourceLanguageCode: 'en', targetLanguageCode: 'vi', userId, languageFolderId: folderId } })).id;
+
+            // Act
+            const conflicts = await vocabService.findTrainerConflicts([free, inTrainer, inTrainer], userId);
+
+            // Assert
+            expect(conflicts).toEqual([
+                { vocabId: free, textSource: 'window', trainers: [] },
+                { vocabId: inTrainer, textSource: 'apple', trainers: [{ id: trainerId, name: 'Exam words', mode: TrainerMode.CLASSIC }] },
+            ]);
+        });
+
+        test('leaves out the words of another user', async () => {
+            // Arrange
+            const other = await prisma.user.create({ data: { email: `vocab-in-use-spec-other-${Date.now()}@example.com`, firstName: 'C', lastName: 'D' } });
+
+            // Act
+            const conflicts = await vocabService.findTrainerConflicts([inTrainer, notInTrainer], other.id);
+
+            // Assert
+            expect(conflicts).toEqual([]);
+        });
+    });
 });

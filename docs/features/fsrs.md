@@ -143,6 +143,7 @@ One row per rating. Append-only in practice.
 ### Removing words
 
 - Removing a word from a trainer deletes its cards (composite foreign key, cascade). Its logs are kept.
+- Removing it on purpose uses `DELETE :id/vocabs/:vocabId` (see the API table). It does the same thing.
 - Adding the word again creates new NEW cards. The old logs are not used to rebuild a schedule.
 - A vocab that is still in a trainer cannot be deleted. The database foreign key (`NO ACTION`, deferred) blocks it.
   Mapping that error to a friendly conflict response is still open (ticket 13).
@@ -177,16 +178,18 @@ The timezone is a separate Config value (`srs.timezone`) saved with the same end
 
 All routes are under `/vocab-trainers`.
 
-| Route                              | Purpose                                                                                                                   |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET :id/review-queue?limit&ahead` | One fixed session list plus the counts around it. `limit` is the session size, `ahead` looks ahead in days.               |
-| `GET :id/review-summary`           | Overdue, due today, new available, mastered, leech, ended, deadline.                                                      |
-| `GET :id/review-stats`             | Cards by state and direction, forecast, true retention, stability.                                                        |
-| `POST :id/review-answer`           | Records one rating. `409 CycleEnded` once the cycle is over, `409 AnswerIdReused` for an `answerId` used by another card. |
-| `POST :id/review-check`            | Compares a typed answer and suggests a rating. Records nothing.                                                           |
-| `PATCH :id`                        | Edits the settings that stay editable (retention, maximum interval, new per day, deadline).                               |
-| `POST :id/clone`                   | Starts a new cycle from an ended or active FSRS trainer.                                                                  |
-| `GET/PUT /srs-settings`            | The user's defaults and timezone.                                                                                         |
+| Route                                          | Purpose                                                                                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET :id/review-queue?limit&ahead`             | One fixed session list plus the counts around it. `limit` is the session size, `ahead` looks ahead in days.                                             |
+| `GET :id/review-summary`                       | Overdue, due today, new available, mastered, leech, ended, deadline.                                                                                    |
+| `GET :id/review-stats`                         | Cards by state and direction, forecast, true retention, stability.                                                                                      |
+| `POST :id/review-answer`                       | Records one rating. `409 CycleEnded` once the cycle is over, `409 AnswerIdReused` for an `answerId` used by another card.                               |
+| `POST :id/review-check`                        | Compares a typed answer and suggests a rating. Records nothing.                                                                                         |
+| `PATCH :id`                                    | Edits the settings that stay editable (retention, maximum interval, new per day, deadline).                                                             |
+| `POST :id/clone`                               | Starts a new cycle from an ended or active FSRS trainer.                                                                                                |
+| `DELETE :id/vocabs/:vocabId`                   | Removes one word from the trainer. Its FSRS cards are deleted, its review logs are kept. 404 if the trainer is not the user's or the word is not in it. |
+| `GET /vocabs/conflict/by-trainer?vocabIds=a,b` | For each word of the user, the trainers that still hold it (empty when free). Used by the page that resolves a blocked delete.                          |
+| `GET/PUT /srs-settings`                        | The user's defaults and timezone.                                                                                                                       |
 
 ## Reminders
 

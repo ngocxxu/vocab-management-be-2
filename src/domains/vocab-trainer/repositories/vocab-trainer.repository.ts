@@ -216,6 +216,13 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
+    /** Removes one word from the trainer. Its FSRS cards go with it (composite foreign key); review logs stay. Returns the rows deleted. */
+    public async deleteTrainerWord(tx: Prisma.TransactionClient, trainerId: string, vocabId: string): Promise<number> {
+        const result = await tx.vocabTrainerWord.deleteMany({ where: { vocabTrainerId: trainerId, vocabId } });
+
+        return result.count;
+    }
+
     public async replaceVocabTrainerWordAssignments(
         tx: Prisma.TransactionClient,
         id: string,

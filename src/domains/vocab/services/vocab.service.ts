@@ -30,6 +30,7 @@ import {
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { SubjectRefInput } from '../dto/subject-ref.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
+import { VocabTrainerConflictDto } from '../dto/vocab-trainer-conflict.dto';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
 import { type TVocabInUse, VocabBadRequestException, VocabInUseException, VocabNotFoundException } from '../exceptions';
 import { ResolvedTextTargetInput, ResolvedVocabInput, VocabMapper, VocabRelatedWordMapper } from '../mappers';
@@ -48,6 +49,9 @@ const QUERY_VECTOR_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
 function isCircuitOpen(error: unknown): boolean {
     return error instanceof Error && (error as NodeJS.ErrnoException).code === 'EOPENBREAKER';
 }
+
+/** A word of the user and the trainers that still hold it. `trainers` is empty when the word is free. */
+export type VocabTrainerConflict = VocabTrainerConflictDto;
 
 @Injectable()
 export class VocabService {
@@ -830,6 +834,31 @@ export class VocabService {
         const vocabs = paginatedResult.items;
 
         return CsvParserUtil.generateCsvBuffer(vocabs);
+    }
+
+    /**
+     * For each word of the user in the list, the trainers that still hold it (empty when it is free). Words of other
+     * users and unknown ids are left out. Keeps the order of the request and drops duplicates.
+     */
+    public async findTrainerConflicts(vocabIds: string[], userId: string): Promise<VocabTrainerConflict[]> {
+        const uniqueIds = [...new Set(vocabIds)];
+        const [vocabs, usage] = await Promise.all([this.vocabRepository.findByIds(uniqueIds, userId), this.vocabRepository.findTrainerUsage(uniqueIds, userId)]);
+
+        const ownedById = new Map(vocabs.map((vocab) => [vocab.id, vocab]));
+        const trainersByVocabId = new Map<string, VocabTrainerConflict['trainers']>();
+        for (const row of usage) {
+            const trainers = trainersByVocabId.get(row.vocabId) ?? [];
+            trainersByVocabId.set(row.vocabId, [...trainers, { id: row.trainerId, name: row.trainerName, mode: row.trainerMode }]);
+        }
+
+        return uniqueIds.flatMap((vocabId) => {
+            const vocab = ownedById.get(vocabId);
+            if (!vocab) {
+                return [];
+            }
+
+            return [{ vocabId, textSource: vocab.textSource, trainers: trainersByVocabId.get(vocabId) ?? [] }];
+        });
     }
 
     /**

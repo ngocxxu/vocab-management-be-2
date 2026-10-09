@@ -205,6 +205,15 @@ export class VocabTrainerController {
         return trainer;
     }
 
+    @Delete(':id/vocabs/:vocabId')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Remove one word from a trainer. Its FSRS cards are deleted; review logs are kept.' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Trainer not found, or the word is not in it' })
+    public async removeVocab(@Param('id') id: string, @Param('vocabId') vocabId: string, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+        return this.vocabTrainerService.removeVocab(id, vocabId, user.id);
+    }
+
     @Delete(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])

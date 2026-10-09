@@ -41,6 +41,7 @@ import {
     TopProblematicVocabDto,
     UpsertRelatedWordsInput,
     VocabAutocompleteDto,
+    VocabConflictByTrainerQuery,
     VocabConflictBySubjectQuery,
     VocabDto,
     VocabInput,
@@ -49,8 +50,9 @@ import {
 } from '../dto';
 import { BulkUpdateInput } from '../dto/bulk-update.input';
 import { VOCAB_FILTERS, VocabQueryParamsInput } from '../dto/vocab-query-params.input';
+import { VocabTrainerConflictDto } from '../dto/vocab-trainer-conflict.dto';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
-import { VocabMasteryService, VocabRelatedWordService, VocabService } from '../services';
+import { VocabMasteryService, VocabRelatedWordService, VocabService, type VocabTrainerConflict } from '../services';
 import { CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
 // Type for multer file
@@ -341,6 +343,15 @@ export class VocabController {
     })
     public async getConflictsBySubject(@Query() query: VocabConflictBySubjectQuery, @CurrentUser() user: User): Promise<PaginationDto<VocabDto>> {
         return this.vocabService.findConflictsBySubject(query, user.id);
+    }
+
+    @Get('conflict/by-trainer')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'For each of these words, the trainers that still hold it (empty when it is free)' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'One entry per word of the user, in the order asked', type: [VocabTrainerConflictDto] })
+    public async getConflictsByTrainer(@Query() query: VocabConflictByTrainerQuery, @CurrentUser() user: User): Promise<VocabTrainerConflict[]> {
+        return this.vocabService.findTrainerConflicts(query.vocabIds, user.id);
     }
 
     @Post('generate/text-target')

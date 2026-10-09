@@ -8,6 +8,7 @@ import request from 'supertest';
 import { FsrsReminderService } from '../../reminder/services';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
 import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
+import { VocabTrainerWordNotFoundException } from '../exceptions';
 import { VocabTrainerService } from '../services';
 import { VocabTrainerController } from './vocab-trainer.controller';
 
@@ -15,7 +16,7 @@ describe('VocabTrainerController FSRS routes', () => {
     let app: INestApplication;
     const fsrsSessionService = { getQueue: jest.fn(), getSummary: jest.fn(), recordAnswer: jest.fn(), checkAnswer: jest.fn() };
     const fsrsStatsService = { getTrainerStats: jest.fn() };
-    const vocabTrainerService = { updateFsrsSettings: jest.fn(), clone: jest.fn() };
+    const vocabTrainerService = { updateFsrsSettings: jest.fn(), clone: jest.fn(), removeVocab: jest.fn() };
     const fsrsReminderService = { sync: jest.fn() };
 
     const validAnswer = { cardId: 'c1', answerId: 'a1', rating: 'GOOD', questionType: 'FLIP_CARD' };
@@ -263,6 +264,27 @@ describe('VocabTrainerController FSRS routes', () => {
             // Act + Assert
             await request(app.getHttpServer()).post('/vocab-trainers/t1/clone').send(body).expect(400);
             expect(vocabTrainerService.clone).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('DELETE :id/vocabs/:vocabId', () => {
+        test('removes the word from the trainer of the user', async () => {
+            // Arrange
+            vocabTrainerService.removeVocab.mockResolvedValue({ id: 't1' });
+
+            // Act
+            await request(app.getHttpServer()).delete('/vocab-trainers/t1/vocabs/v1').expect(200);
+
+            // Assert
+            expect(vocabTrainerService.removeVocab).toHaveBeenCalledWith('t1', 'v1', 'u1');
+        });
+
+        test('answers 404 when the word is not in the trainer', async () => {
+            // Arrange
+            vocabTrainerService.removeVocab.mockRejectedValue(new VocabTrainerWordNotFoundException('t1', 'v1'));
+
+            // Act + Assert
+            await request(app.getHttpServer()).delete('/vocab-trainers/t1/vocabs/v1').expect(404);
         });
     });
 });

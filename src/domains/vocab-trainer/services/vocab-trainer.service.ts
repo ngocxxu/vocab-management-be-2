@@ -23,7 +23,7 @@ import {
     VocabTrainerQueryParamsInput,
 } from '../dto';
 import { SubmitTranslationAudioResponseDto } from '../dto/submit-translation-audio-response.dto';
-import { VocabTrainerBadRequestException, VocabTrainerNotFoundException } from '../exceptions';
+import { VocabTrainerBadRequestException, VocabTrainerNotFoundException, VocabTrainerWordNotFoundException } from '../exceptions';
 import { VocabTrainerMapper } from '../mappers';
 import { VocabTrainerRepository } from '../repositories';
 import { EQuestionType, EReminderRepeat, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
@@ -594,6 +594,27 @@ export class VocabTrainerService {
             },
             userId,
         );
+    }
+
+    /**
+     * Removes one word from a trainer (the vocab itself stays). The FSRS cards of the word are deleted, its review logs are kept.
+     * 404 when the trainer is not the user's or the word is not in it.
+     */
+    public async removeVocab(trainerId: string, vocabId: string, userId: string): Promise<VocabTrainerDto> {
+        const existing = await this.vocabTrainerRepository.findById(trainerId, userId);
+        if (!existing) {
+            throw new VocabTrainerNotFoundException(trainerId);
+        }
+
+        const removed = await this.vocabTrainerRepository.inTransaction(async (tx) => this.vocabTrainerRepository.deleteTrainerWord(tx, trainerId, vocabId));
+        if (removed === 0) {
+            throw new VocabTrainerWordNotFoundException(trainerId, vocabId);
+        }
+
+        await this.syncFsrsReminder(existing);
+        const trainer = await this.vocabTrainerRepository.findByIdWithVocabs(trainerId, userId);
+
+        return this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
     }
 
     /**

@@ -5,6 +5,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { QuestionType, TrainerStatus, User } from '@prisma/client';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabTrainerInput } from '../dto';
+import { VocabTrainerNotFoundException, VocabTrainerWordNotFoundException } from '../exceptions';
 import { VocabTrainerRepository } from '../repositories';
 import { FsrsDefaultsService } from './fsrs-defaults.service';
 import { VocabTrainerService } from './vocab-trainer.service';
@@ -532,5 +533,43 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
 
         // Assert
         expect(deleted.count).toBe(1);
+    });
+
+    describe('removeVocab', () => {
+        test('removes the word from the trainer, its cards go and the other cards stay', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+            const [removed, kept] = words as [string, string];
+
+            // Act
+            await service.removeVocab(trainer.id, removed, user.id);
+
+            // Assert
+            const cards = await cardsOf(trainer.id);
+            expect(cards.some((c) => c.vocabId === removed)).toBe(false);
+            expect(cards.filter((c) => c.vocabId === kept)).toHaveLength(2);
+            expect(await prisma.vocab.findUnique({ where: { id: removed } })).not.toBeNull();
+            expect(reminders.sync).toHaveBeenCalledWith(user.id, trainer.id);
+        });
+
+        test('404 when the word is not in the trainer, and nothing changes', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+            const before = await cardsOf(trainer.id);
+
+            // Act + Assert
+            await expect(service.removeVocab(trainer.id, wordWithoutTranslation, user.id)).rejects.toBeInstanceOf(VocabTrainerWordNotFoundException);
+            expect(await cardsOf(trainer.id)).toHaveLength(before.length);
+        });
+
+        test('404 for a trainer of another user, and the word stays in it', async () => {
+            // Arrange
+            const trainer = await service.create(input(), user.id);
+            const other = await prisma.user.create({ data: { email: `fsrs-trainer-spec-other-${Date.now()}@example.com`, firstName: 'C', lastName: 'D' } });
+
+            // Act + Assert
+            await expect(service.removeVocab(trainer.id, words[0], other.id)).rejects.toBeInstanceOf(VocabTrainerNotFoundException);
+            expect(await cardsOf(trainer.id)).toHaveLength(6);
+        });
     });
 });
