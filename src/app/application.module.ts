@@ -59,7 +59,7 @@ import { envConfigLoaders, validationSchema } from '../config';
                 throttlers: [
                     {
                         ttl: 60000,
-                        limit: 50,
+                        limit: configService.getOrThrow<number>('app.throttleLimit'),
                     },
                 ],
                 storage: new ThrottlerStorageRedisService(configService.getOrThrow<string>('redis.url')) as unknown as ThrottlerStorage,

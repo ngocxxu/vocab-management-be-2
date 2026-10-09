@@ -4,6 +4,7 @@ export const validationSchema = Joi.object({
     NODE_ENV: Joi.string().valid('development', 'production', 'test', 'staging').default('development'),
 
     API_PORT: Joi.number().required(),
+    THROTTLE_LIMIT: Joi.number().integer().min(1).default(50),
     API_PREFIX: Joi.string().required(),
     API_CORS_ORIGINS: Joi.string().allow(''),
 

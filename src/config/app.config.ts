@@ -5,6 +5,8 @@ export default registerAs('app', () => ({
     apiPort: parseInt(process.env.API_PORT || '3002', 10),
     apiPrefix: process.env.API_PREFIX as string,
     apiCorsOrigins: process.env.API_CORS_ORIGINS || '',
+    // Requests per minute per client IP for the global throttler. E2E raises it: one run makes far more calls than production allows.
+    throttleLimit: parseInt(process.env.THROTTLE_LIMIT || '50', 10),
     swaggerEnable: process.env.SWAGGER_ENABLE ?? '1',
     swaggerPrefix: process.env.SWAGGER_PREFIX as string,
     swaggerUser: process.env.SWAGGER_USER as string,
