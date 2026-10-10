@@ -1,28 +1,34 @@
 import { LoggerService, PaginationDto } from '@/shared';
 import { getOrderBy, getPagination } from '@/shared/utils';
 import { Injectable } from '@nestjs/common';
-import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerMode, TrainerStatus, User, VocabTrainer } from '@prisma/client';
 import { AiService } from '../../ai/services/ai.service';
 import { NotificationService } from '../../notification/services';
-import { VocabTrainerReminderAfterExamService } from '../../reminder/services';
+import { FsrsReminderService, VocabTrainerReminderAfterExamService } from '../../reminder/services';
 import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
+import { FsrsMapper } from '../../vocab/mappers/fsrs.mapper';
+import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import {
+    CloneVocabTrainerInput,
     SubmitExamBodyInput,
     SubmitFillInBlankChoiceInput,
     SubmitFillInBlankInput,
     SubmitMultipleChoiceInput,
     SubmitTranslationAudioInput,
+    UpdateFsrsSettingsInput,
     UpdateVocabTrainerInput,
     VocabTrainerDto,
     VocabTrainerInput,
     VocabTrainerQueryParamsInput,
 } from '../dto';
 import { SubmitTranslationAudioResponseDto } from '../dto/submit-translation-audio-response.dto';
-import { VocabTrainerBadRequestException, VocabTrainerNotFoundException } from '../exceptions';
+import { VocabTrainerBadRequestException, VocabTrainerNotFoundException, VocabTrainerWordNotFoundException } from '../exceptions';
 import { VocabTrainerMapper } from '../mappers';
 import { VocabTrainerRepository } from '../repositories';
 import { EQuestionType, EReminderRepeat, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
+import { assertTrainerUpdateAllowed, assertValidTrainerCreate } from '../utils/fsrs-trainer-rules';
+import { FsrsDefaultsService } from './fsrs-defaults.service';
 
 export interface FlipCardQuestion {
     frontText: string[];
@@ -34,6 +40,7 @@ export interface FlipCardQuestion {
 @Injectable()
 export class VocabTrainerService {
     private readonly vocabTrainerMapper = new VocabTrainerMapper();
+    private readonly fsrsMapper = new FsrsMapper();
 
     public constructor(
         private readonly vocabTrainerRepository: VocabTrainerRepository,
@@ -42,6 +49,9 @@ export class VocabTrainerService {
         private readonly notificationService: NotificationService,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly logger: LoggerService,
+        private readonly fsrsRepository: FsrsRepository,
+        private readonly fsrsDefaultsService: FsrsDefaultsService,
+        private readonly fsrsReminderService: FsrsReminderService,
     ) {}
 
     /**
@@ -290,6 +300,7 @@ export class VocabTrainerService {
         if (!trainer) {
             throw new VocabTrainerNotFoundException(id);
         }
+        this.assertClassicTrainer(trainer);
 
         const { countTime, wordTestInputs } = input;
         if (!wordTestInputs?.length) {
@@ -461,6 +472,11 @@ export class VocabTrainerService {
      * Create a new vocab trainer
      */
     public async create(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        assertValidTrainerCreate(input);
+        if (input.mode === TrainerMode.FSRS) {
+            return this.createFsrsTrainer(input, userId);
+        }
+
         const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId));
 
         const trainerWithAssignments = await this.vocabTrainerRepository.findById(trainer.id);
@@ -481,12 +497,14 @@ export class VocabTrainerService {
             throw new VocabTrainerNotFoundException(id);
         }
 
+        assertTrainerUpdateAllowed(input, existing);
+
         const { vocabAssignmentIds, ...trainerData } = input;
 
         if (vocabAssignmentIds !== undefined) {
             const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
 
-            return this.vocabTrainerRepository.inTransaction(async (tx) => {
+            const updated = await this.vocabTrainerRepository.inTransaction(async (tx) => {
                 const trainerWithAssignments = await this.vocabTrainerRepository.replaceVocabTrainerWordAssignments(
                     tx,
                     id,
@@ -499,13 +517,104 @@ export class VocabTrainerService {
                     throw new VocabTrainerNotFoundException(id);
                 }
 
-                return this.vocabTrainerMapper.toResponse(trainerWithAssignments);
+                const trainerDto = this.vocabTrainerMapper.toResponse(trainerWithAssignments);
+                if (existing.mode === TrainerMode.FSRS) {
+                    trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainerWithAssignments, uniqueVocabIds);
+                }
+
+                return trainerDto;
             });
+            await this.syncFsrsReminder(existing);
+
+            return updated;
         }
 
         const trainer = await this.vocabTrainerRepository.update(id, this.vocabTrainerMapper.buildUpdateInput(trainerData, existing));
+        await this.syncFsrsReminder(existing);
 
         return this.vocabTrainerMapper.toResponse(trainer);
+    }
+
+    /** Changes the settings of an FSRS trainer that stay editable. Mode and directions are fixed at creation. */
+    public async updateFsrsSettings(id: string, input: UpdateFsrsSettingsInput, userId?: string): Promise<VocabTrainerDto> {
+        const existing = await this.vocabTrainerRepository.findById(id, userId);
+        if (!existing) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+        if (existing.mode !== TrainerMode.FSRS) {
+            throw new VocabTrainerBadRequestException('FSRS settings need mode FSRS');
+        }
+        if (input.mode !== undefined || input.directions !== undefined) {
+            throw new VocabTrainerBadRequestException('The mode and the directions of a trainer cannot be changed');
+        }
+        if (input.endsAt && input.endsAt.getTime() <= Date.now()) {
+            throw new VocabTrainerBadRequestException('The end of the cycle must be in the future');
+        }
+
+        const { desiredRetention, maximumInterval, newPerDay, endsAt } = input;
+        const trainer = await this.vocabTrainerRepository.update(id, this.fsrsMapper.toColumns({ desiredRetention, maximumInterval, newPerDay, endsAt }));
+        // A longer deadline brings the reminders back; a shorter one can bring the next one forward.
+        await this.syncFsrsReminder(existing);
+
+        return this.vocabTrainerMapper.toResponse(trainer);
+    }
+
+    /**
+     * Starts a new cycle from an FSRS trainer: a new trainer with the same words, directions and settings, a new name and an
+     * optional new deadline. Its cards start as NEW; the original trainer, its cards and its logs are not touched.
+     */
+    public async clone(id: string, input: CloneVocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        const source = (await this.vocabTrainerRepository.findById(id, userId)) as (VocabTrainer & { vocabAssignments: Array<{ vocabId: string }> }) | null;
+        if (!source) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+        if (source.mode !== TrainerMode.FSRS) {
+            throw new VocabTrainerBadRequestException('Only an FSRS trainer can start a new cycle');
+        }
+        if (input.endsAt && input.endsAt.getTime() <= Date.now()) {
+            throw new VocabTrainerBadRequestException('The end of the cycle must be in the future');
+        }
+
+        const settings = this.fsrsMapper.toSettings(source);
+
+        return this.persistFsrsTrainer(
+            {
+                name: input.name,
+                status: TrainerStatus.PENDING,
+                questionType: source.questionType,
+                setCountTime: source.setCountTime,
+                reminderDisabled: source.reminderDisabled,
+                vocabAssignmentIds: source.vocabAssignments.map((assignment) => assignment.vocabId),
+                mode: TrainerMode.FSRS,
+                fsrsDesiredRetention: settings.desiredRetention,
+                fsrsMaximumInterval: settings.maximumInterval,
+                fsrsNewPerDay: settings.newPerDay,
+                fsrsDirections: settings.directions,
+                fsrsEndsAt: input.endsAt ?? null,
+            },
+            userId,
+        );
+    }
+
+    /**
+     * Removes one word from a trainer (the vocab itself stays). The FSRS cards of the word are deleted, its review logs are kept.
+     * 404 when the trainer is not the user's or the word is not in it.
+     */
+    public async removeVocab(trainerId: string, vocabId: string, userId: string): Promise<VocabTrainerDto> {
+        const existing = await this.vocabTrainerRepository.findById(trainerId, userId);
+        if (!existing) {
+            throw new VocabTrainerNotFoundException(trainerId);
+        }
+
+        const removed = await this.vocabTrainerRepository.inTransaction(async (tx) => this.vocabTrainerRepository.deleteTrainerWord(tx, trainerId, vocabId));
+        if (removed === 0) {
+            throw new VocabTrainerWordNotFoundException(trainerId, vocabId);
+        }
+
+        await this.syncFsrsReminder(existing);
+        const trainer = await this.vocabTrainerRepository.findByIdWithVocabs(trainerId, userId);
+
+        return this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
     }
 
     /**
@@ -513,6 +622,10 @@ export class VocabTrainerService {
      */
     public async delete(id: string, userId?: string): Promise<VocabTrainerDto> {
         const trainer = await this.vocabTrainerRepository.delete(id, userId);
+        if (trainer.mode === TrainerMode.FSRS) {
+            await this.fsrsReminderService.cancelForTrainer(id, 'trainer_deleted');
+        }
+
         return this.vocabTrainerMapper.toResponse(trainer);
     }
 
@@ -533,6 +646,7 @@ export class VocabTrainerService {
         if (!trainer) {
             throw new VocabTrainerNotFoundException(id);
         }
+        this.assertClassicTrainer(trainer);
 
         const { countTime, wordTestSelects } = input;
         if (!wordTestSelects?.length) {
@@ -665,5 +779,57 @@ export class VocabTrainerService {
         );
 
         return this.vocabTrainerMapper.toResponse(result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+    }
+
+    /** The trainer and its cards are created together, so an FSRS trainer never exists without the cards of its words. */
+    private async createFsrsTrainer(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        // The trainer keeps its own copy of the defaults of the user, so changing them later does not touch it.
+        const inputWithDefaults = { ...input, ...(await this.fsrsDefaultsService.resolveForCreate(userId, input)) };
+
+        return this.persistFsrsTrainer(inputWithDefaults, userId);
+    }
+
+    /** Writes a trainer whose settings are complete, with the cards of its words, in one transaction. */
+    private async persistFsrsTrainer(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
+        const created = await this.vocabTrainerRepository.inTransaction(async (tx) => {
+            const trainer = await this.vocabTrainerRepository.create(this.vocabTrainerMapper.toCreateInput(input, userId), tx);
+            const trainerDto = this.vocabTrainerMapper.toResponse(trainer);
+            trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainer, input.vocabAssignmentIds ?? []);
+
+            return trainerDto;
+        });
+        await this.fsrsReminderService.sync(userId, created.id);
+
+        return created;
+    }
+
+    /** The reminder of an FSRS trainer follows its cards and settings; Classic reminders are planned after an exam instead. */
+    private async syncFsrsReminder(trainer: Pick<VocabTrainer, 'id' | 'userId' | 'mode'>): Promise<void> {
+        if (trainer.mode === TrainerMode.FSRS) {
+            await this.fsrsReminderService.sync(trainer.userId, trainer.id);
+        }
+    }
+
+    /**
+     * Creates the missing cards (one per word and direction) and returns the words that cannot have one yet because
+     * they have no translation. Cards that already exist are left alone, so this is safe to run on every update.
+     */
+    private async enrollFsrsCards(tx: Prisma.TransactionClient, trainer: VocabTrainer, vocabIds: string[]): Promise<string[]> {
+        const uniqueVocabIds = [...new Set(vocabIds)];
+        const enrollable = new Set(await this.fsrsRepository.findVocabIdsWithTranslation(tx, uniqueVocabIds));
+        const cards = [...enrollable].flatMap((vocabId) => trainer.fsrsDirections.map((direction) => ({ vocabTrainerId: trainer.id, vocabId, userId: trainer.userId, direction })));
+
+        if (cards.length > 0) {
+            await this.fsrsRepository.createCards(tx, cards);
+        }
+
+        return uniqueVocabIds.filter((vocabId) => !enrollable.has(vocabId));
+    }
+
+    /** FSRS trainers are reviewed card by card through the review API; the exam flow would delete or re-status them like a Classic trainer. */
+    private assertClassicTrainer(trainer: Pick<VocabTrainer, 'mode'>): void {
+        if (trainer.mode === TrainerMode.FSRS) {
+            throw new VocabTrainerBadRequestException('An FSRS trainer is reviewed through the FSRS review API, not submitted as an exam');
+        }
     }
 }

@@ -5,14 +5,15 @@ import { LanguageFolderModule } from '../catalog/language-folder';
 import { PlanModule } from '../catalog/plan';
 import { SubjectModule } from '../catalog/subject';
 import { ApiKeyModule } from '../identity/api-key';
+import { ConfigModule } from '../platform/config/config.module';
 import { EventsModule } from '../platform/events/events.module';
 import { EReminderType } from '../reminder/utils';
 import { TextTargetController, VocabController } from './controllers';
 import { CdcWebhookController } from './controllers/cdc-webhook.controller';
 import { VocabGenerateTextTargetProcessor } from './processors/vocab-generate-text-target.processor';
 import { VocabTranslationProcessor } from './processors/vocab-translation.processor';
-import { VocabEmbeddingRepository, VocabMasteryRepository, VocabRelatedWordRepository, VocabRepository } from './repositories';
-import { VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
+import { FsrsRepository, VocabEmbeddingRepository, VocabMasteryRepository, VocabRelatedWordRepository, VocabRepository } from './repositories';
+import { FsrsReviewService, FsrsService, FsrsSessionService, FsrsStatsService, VocabMasteryService, VocabRelatedWordService, VocabService } from './services';
 import { QdrantService } from './services/qdrant.service';
 import { VocabEmbeddingWorkerService } from './services/vocab-embedding-worker.service';
 import { VocabTextTargetService } from './services/vocab-text-target.service';
@@ -25,6 +26,7 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         forwardRef(() => LanguageFolderModule),
         ApiKeyModule,
         EventsModule,
+        ConfigModule,
         BullModule.registerQueue({ name: EReminderType.VOCAB_GENERATE_TEXT_TARGET }),
     ],
     controllers: [VocabController, TextTargetController, CdcWebhookController],
@@ -35,6 +37,11 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         VocabEmbeddingRepository,
         VocabService,
         VocabMasteryService,
+        FsrsRepository,
+        FsrsService,
+        FsrsReviewService,
+        FsrsSessionService,
+        FsrsStatsService,
         VocabRelatedWordService,
         VocabTextTargetService,
         VocabTranslationProcessor,
@@ -42,6 +49,17 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         QdrantService,
         VocabEmbeddingWorkerService,
     ],
-    exports: [VocabService, VocabMasteryService, VocabRelatedWordService, VocabRepository, VocabRelatedWordRepository],
+    exports: [
+        VocabService,
+        VocabMasteryService,
+        FsrsService,
+        FsrsReviewService,
+        FsrsSessionService,
+        FsrsStatsService,
+        FsrsRepository,
+        VocabRelatedWordService,
+        VocabRepository,
+        VocabRelatedWordRepository,
+    ],
 })
 export class VocabModule {}

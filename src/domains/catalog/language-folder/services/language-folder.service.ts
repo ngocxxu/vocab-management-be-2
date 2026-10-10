@@ -5,7 +5,7 @@ import { PlanQuotaService } from '../../plan/services/plan-quota.service';
 import { LanguageFolderDto, LanguageFolderInput } from '../dto';
 import { LanguageFolderParamsInput } from '../dto/language-folder-params.input';
 import { LanguageFolderWithStatsDto } from '../dto/language-folder-with-stats.dto';
-import { LanguageFolderBadRequestException, LanguageFolderNotFoundException } from '../exceptions';
+import { LanguageFolderBadRequestException, LanguageFolderInUseException, LanguageFolderNotFoundException } from '../exceptions';
 import { LanguageFolderMapper } from '../mappers';
 import { LanguageFolderRepository } from '../repositories/language-folder.repository';
 
@@ -85,10 +85,23 @@ export class LanguageFolderService {
     }
 
     public async delete(id: string, userId?: string): Promise<LanguageFolderDto> {
-        await this.findOne(id, userId);
-        const folder = await this.languageFolderRepository.delete(id, userId);
+        const existing = await this.findOne(id, userId);
+        await this.assertNoVocabsInTrainers(id, existing.name);
 
-        return this.languageFolderMapper.toResponse(folder);
+        try {
+            const folder = await this.languageFolderRepository.delete(id, userId);
+
+            return this.languageFolderMapper.toResponse(folder);
+        } catch (error: unknown) {
+            // A trainer can get one of these words between the check and the delete; the database then refuses it (P2003).
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+                await this.assertNoVocabsInTrainers(id, existing.name);
+
+                throw new LanguageFolderInUseException(id, existing.name, 1);
+            }
+
+            throw error;
+        }
     }
 
     public async clearLanguageFolderCache(): Promise<void> {
@@ -97,5 +110,16 @@ export class LanguageFolderService {
 
     public async clearLanguageFolderCacheById(id: string): Promise<void> {
         await this.languageFolderRepository.clearCacheById(id);
+    }
+
+    /** Refuses with LanguageFolderInUse when a word of the folder is still in a trainer. */
+    private async assertNoVocabsInTrainers(folderId: string, folderName: string): Promise<void> {
+        const rows = await this.languageFolderRepository.findVocabsInTrainers(folderId);
+        if (rows.length === 0) {
+            return;
+        }
+
+        const vocabIds = [...new Set(rows.map((row) => row.vocabId))];
+        throw new LanguageFolderInUseException(folderId, folderName, vocabIds.length, vocabIds.slice(0, 3));
     }
 }

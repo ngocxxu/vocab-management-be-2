@@ -3,6 +3,7 @@ import { VocabDto } from '../dto';
 import { VocabBadRequestException } from '../exceptions';
 import { VocabMasteryRepository, VocabMasteryWithVocab, VocabRepository } from '../repositories';
 import { NEEDS_REVIEW_STATUS_FILTERS, NeedsReviewStatusFilter } from '../types';
+import { FsrsStatsService } from './fsrs-stats.service';
 
 const TREND_WINDOW_DAYS = 7;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -16,6 +17,7 @@ export class VocabMasteryService {
     public constructor(
         private readonly vocabMasteryRepository: VocabMasteryRepository,
         private readonly vocabRepository: VocabRepository,
+        private readonly fsrsStatsService: FsrsStatsService,
     ) {}
 
     public async getOrCreateMastery(vocabId: string, userId: string) {
@@ -87,12 +89,13 @@ export class VocabMasteryService {
         }
 
         const trendCutoff = new Date(Date.now() - TREND_WINDOW_DAYS * MILLISECONDS_PER_DAY);
-        const [result, lastPractice, healthCounts, totalVocabs, previousSummary] = await Promise.all([
+        const [result, lastPractice, healthCounts, totalVocabs, previousSummary, fsrsSummary] = await Promise.all([
             this.vocabMasteryRepository.aggregateByUserId(userId),
             this.vocabMasteryRepository.findLastPracticeAtByUserId(userId),
             this.vocabMasteryRepository.countHealthByUserId(userId),
             this.vocabRepository.countByUserId(userId),
             this.vocabMasteryRepository.getSummarySnapshotAt(userId, trendCutoff),
+            this.fsrsStatsService.getUserSummary(userId),
         ]);
 
         // eslint-disable-next-line no-underscore-dangle
@@ -116,6 +119,8 @@ export class VocabMasteryService {
             lastPracticeAt: lastPractice?.createdAt ?? null,
             criticalCount: healthCounts.criticalCount,
             warningCount: healthCounts.warningCount,
+            fsrsDueToday: fsrsSummary.fsrsDueToday,
+            fsrsMastered: fsrsSummary.fsrsMastered,
             trends: {
                 totalVocabsPercentDelta: previousSummary.totalVocabs > 0 ? Math.round(((totalVocabs - previousSummary.totalVocabs) / previousSummary.totalVocabs) * 100) : null,
                 averageMasteryDelta: previousAverageMastery !== null ? roundToOneDecimal(averageMastery - previousAverageMastery) : null,

@@ -89,6 +89,47 @@ export class ReminderScheduleRepository extends BaseRepository {
         return result.count;
     }
 
+    /** Cancels the schedules of one template that have not been sent yet, except the one with `keepDedupeKey`. */
+    public async cancelActiveExcept(entityType: string, entityId: string, template: string, keepDedupeKey: string | null, reason: string): Promise<number> {
+        const now = new Date();
+        const result = await this.prisma.reminderSchedule.updateMany({
+            where: {
+                entityType,
+                entityId,
+                template,
+                status: { in: ACTIVE_CANCEL_STATUSES },
+                ...(keepDedupeKey ? { dedupeKey: { not: keepDedupeKey } } : {}),
+            },
+            data: {
+                status: ReminderScheduleStatus.CANCELLED,
+                cancelledAt: now,
+                cancelledBy: 'system',
+                cancelReason: reason,
+                completedAt: now,
+                lockedBy: null,
+                lockedAt: null,
+            },
+        });
+        return result.count;
+    }
+
+    /** The most recently sent schedules of one template for an entity, newest first. */
+    public async findLatestSent(entityType: string, entityId: string, template: string, take: number): Promise<ReminderSchedule[]> {
+        return this.prisma.reminderSchedule.findMany({
+            where: { entityType, entityId, template, status: ReminderScheduleStatus.SENT },
+            orderBy: { sentAt: 'desc' },
+            take,
+        });
+    }
+
+    public async createSchedule(data: Prisma.ReminderScheduleUncheckedCreateInput): Promise<ReminderSchedule> {
+        return this.prisma.reminderSchedule.create({ data });
+    }
+
+    public async findUserContact(userId: string): Promise<{ email: string; firstName: string; lastName: string } | null> {
+        return this.prisma.user.findUnique({ where: { id: userId }, select: { email: true, firstName: true, lastName: true } });
+    }
+
     public async cancelSiblingEscalations(initialReminderId: string, excludeId: string): Promise<number> {
         const now = new Date();
         const result = await this.prisma.reminderSchedule.updateMany({
@@ -204,6 +245,8 @@ export class ReminderScheduleRepository extends BaseRepository {
                 reminderType: ReminderScheduleKind.INITIAL,
                 status: ReminderScheduleStatus.SENT,
                 sentAt: { lt: threshold },
+                // Only these templates get escalations; the others would be picked again on every run and crowd out the real candidates.
+                template: { in: [...ESCALATION_CONFIG.enabledTemplates] },
             },
             take,
         });

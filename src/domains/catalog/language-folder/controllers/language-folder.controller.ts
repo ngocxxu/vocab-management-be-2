@@ -40,6 +40,7 @@ export class LanguageFolderController {
     @ApiOperation({ summary: 'Find language folder by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageFolderDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language folder not found' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'LanguageFolderInUse: a vocab in the folder is still in a trainer' })
     public async findOne(@Param('id') id: string): Promise<LanguageFolderDto> {
         return this.languageFolderService.findOne(id);
     }

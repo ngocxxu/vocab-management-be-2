@@ -5,6 +5,7 @@ export class EmailTemplates {
     private static readonly templateRegistry: Map<string, (data: TemplateData) => string> = new Map([
         [EEmailTemplate.REMINDER, (data: TemplateData) => EmailTemplates.reminderTemplate(data)],
         [EEmailTemplate.EXAM_REMINDER, (data: TemplateData) => EmailTemplates.examReminderTemplate(data)],
+        [EEmailTemplate.FSRS_DUE_REMINDER, (data: TemplateData) => EmailTemplates.fsrsDueReminderTemplate(data)],
         [EEmailTemplate.WELCOME, (data: TemplateData) => EmailTemplates.welcomeTemplate(data)],
     ]);
 
@@ -50,6 +51,37 @@ export class EmailTemplates {
               </table>
             `,
             footerNote: "If you don't want to receive these reminders, please contact support.",
+        });
+    }
+
+    /** "N cards to review, M new words ready": the numbers are counted when the email is sent. */
+    public static fsrsDueReminderTemplate(data: TemplateData): string {
+        const reviewCount = Number(data.reviewCount ?? 0);
+        const newCount = Number(data.newCount ?? 0);
+        const lines = [
+            reviewCount > 0 ? `<strong>${reviewCount}</strong> ${reviewCount === 1 ? 'question' : 'questions'} to review` : '',
+            newCount > 0 ? `<strong>${newCount}</strong> new ${newCount === 1 ? 'question' : 'questions'} ready` : '',
+        ].filter(Boolean);
+
+        return EmailTemplates.shell({
+            icon: '&#128276;',
+            heading: 'Time to review',
+            body: `
+              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
+                Hello <strong style="color:#202124;">${data.firstName} ${data.lastName}</strong>,
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+                <tr>
+                  <td style="background-color:#e8f0fe; border-radius:8px; padding:15px;">
+                    <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.5; color:#202124;">
+                      <strong>"${data.trainerName}"</strong>: ${lines.join(', ')}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              ${EmailTemplates.ctaButton(String(data.reviewUrl ?? ''), 'Review now')}
+            `,
+            footerNote: "You get at most one email a day for a trainer, and we stop after 3 emails in a row that you didn't act on. Turn reminders off in the trainer settings.",
         });
     }
 

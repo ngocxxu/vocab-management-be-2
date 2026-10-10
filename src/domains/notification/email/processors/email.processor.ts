@@ -1,12 +1,13 @@
 import { EMAIL_REMINDER_JOB_CONCURRENCY } from '@/queues/config/queue.config';
 import { captureSentryException, LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
-import { ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
+import { ReminderSchedule, ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
 import { Job } from 'bullmq';
 import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { ReminderScheduleRepository } from '../../../reminder/repositories/reminder-schedule.repository';
+import { FsrsReminderService } from '../../../reminder/services/fsrs-reminder.service';
 import { ActedCheckRegistry } from '../../../reminder/strategies/acted-check.registry';
-import { EEmailReminderType, EReminderType } from '../../../reminder/utils';
+import { EEmailReminderType, EEmailTemplate, EReminderType } from '../../../reminder/utils';
 import { computeBackoffMs } from '../../../reminder/utils/reminder-date.util';
 import { EmailService } from '../services';
 import { EmailJobData, ReminderScheduleEmailJobData, TemplateData } from '../utils/type';
@@ -18,6 +19,7 @@ export class EmailProcessor {
         private readonly logger: LoggerService,
         private readonly reminderScheduleRepository: ReminderScheduleRepository,
         private readonly actedCheckRegistry: ActedCheckRegistry,
+        private readonly fsrsReminderService: FsrsReminderService,
     ) {}
 
     @Process({
@@ -89,7 +91,29 @@ export class EmailProcessor {
             }
         }
 
-        const data = fresh.payload as TemplateData;
+        let data = fresh.payload as TemplateData;
+        const isFsrsDue = fresh.template === (EEmailTemplate.FSRS_DUE_REMINDER as string);
+        if (isFsrsDue) {
+            // What is due is counted now, not when the reminder was planned.
+            try {
+                const prepared = await this.fsrsReminderService.prepareSend(fresh);
+                if (!prepared.send) {
+                    const cancelledAt = new Date();
+                    await this.reminderScheduleRepository.transitionStatus(fresh.id, ReminderScheduleStatus.SENDING, ReminderScheduleStatus.CANCELLED, {
+                        cancelledAt,
+                        cancelledBy: 'system',
+                        cancelReason: prepared.reason,
+                        completedAt: cancelledAt,
+                    });
+                    await this.planNextFsrsReminder(fresh);
+                    return;
+                }
+                data = prepared.data;
+            } catch (error: unknown) {
+                await this.handleSendFailure(fresh.id, fresh.attempt, error);
+                return;
+            }
+        }
         const reminderTitle = 'Vocab Trainer';
 
         try {
@@ -112,6 +136,17 @@ export class EmailProcessor {
                 }
             }
         });
+
+        if (isFsrsDue) {
+            await this.planNextFsrsReminder(fresh);
+        }
+    }
+
+    /** The next reminder is planned once this one is done: tomorrow if work is still waiting, none after 3 ignored emails. */
+    private async planNextFsrsReminder(row: ReminderSchedule): Promise<void> {
+        if (row.userId && row.entityId) {
+            await this.fsrsReminderService.sync(row.userId, row.entityId);
+        }
     }
 
     private async handleSendFailure(scheduleId: string, attempt: number, error: unknown): Promise<void> {

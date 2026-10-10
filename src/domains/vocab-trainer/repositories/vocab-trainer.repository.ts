@@ -2,7 +2,7 @@ import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { buildPrismaWhere } from '@/shared/utils/query-builder.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { VocabTrainerQueryParamsInput } from '../dto/vocab-trainer-query-params.input';
 
 @Injectable()
@@ -117,8 +117,8 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
-    public async create(data: Prisma.VocabTrainerCreateInput): Promise<VocabTrainer> {
-        return this.prisma.vocabTrainer.create({
+    public async create(data: Prisma.VocabTrainerCreateInput, tx?: Prisma.TransactionClient): Promise<VocabTrainer> {
+        return this.client(tx).vocabTrainer.create({
             data,
             include: {
                 vocabAssignments: true,
@@ -181,10 +181,10 @@ export class VocabTrainerRepository extends BaseRepository {
         return this.client(tx).vocabTrainer.findUnique({ where: { id } });
     }
 
-    public async findLastExamSubmittedAt(id: string): Promise<{ lastExamSubmittedAt: Date | null } | null> {
+    public async findLastExamSubmittedAt(id: string): Promise<{ lastExamSubmittedAt: Date | null; mode: TrainerMode } | null> {
         return this.prisma.vocabTrainer.findUnique({
             where: { id },
-            select: { lastExamSubmittedAt: true },
+            select: { lastExamSubmittedAt: true, mode: true },
         });
     }
 
@@ -216,6 +216,13 @@ export class VocabTrainerRepository extends BaseRepository {
         });
     }
 
+    /** Removes one word from the trainer. Its FSRS cards go with it (composite foreign key); review logs stay. Returns the rows deleted. */
+    public async deleteTrainerWord(tx: Prisma.TransactionClient, trainerId: string, vocabId: string): Promise<number> {
+        const result = await tx.vocabTrainerWord.deleteMany({ where: { vocabTrainerId: trainerId, vocabId } });
+
+        return result.count;
+    }
+
     public async replaceVocabTrainerWordAssignments(
         tx: Prisma.TransactionClient,
         id: string,
@@ -229,6 +236,10 @@ export class VocabTrainerRepository extends BaseRepository {
             reminderDisabled?: boolean;
             reminderRepeat?: number;
             reminderLastRemind?: Date;
+            fsrsDesiredRetention?: number;
+            fsrsMaximumInterval?: number;
+            fsrsNewPerDay?: number | null;
+            fsrsEndsAt?: Date | null;
         },
         existing: VocabTrainer,
         uniqueVocabIds: string[],
@@ -245,6 +256,10 @@ export class VocabTrainerRepository extends BaseRepository {
                 reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
                 reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
                 reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+                fsrsDesiredRetention: trainerData.fsrsDesiredRetention,
+                fsrsMaximumInterval: trainerData.fsrsMaximumInterval,
+                fsrsNewPerDay: trainerData.fsrsNewPerDay,
+                fsrsEndsAt: trainerData.fsrsEndsAt,
             },
             include: {
                 vocabAssignments: true,
@@ -252,8 +267,10 @@ export class VocabTrainerRepository extends BaseRepository {
             },
         });
 
+        // Only the words that left the trainer are deleted: deleting a word also deletes its FSRS cards (composite
+        // foreign key), so a delete-all-and-recreate would wipe the progress of the words that stay.
         await tx.vocabTrainerWord.deleteMany({
-            where: { vocabTrainerId: id },
+            where: { vocabTrainerId: id, vocabId: { notIn: uniqueVocabIds } },
         });
 
         if (uniqueVocabIds.length > 0) {

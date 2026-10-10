@@ -28,3 +28,5 @@ export * from './vocab-related-words.dto';
 export * from './vocab-autocomplete.dto';
 export * from './vocab-search-group.dto';
 export * from './quick-add-vocab.input';
+export * from './vocab-conflict-by-trainer.query';
+export * from './vocab-trainer-conflict.dto';

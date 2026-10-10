@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
+import { FsrsDirection, TrainerMode, TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { shuffleArray } from '../utils';
 import { FillInBlankQuestionDto } from './fill-in-blank-question.dto';
@@ -38,6 +38,27 @@ export class VocabTrainerDto {
 
     @ApiProperty({ description: 'Last reminder date' })
     public reminderLastRemind: Date;
+
+    @ApiProperty({ description: 'Learning mode', enum: TrainerMode })
+    public mode: TrainerMode;
+
+    @ApiProperty({ description: 'FSRS: target recall probability at review time' })
+    public fsrsDesiredRetention: number;
+
+    @ApiProperty({ description: 'FSRS: longest gap between reviews, in days' })
+    public fsrsMaximumInterval: number;
+
+    @ApiProperty({ description: 'FSRS: max new words introduced per day; null = unlimited', nullable: true, type: Number })
+    public fsrsNewPerDay: number | null;
+
+    @ApiProperty({ description: 'FSRS: directions that get a card', enum: FsrsDirection, isArray: true })
+    public fsrsDirections: FsrsDirection[];
+
+    @ApiProperty({ description: 'FSRS: end of the cycle; null = no end', nullable: true, type: Date })
+    public fsrsEndsAt: Date | null;
+
+    @ApiProperty({ description: 'FSRS: words that got no card because they have no translation yet (only set on create/update)', required: false, type: [String] })
+    public fsrsSkippedVocabIds?: string[];
 
     @ApiProperty({ description: 'User ID', example: 'string' })
     public userId: string;
@@ -97,6 +118,12 @@ export class VocabTrainerDto {
         this.reminderDisabled = entity.reminderDisabled;
         this.reminderRepeat = entity.reminderRepeat;
         this.reminderLastRemind = entity.reminderLastRemind;
+        this.mode = entity.mode;
+        this.fsrsDesiredRetention = entity.fsrsDesiredRetention;
+        this.fsrsMaximumInterval = entity.fsrsMaximumInterval;
+        this.fsrsNewPerDay = entity.fsrsNewPerDay;
+        this.fsrsDirections = entity.fsrsDirections;
+        this.fsrsEndsAt = entity.fsrsEndsAt;
         this.userId = entity.userId;
         this.createdAt = entity.createdAt;
         this.updatedAt = entity.updatedAt;

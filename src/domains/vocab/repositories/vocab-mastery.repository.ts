@@ -182,38 +182,45 @@ export class VocabMasteryRepository extends BaseRepository {
         `;
     }
 
-    public async getProgressOverTimeRaw(userId: string, startDate?: string, endDate?: string): Promise<Array<{ date: string; averageMastery: number; practiceCount: number }>> {
-        const whereConditions: string[] = ['vm.user_id = $1'];
-        const params: unknown[] = [userId];
-        let paramIndex = 2;
+    /**
+     * One row per day with practice. `practiceCount` is the Classic mastery events plus the FSRS reviews of the day (the
+     * heatmap counts both). `averageMastery` stays Classic only, so it is null on a day with FSRS reviews only: there is
+     * nothing to average, which is not the same as a mastery of 0.
+     */
+    public async getProgressOverTimeRaw(
+        userId: string,
+        startDate?: string,
+        endDate?: string,
+    ): Promise<Array<{ date: string; averageMastery: number | null; practiceCount: number }>> {
+        const classicFrom = startDate ? Prisma.sql`AND DATE(vmh.created_at) >= ${startDate}::date` : Prisma.empty;
+        const classicTo = endDate ? Prisma.sql`AND DATE(vmh.created_at) <= ${endDate}::date` : Prisma.empty;
+        const fsrsFrom = startDate ? Prisma.sql`AND DATE(l.reviewed_at) >= ${startDate}::date` : Prisma.empty;
+        const fsrsTo = endDate ? Prisma.sql`AND DATE(l.reviewed_at) <= ${endDate}::date` : Prisma.empty;
 
-        if (startDate) {
-            whereConditions.push(`DATE(vmh.created_at) >= $${paramIndex}::date`);
-            params.push(startDate);
-            paramIndex++;
-        }
-
-        if (endDate) {
-            whereConditions.push(`DATE(vmh.created_at) <= $${paramIndex}::date`);
-            params.push(endDate);
-            paramIndex++;
-        }
-
-        const whereClause = whereConditions.join(' AND ');
-
-        const sql = `
-            SELECT 
-                DATE(vmh.created_at)::text as date,
-                AVG(vmh.mastery_score)::float as "averageMastery",
-                COUNT(*)::int as "practiceCount"
-            FROM vocab_mastery_history vmh
-            INNER JOIN vocab_mastery vm ON vmh.vocab_mastery_id = vm.id
-            WHERE ${whereClause}
-            GROUP BY DATE(vmh.created_at)
-            ORDER BY DATE(vmh.created_at) ASC
+        const rows = await this.prisma.$queryRaw<Array<{ date: string; averageMastery: number | null; practiceCount: number }>>`
+            WITH classic AS (
+                SELECT DATE(vmh.created_at) AS day, AVG(vmh.mastery_score)::float AS average_mastery, COUNT(*)::int AS practice_count
+                FROM vocab_mastery_history vmh
+                INNER JOIN vocab_mastery vm ON vmh.vocab_mastery_id = vm.id
+                WHERE vm.user_id = ${userId} ${classicFrom} ${classicTo}
+                GROUP BY DATE(vmh.created_at)
+            ),
+            fsrs AS (
+                SELECT DATE(l.reviewed_at) AS day, COUNT(*)::int AS practice_count
+                FROM vocab_fsrs_review_log l
+                WHERE l.user_id = ${userId} ${fsrsFrom} ${fsrsTo}
+                GROUP BY DATE(l.reviewed_at)
+            )
+            SELECT
+                COALESCE(c.day, f.day)::text AS date,
+                c.average_mastery AS "averageMastery",
+                (COALESCE(c.practice_count, 0) + COALESCE(f.practice_count, 0))::int AS "practiceCount"
+            FROM classic c
+            FULL OUTER JOIN fsrs f ON c.day = f.day
+            ORDER BY COALESCE(c.day, f.day) ASC
         `;
 
-        return this.prisma.$queryRawUnsafe<Array<{ date: string; averageMastery: number; practiceCount: number }>>(sql, ...params);
+        return rows;
     }
 
     public async findNeedsReviewVocabs(

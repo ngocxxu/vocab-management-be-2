@@ -5,7 +5,7 @@ import { getOrderBy } from '@/shared/utils/pagination.util';
 import { buildPrismaWhere, coerceQueryStringArray } from '@/shared/utils/query-builder.util';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma, Vocab } from '@prisma/client';
+import { Prisma, TrainerMode, Vocab } from '@prisma/client';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 
@@ -312,6 +312,34 @@ export class VocabRepository extends BaseRepository {
         await Promise.all(relatedCacheIds.map(async (vocabId) => this.redisService.del(RedisPrefix.VOCAB_RELATED, `id:${vocabId}`)));
 
         return vocab;
+    }
+
+    /**
+     * Every trainer that still has one of these words, oldest first. Used to refuse deleting a word that is in use.
+     * Pass `userId` to look only at the user's own words (the conflict page); the delete check does not need it.
+     */
+    public async findTrainerUsage(
+        vocabIds: string[],
+        userId?: string,
+    ): Promise<Array<{ vocabId: string; trainerId: string; trainerName: string; trainerMode: TrainerMode; textSource: string }>> {
+        const rows = await this.prisma.vocabTrainerWord.findMany({
+            where: { vocabId: { in: vocabIds }, ...(userId ? { vocab: { userId } } : {}) },
+            select: {
+                vocabId: true,
+                vocabTrainerId: true,
+                vocabTrainer: { select: { name: true, mode: true } },
+                vocab: { select: { textSource: true } },
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        return rows.map((row) => ({
+            vocabId: row.vocabId,
+            trainerId: row.vocabTrainerId,
+            trainerName: row.vocabTrainer.name,
+            trainerMode: row.vocabTrainer.mode,
+            textSource: row.vocab.textSource,
+        }));
     }
 
     public async findByIds(ids: string[], userId: string): Promise<Vocab[]> {

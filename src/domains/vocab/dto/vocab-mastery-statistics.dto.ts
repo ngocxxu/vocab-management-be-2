@@ -26,6 +26,12 @@ export class MasterySummaryDto {
     @ApiProperty({ description: 'Vocabs with error rate at or above warning threshold but below critical', example: 8 })
     public warningCount: number;
 
+    @ApiProperty({ description: 'Spaced repetition cards due today across all active FSRS trainers (their own count, not part of the mastery score)', example: 14 })
+    public fsrsDueToday: number;
+
+    @ApiProperty({ description: 'Spaced repetition cards the user has mastered across all FSRS trainers', example: 31 })
+    public fsrsMastered: number;
+
     @ApiProperty({ description: 'Rolling 7-day dashboard trend deltas', type: MasterySummaryTrendsDto })
     public trends: MasterySummaryTrendsDto;
 
@@ -37,6 +43,8 @@ export class MasterySummaryDto {
         lastPracticeAt: Date | null;
         criticalCount: number;
         warningCount: number;
+        fsrsDueToday: number;
+        fsrsMastered: number;
         trends: ConstructorParameters<typeof MasterySummaryTrendsDto>[0];
     }) {
         this.totalVocabs = data.totalVocabs;
@@ -46,6 +54,8 @@ export class MasterySummaryDto {
         this.lastPracticeAt = data.lastPracticeAt;
         this.criticalCount = data.criticalCount;
         this.warningCount = data.warningCount;
+        this.fsrsDueToday = data.fsrsDueToday;
+        this.fsrsMastered = data.fsrsMastered;
         this.trends = new MasterySummaryTrendsDto(data.trends);
     }
 }
@@ -75,15 +85,20 @@ export class ProgressOverTimeDto {
     @ApiProperty({ description: 'Date in YYYY-MM-DD format', example: '2024-12-05' })
     public date: string;
 
-    @ApiProperty({ description: 'Average mastery score on this date', example: 7.2 })
-    public averageMastery: number;
+    @ApiProperty({
+        description: 'Average Classic mastery score on this date; null when there was no Classic practice that day (only spaced repetition)',
+        example: 7.2,
+        nullable: true,
+        type: Number,
+    })
+    public averageMastery: number | null;
 
-    @ApiProperty({ description: 'Number of mastery history events on this date', example: 12 })
+    @ApiProperty({ description: 'Number of practice events on this date: Classic mastery events plus spaced repetition reviews', example: 12 })
     public practiceCount: number;
 
-    public constructor(data: { date: string; averageMastery: number; practiceCount: number }) {
+    public constructor(data: { date: string; averageMastery: number | null; practiceCount: number }) {
         this.date = data.date;
-        this.averageMastery = Math.round(data.averageMastery * 10) / 10;
+        this.averageMastery = data.averageMastery === null ? null : Math.round(data.averageMastery * 10) / 10;
         this.practiceCount = data.practiceCount;
     }
 }
