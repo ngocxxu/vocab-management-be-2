@@ -1,5 +1,6 @@
 export * from './type.util';
 export * from './pagination.util';
+export * from './chunk.util';
 export * from './query-builder.util';
 export * from './redis-key.util';
 export * from './jwt.util';

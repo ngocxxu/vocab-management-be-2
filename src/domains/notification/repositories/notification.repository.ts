@@ -1,8 +1,15 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { chunk } from '@/shared/utils';
 import { Injectable } from '@nestjs/common';
-import { Notification, NotificationRecipient, Prisma } from '@prisma/client';
-import { NotificationInput } from '../dto';
+import { Notification, NotificationRecipient, NotificationType, Prisma, UserRole } from '@prisma/client';
+import { NotificationInput, TBroadcastHistoryRow } from '../dto';
+
+/** Recipient rows per insert. Keeps one statement well under the Postgres bind-parameter limit. */
+const BROADCAST_CHUNK_SIZE = 500;
+
+/** Prisma's interactive transactions default to 5 s, which a large audience can exceed mid-write. */
+const BROADCAST_TRANSACTION_TIMEOUT_MS = 60_000;
 
 const notificationInclude = {
     notificationRecipients: {
@@ -154,6 +161,61 @@ export class NotificationRepository extends BaseRepository {
             where: { id },
             include: notificationInclude,
         });
+    }
+
+    /** Every SYSTEM notification, newest first, with its recipient count. Recipient rows are counted, not loaded. */
+    public async findBroadcastHistoryRows(): Promise<TBroadcastHistoryRow[]> {
+        return this.prisma.notification.findMany({
+            where: { type: NotificationType.SYSTEM },
+            select: {
+                id: true,
+                data: true,
+                priority: true,
+                isActive: true,
+                expiresAt: true,
+                createdAt: true,
+                _count: { select: { notificationRecipients: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+
+    /** IDs of active users, optionally limited to one role. Inactive users never receive a broadcast. */
+    public async findActiveUserIds(role?: UserRole): Promise<string[]> {
+        const users = await this.prisma.user.findMany({
+            where: { isActive: true, ...(role !== undefined && { role }) },
+            select: { id: true },
+        });
+
+        return users.map((user) => user.id);
+    }
+
+    /** The given IDs that belong to active users. Unknown and inactive IDs are dropped. */
+    public async findActiveUserIdsIn(userIds: string[]): Promise<string[]> {
+        const users = await this.prisma.user.findMany({
+            where: { id: { in: userIds }, isActive: true },
+            select: { id: true },
+        });
+
+        return users.map((user) => user.id);
+    }
+
+    /** Writes the notification and its recipients in one transaction, recipients in chunks of BROADCAST_CHUNK_SIZE. */
+    public async createBroadcast(data: Prisma.NotificationUncheckedCreateInput, recipientUserIds: string[]): Promise<Notification> {
+        return this.inTransaction(
+            async (tx) => {
+                const notification = await tx.notification.create({ data });
+
+                for (const userIds of chunk(recipientUserIds, BROADCAST_CHUNK_SIZE)) {
+                    await tx.notificationRecipient.createMany({
+                        data: userIds.map((userId) => ({ notificationId: notification.id, userId })),
+                    });
+                }
+
+                return notification;
+            },
+            { timeout: BROADCAST_TRANSACTION_TIMEOUT_MS },
+        );
     }
 
     public async deleteManyExpired(): Promise<number> {
