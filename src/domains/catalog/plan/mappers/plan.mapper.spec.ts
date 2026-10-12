@@ -20,6 +20,18 @@ describe('PlanMapper limits', () => {
         expect(result.limits).toEqual({ vocabPerDay: 20, languageFolders: 2, subjects: 5, requestsPerMinute: 20 });
     });
 
+    it('creates an inactive plan when the create input says so', () => {
+        const result = mapper.toCreateInput({ ...createInput({ subjects: 5 }), isActive: false } as CreatePlanInput);
+
+        expect(result.isActive).toBe(false);
+    });
+
+    it('creates an active plan when the create input leaves isActive out', () => {
+        const result = mapper.toCreateInput(createInput({ subjects: 5 }));
+
+        expect(result.isActive).toBe(true);
+    });
+
     it('persists only the known limit keys on update', () => {
         const input = { limits: { subjects: -1, unknownKey: 'x' } } as unknown as UpdatePlanInput;
 

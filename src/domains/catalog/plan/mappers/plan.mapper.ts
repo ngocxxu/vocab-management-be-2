@@ -1,4 +1,5 @@
-import { Prisma, UserRole } from '@prisma/client';
+import { Plan, Prisma, UserRole } from '@prisma/client';
+import { AdminPlanDto } from '../dto/admin-plan.dto';
 import { CreatePlanInput } from '../dto/create-plan.input';
 import { PlanDto, PlanLimitsDto } from '../dto/plan.dto';
 import { UpdatePlanInput } from '../dto/update-plan.input';
@@ -24,6 +25,7 @@ export class PlanMapper {
             features: input.features ?? undefined,
             stripePriceId: input.stripePriceId ?? undefined,
             sortOrder: input.sortOrder ?? 0,
+            isActive: input.isActive ?? true,
         };
     }
 
@@ -48,6 +50,16 @@ export class PlanMapper {
             priceLabel: p.priceLabel,
             limits: p.limits as PlanLimitsDto,
             features: (p.features as string[]) ?? [],
+        };
+    }
+
+    public toAdminDto(p: Plan): AdminPlanDto {
+        return {
+            ...this.toDto(p),
+            id: p.id,
+            stripePriceId: p.stripePriceId,
+            sortOrder: p.sortOrder,
+            isActive: p.isActive,
         };
     }
 }

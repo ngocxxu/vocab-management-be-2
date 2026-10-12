@@ -10,6 +10,6 @@ import { PlanService } from './services/plan.service';
     imports: [forwardRef(() => LanguageFolderModule), forwardRef(() => SubjectModule)],
     controllers: [PlanController],
     providers: [PlanRepository, PlanQuotaService, PlanService],
-    exports: [PlanQuotaService],
+    exports: [PlanQuotaService, PlanService],
 })
 export class PlanModule {}
