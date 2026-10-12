@@ -1,9 +1,10 @@
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { LanguageDto, LanguageInput } from '../dto';
-import { LanguageNotFoundException } from '../exceptions';
+import { AdminLanguageDto, LanguageDto, LanguageInput } from '../dto';
+import { LanguageCodeImmutableException, LanguageInUseException, LanguageNotFoundException } from '../exceptions';
 import { LanguageMapper } from '../mappers';
 import { LanguageRepository } from '../repositories';
+import { countUsageForCode } from '../utils';
 
 @Injectable()
 export class LanguageService {
@@ -36,18 +37,46 @@ export class LanguageService {
         return this.languageMapper.toResponse(language);
     }
 
+    /** The code is fixed once created: vocabs and folders point at it. Only the name can change. */
     public async update(id: string, updateLanguageData: Partial<LanguageInput>): Promise<LanguageDto> {
-        await this.findOne(id);
+        const existing = await this.findOne(id);
 
-        const language = await this.languageRepository.update(id, this.languageMapper.buildUpdateInput(updateLanguageData));
+        if (updateLanguageData.code !== undefined && updateLanguageData.code !== existing.code) {
+            throw new LanguageCodeImmutableException(existing.code);
+        }
+
+        const language = await this.languageRepository.update(id, this.languageMapper.buildUpdateInput({ name: updateLanguageData.name }));
 
         return this.languageMapper.toResponse(language);
     }
 
     public async delete(id: string): Promise<LanguageDto> {
-        await this.findOne(id);
-        const language = await this.languageRepository.delete(id);
+        const existing = await this.findOne(id);
+        const result = await this.languageRepository.deleteIfUnused(id);
 
-        return this.languageMapper.toResponse(language);
+        if (result.status === 'missing') {
+            throw new LanguageNotFoundException(id);
+        }
+        if (result.status === 'in-use') {
+            throw new LanguageInUseException(id, existing.name, result.usage);
+        }
+
+        return this.languageMapper.toResponse(result.language);
+    }
+
+    /** Every language with how many vocabs and folders use it. Uncached, so the counts are current. */
+    public async findAllForAdmin(): Promise<AdminLanguageDto[]> {
+        const [languages, vocabPairs, folderPairs] = await Promise.all([
+            this.languageRepository.findAllUncached(),
+            this.languageRepository.findVocabLanguagePairs(),
+            this.languageRepository.findFolderLanguagePairs(),
+        ]);
+
+        return languages.map((language) =>
+            this.languageMapper.toAdminResponse(language, {
+                vocabCount: countUsageForCode(vocabPairs, language.code),
+                folderCount: countUsageForCode(folderPairs, language.code),
+            }),
+        );
     }
 }

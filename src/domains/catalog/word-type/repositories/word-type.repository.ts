@@ -5,6 +5,8 @@ import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
 import { Prisma, WordType } from '@prisma/client';
 
+export type TWordTypeWithUsage = WordType & { textTargetCount: number };
+
 @Injectable()
 export class WordTypeRepository extends BaseRepository {
     public constructor(
@@ -47,6 +49,16 @@ export class WordTypeRepository extends BaseRepository {
         }
 
         return wordType;
+    }
+
+    /** Every word type with how many text targets use it, bypassing the cache so the counts are current. */
+    public async findAllWithTextTargetCount(): Promise<TWordTypeWithUsage[]> {
+        const wordTypes = await this.prisma.wordType.findMany({
+            orderBy: { name: 'asc' },
+            include: { _count: { select: { textTargets: true } } },
+        });
+
+        return wordTypes.map(({ _count, ...wordType }) => ({ ...wordType, textTargetCount: _count.textTargets }));
     }
 
     public async findByName(name: string): Promise<WordType | null> {

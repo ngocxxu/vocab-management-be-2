@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { LanguageDto, LanguageInput } from '../dto';
+import { AdminLanguageDto, LanguageDto, LanguageInput } from '../dto';
+import { TLanguageUsage } from '../utils';
 
 type LanguageEntity = ConstructorParameters<typeof LanguageDto>[0];
 
@@ -21,5 +22,17 @@ export class LanguageMapper {
 
     public toResponseList(entities: LanguageEntity[]): LanguageDto[] {
         return entities.map((e) => this.toResponse(e));
+    }
+
+    public toAdminResponse(entity: LanguageEntity, usage: TLanguageUsage): AdminLanguageDto {
+        return {
+            id: entity.id,
+            code: entity.code,
+            name: entity.name,
+            vocabCount: usage.vocabCount,
+            folderCount: usage.folderCount,
+            createdAt: entity.createdAt,
+            updatedAt: entity.updatedAt,
+        };
     }
 }
