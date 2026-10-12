@@ -4,7 +4,7 @@
 
 Cross-language semantic search over vocab: a query embedded with Gemini is matched against vector embeddings of every vocab's `textSource` + `textTargets`, stored in Qdrant Cloud. Keeping those vectors in sync with Postgres is a background worker, not a request-time write — creating or editing a vocab never blocks on an embedding call.
 
-Terminology used below (orphan state/point, stale state/embedding, lease, candidate) is defined in [`CONTEXT.md`](../../CONTEXT.md).
+Terminology used below (orphan state/point, stale state/embedding, lease, candidate) is defined in [`GLOSSARY.md`](../../GLOSSARY.md).
 
 ## Why not embed on write
 
