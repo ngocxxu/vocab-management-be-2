@@ -30,7 +30,3 @@ Out of scope for this package: refresh issuance, rotation, and Supabase session 
 ## Scope
 
 Roughly **9 controllers** / **~48** `@CurrentUser()` call sites still assume Prisma **`User`** until migrated.
-
-## Example routes
-
-Set **`AUTH_EXAMPLE_ROUTES_ENABLED=true`** to register **`ExampleAuthDecoratorsController`** (`/auth/examples/*`).

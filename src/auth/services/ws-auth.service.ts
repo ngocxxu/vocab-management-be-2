@@ -22,15 +22,13 @@ export class WsAuthService {
         }
         const authUser = await this.authTokenService.resolveAuthUser(token, 'combined');
 
-        if (authUser.provider === 'supabase') {
-            const localUser = await this.userRepository.findBySupabaseUserId(authUser.id);
-            if (!localUser) {
-                throw new UnauthorizedException('User not registered');
-            }
-            return { ...authUser, id: localUser.id, roles: authUser.roles.length > 0 ? authUser.roles : [localUser.role] };
+        const localUser = authUser.provider === 'supabase' ? await this.userRepository.findBySupabaseUserId(authUser.id) : await this.userRepository.findById(authUser.id);
+        if (!localUser) {
+            throw new UnauthorizedException('User not registered');
         }
 
-        return authUser;
+        // The database role is the single source of truth; token role claims are never trusted.
+        return { ...authUser, id: localUser.id, roles: [localUser.role] };
     }
 
     private extractToken(client: Socket): string | null {

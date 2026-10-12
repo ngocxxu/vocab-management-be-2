@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsInt, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min, ValidateIf, ValidateNested } from 'class-validator';
+import { HasKnownPlanLimit, PlanLimitsInput } from './plan-limits.input';
 
 export class UpdatePlanInput {
     @ApiPropertyOptional({ example: 'Free' })
@@ -21,11 +22,15 @@ export class UpdatePlanInput {
     public priceLabel?: string;
 
     @ApiPropertyOptional({
-        description: 'Plan limits (e.g. vocabPerDay, languageFolders, subjects, requestsPerMinute)',
+        description: 'Plan limits; replaces the stored set. -1 means unlimited',
+        type: PlanLimitsInput,
     })
-    @IsOptional()
-    @IsObject()
-    public limits?: Record<string, unknown>;
+    // IsOptional would also skip null, letting {limits: null} reach the mapper; only undefined may be skipped.
+    @ValidateIf((_, value) => value !== undefined)
+    @HasKnownPlanLimit()
+    @ValidateNested()
+    @Type(() => PlanLimitsInput)
+    public limits?: PlanLimitsInput;
 
     @ApiPropertyOptional({ isArray: true, type: String })
     @IsOptional()

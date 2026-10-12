@@ -64,6 +64,19 @@ export class NotificationRepository extends BaseRepository {
         });
     }
 
+    /** Returns the notification only if `userId` is a recipient, with just that user's recipient row. */
+    public async findByIdForRecipient(id: string, userId: string): Promise<NotificationWithRecipients | null> {
+        return this.prisma.notification.findFirst({
+            where: { id, notificationRecipients: { some: { userId } } },
+            include: {
+                notificationRecipients: {
+                    where: { userId },
+                    include: { user: true },
+                },
+            },
+        });
+    }
+
     public async findById(id: string): Promise<Notification | null> {
         return this.prisma.notification.findUnique({ where: { id } });
     }

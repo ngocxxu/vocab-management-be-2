@@ -1,6 +1,6 @@
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, User, UserRole } from '@prisma/client';
 import { NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
 import { NotificationForbiddenException, NotificationNotFoundException } from '../exceptions';
 import { NotificationRepository } from '../repositories';
@@ -41,6 +41,35 @@ export class NotificationService {
         return new NotificationDto(notification);
     }
 
+    /** Admins see the full notification; everyone else gets the caller-scoped view. */
+    public async findOneFor(id: string, user: Pick<User, 'id' | 'role'>): Promise<NotificationDto> {
+        return user.role === UserRole.ADMIN ? this.findOne(id) : this.findOneForUser(id, user.id);
+    }
+
+    /** Caller-scoped lookup: non-recipients get 404 and only the caller's recipient row is returned. */
+    public async findOneForUser(id: string, userId: string): Promise<NotificationDto> {
+        const notification = await this.notificationRepository.findByIdForRecipient(id, userId);
+
+        if (!notification) {
+            throw new NotificationNotFoundException(id);
+        }
+
+        return new NotificationDto(notification);
+    }
+
+    /** Hides the notification for this user only; other recipients keep it. */
+    public async deleteForUser(id: string, userId: string): Promise<NotificationDto> {
+        const recipient = await this.notificationRepository.findRecipient(id, userId);
+
+        if (!recipient) {
+            throw new NotificationNotFoundException(id);
+        }
+
+        await this.notificationRepository.updateRecipient(id, userId, { isDeleted: true });
+
+        return this.findOneForUser(id, userId);
+    }
+
     public async create(createNotificationData: NotificationInput): Promise<NotificationDto> {
         const notification = await this.notificationRepository.createWithRecipients(createNotificationData);
 
@@ -79,15 +108,21 @@ export class NotificationService {
 
         await this.notificationRepository.updateRecipient(notificationId, userId, updateData);
 
-        return this.findOne(notificationId);
+        return this.findOneForUser(notificationId, userId);
     }
 
     public async markAsRead(notificationId: string, userId: string): Promise<NotificationDto> {
+        const recipient = await this.notificationRepository.findRecipient(notificationId, userId);
+
+        if (!recipient) {
+            throw new NotificationNotFoundException(notificationId);
+        }
+
         await this.notificationRepository.updateRecipient(notificationId, userId, {
             isRead: true,
         });
 
-        return this.findOne(notificationId);
+        return this.findOneForUser(notificationId, userId);
     }
 
     public async markAllAsRead(userId: string): Promise<number> {

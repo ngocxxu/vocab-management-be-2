@@ -17,7 +17,7 @@ export class NotificationController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Find all notifications (Admin only)' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: NotificationDto })
     public async find(): Promise<IResponse<NotificationDto[]>> {
@@ -81,9 +81,9 @@ export class NotificationController {
             },
         },
     })
-    public async markAllAsRead(@Param('id') userId: string): Promise<{ count: number }> {
-        const count = await this.notificationService.markAllAsRead(userId);
-        this.logger.info(`Marked ${count} notifications as read for user ${userId}`);
+    public async markAllAsRead(@CurrentUser() user: User): Promise<{ count: number }> {
+        const count = await this.notificationService.markAllAsRead(user.id);
+        this.logger.info(`Marked ${count} notifications as read for user ${user.id}`);
         return { count };
     }
 
@@ -93,13 +93,13 @@ export class NotificationController {
     @ApiOperation({ summary: 'Find notification by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
-    public async findOne(@Param('id') id: string): Promise<NotificationDto> {
-        return this.notificationService.findOne(id);
+    public async findOne(@Param('id') id: string, @CurrentUser() user: User): Promise<NotificationDto> {
+        return this.notificationService.findOneFor(id, user);
     }
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Create notification' })
     @ApiResponse({ status: HttpStatus.CREATED, type: NotificationDto })
     public async create(@Body() input: NotificationInput): Promise<NotificationDto> {
@@ -110,7 +110,7 @@ export class NotificationController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Update notification' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
@@ -130,9 +130,9 @@ export class NotificationController {
         status: HttpStatus.FORBIDDEN,
         description: 'User is not a recipient of this notification',
     })
-    public async updateStatus(@Param('id') notificationId: string, @Param('id') userId: string, @Body() updateData: UpdateNotificationStatusInput): Promise<NotificationDto> {
-        const notification = await this.notificationService.updateUserStatus(notificationId, userId, updateData);
-        this.logger.info(`Updated notification status for notification ${notificationId} and user ${userId}`);
+    public async updateStatus(@Param('id') notificationId: string, @CurrentUser() user: User, @Body() updateData: UpdateNotificationStatusInput): Promise<NotificationDto> {
+        const notification = await this.notificationService.updateUserStatus(notificationId, user.id, updateData);
+        this.logger.info(`Updated notification status for notification ${notificationId} and user ${user.id}`);
         return notification;
     }
 
@@ -141,13 +141,13 @@ export class NotificationController {
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
     @ApiOperation({ summary: 'Delete notification for current user' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
-    public async deleteMy(@Param('id') notificationId: string): Promise<NotificationDto> {
-        return this.notificationService.delete(notificationId);
+    public async deleteMy(@Param('id') notificationId: string, @CurrentUser() user: User): Promise<NotificationDto> {
+        return this.notificationService.deleteForUser(notificationId, user.id);
     }
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Delete notification (Admin only)' })
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
