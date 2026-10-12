@@ -622,7 +622,7 @@ erDiagram
 - **Reminder escalation**: ReminderSchedule has self-referential relationship for escalation chains
 - **Multi-language support**: Language entity supports source/target pairs for vocabulary
 - **Notification system**: Notification → NotificationRecipient (many-to-many with User)
-- **Plan-based access**: Plan entity maps to UserRole enum, defines quota limits
+- **Plan-based access**: Plan entity maps to UserRole enum and defines quota limits in `Plan.limits` (`vocabPerDay`, `languageFolders`, `subjects`; `-1` = unlimited). The live plan is read on every create, so a changed limit applies on the next create. ADMIN is never checked. A missing or inactive plan, or a missing or invalid key, falls back to defaults: GUEST 20 vocabs/day, 2 folders, 5 subjects; MEMBER unlimited
 
 ---
 
@@ -649,7 +649,7 @@ sequenceDiagram
     QuotaSvc->>Redis: GET vocab:quota:{userId}:{date}
     Redis-->>QuotaSvc: count
 
-    alt Quota exceeded (GUEST: 20/day)
+    alt Quota exceeded (Plan.limits.vocabPerDay, GUEST default 20/day)
         QuotaSvc-->>API: QuotaExceededException
         API-->>User: 403 Upgrade Required
     else Quota OK

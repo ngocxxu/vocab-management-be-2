@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsEnum, IsDefined, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { HasKnownPlanLimit, PlanLimitsInput } from './plan-limits.input';
 
 export class CreatePlanInput {
     @ApiProperty({ enum: UserRole })
@@ -26,11 +27,15 @@ export class CreatePlanInput {
     public priceLabel: string;
 
     @ApiProperty({
-        description: 'Plan limits (e.g. vocabPerDay, languageFolders, subjects, requestsPerMinute)',
-        example: { vocabPerDay: 20, languageFolders: 2, subjects: 3, requestsPerMinute: 20 },
+        description: 'Plan limits; -1 means unlimited',
+        type: PlanLimitsInput,
+        example: { vocabPerDay: 20, languageFolders: 2, subjects: 5, requestsPerMinute: 20 },
     })
-    @IsObject()
-    public limits: Record<string, unknown>;
+    @IsDefined()
+    @HasKnownPlanLimit()
+    @ValidateNested()
+    @Type(() => PlanLimitsInput)
+    public limits: PlanLimitsInput;
 
     @ApiPropertyOptional({ isArray: true, type: String, example: ['Feature 1'] })
     @IsOptional()
