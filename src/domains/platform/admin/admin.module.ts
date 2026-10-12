@@ -2,6 +2,9 @@ import { createBasicAuthMiddleware } from '@/shared';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { Module } from '@nestjs/common';
+import { AdminStatsController } from './controllers';
+import { AdminStatsRepository } from './repositories';
+import { AdminStatsService } from './services';
 
 @Module({
     imports: [
@@ -14,5 +17,7 @@ import { Module } from '@nestjs/common';
             }),
         }),
     ],
+    controllers: [AdminStatsController],
+    providers: [AdminStatsService, AdminStatsRepository],
 })
 export class AdminModule {}
