@@ -1,7 +1,6 @@
 // eslint-disable-next-line max-classes-per-file
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
-import { IsEmail, IsEnum, IsIn, IsJWT, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsJWT, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class SignUpInput {
     @ApiProperty({ description: 'User email address', example: 'user@gmail.com' })
@@ -39,16 +38,6 @@ export class SignUpInput {
     @IsOptional()
     @IsString()
     public readonly avatar?: string;
-
-    @ApiPropertyOptional({
-        description: 'User role',
-        enum: ['ADMIN', 'MEMBER', 'GUEST'],
-        example: 'GUEST',
-        default: 'GUEST',
-    })
-    @IsOptional()
-    @IsEnum(UserRole)
-    public readonly role?: UserRole;
 }
 
 export class SignInInput {

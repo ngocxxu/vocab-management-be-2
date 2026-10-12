@@ -5,7 +5,8 @@ import { SignInInput, OAuthInput, RefreshTokenInput, ResetPasswordInput, VerifyO
 
 export class SignUpPipe extends JoiValidationPipe {
     public buildSchema(): Joi.Schema {
-        return Joi.object<SignUpInput>({
+        // `role` is not part of SignUpInput; it is listed here only so it can be stripped.
+        return Joi.object<SignUpInput & { role?: unknown }>({
             email: Joi.string().email().required().messages({
                 'string.empty': 'Email cannot be empty',
                 'string.email': 'Please provide a valid email address',
@@ -38,9 +39,8 @@ export class SignUpPipe extends JoiValidationPipe {
                 'string.uri': 'Avatar must be a valid URL',
             }),
 
-            role: Joi.string().valid('ADMIN', 'MEMBER', 'GUEST').optional().messages({
-                'any.only': 'Role must be one of: ADMIN, MEMBER, GUEST',
-            }),
+            // Old clients still send `role`. Accept it and drop it: the server always assigns GUEST.
+            role: Joi.any().strip(),
         });
     }
 }

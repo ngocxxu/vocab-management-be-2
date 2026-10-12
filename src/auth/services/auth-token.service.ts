@@ -35,11 +35,12 @@ function mapJwtPayload(payload: JwtPayload): AuthUser {
 }
 
 function mapSupabaseAuthUser(user: SupabaseUser): AuthUser {
-    const meta = { ...user.user_metadata, ...user.app_metadata } as Record<string, unknown>;
+    // user_metadata is writable by the signed-in user, so Supabase claims never grant roles.
+    // Empty roles make RolesGuard and WsAuthService fall back to the database role.
     return {
         id: user.id,
         email: user.email ?? null,
-        roles: normalizeRoles(meta.roles),
+        roles: [],
         provider: 'supabase',
     };
 }

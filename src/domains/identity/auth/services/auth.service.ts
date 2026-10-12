@@ -34,7 +34,7 @@ export class AuthService {
     }
 
     public async signUp(input: SignUpInput): Promise<SignUpServiceResponse> {
-        const { email, password, firstName, lastName, phone, avatar, role } = input;
+        const { email, password, firstName, lastName, phone, avatar } = input;
 
         const existingUser = await this.userRepository.findByEmail(email);
         if (existingUser) {
@@ -52,7 +52,7 @@ export class AuthService {
             options: {
                 emailRedirectTo: `${process.env.APP_URL}/auth/callback`,
                 data: {
-                    role: role ?? UserRole.GUEST,
+                    role: UserRole.GUEST,
                     first_name: firstName && firstName.trim() !== '' ? firstName.trim() : '',
                     last_name: lastName && lastName.trim() !== '' ? lastName.trim() : '',
                 },
@@ -76,7 +76,7 @@ export class AuthService {
                 lastName: lastName && lastName.trim() !== '' ? lastName : '',
                 phone: phone && phone.trim() !== '' ? phone : supabaseUser.phone || null,
                 avatar: avatar && avatar.trim() !== '' ? avatar : null,
-                role: role ?? UserRole.GUEST,
+                role: UserRole.GUEST,
                 isActive: true,
                 emailConfirmed: false,
             });
@@ -326,7 +326,7 @@ export class AuthService {
                     lastName: extractedUserData.lastName,
                     phone: extractedUserData.phone,
                     avatar: extractedUserData.avatar,
-                    role: extractedUserData.role,
+                    role: UserRole.GUEST,
                     isActive: true,
                     emailConfirmed: true,
                 });
@@ -385,7 +385,6 @@ export class AuthService {
         lastName: string;
         phone: string | null;
         avatar: string | null;
-        role: UserRole;
     } {
         const metadata = supabaseUser.user_metadata || supabaseUser.raw_user_meta_data || {};
         const email = supabaseUser.email || (metadata.email as string) || '';
@@ -407,17 +406,12 @@ export class AuthService {
 
         const phone = supabaseUser.phone || (metadata.phone as string) || null;
 
-        const roleFromMetadata = metadata.role as string;
-        const validRoles = Object.values(UserRole);
-        const role = roleFromMetadata && validRoles.includes(roleFromMetadata as UserRole) ? (roleFromMetadata as UserRole) : UserRole.GUEST;
-
         return {
             email,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: phone ? phone.trim() : null,
             avatar: avatar ? avatar.trim() : null,
-            role,
         };
     }
 
