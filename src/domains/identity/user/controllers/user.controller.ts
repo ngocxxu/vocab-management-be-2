@@ -20,7 +20,7 @@ export class UserController {
 
     @Get()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Find users' })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: UserDto })
     public async find(): Promise<IResponse<UserDto[]>> {
@@ -29,7 +29,7 @@ export class UserController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Find user by ID' })
     @ApiResponse({ status: HttpStatus.OK, type: UserDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })

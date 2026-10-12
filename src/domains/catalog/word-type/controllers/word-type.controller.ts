@@ -35,7 +35,7 @@ export class WordTypeController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Create word type' })
     @ApiResponse({ status: HttpStatus.CREATED, type: WordTypeDto })
     public async create(@Body() input: WordTypeInput): Promise<WordTypeDto> {
@@ -46,7 +46,7 @@ export class WordTypeController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Update word type' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })
@@ -58,7 +58,7 @@ export class WordTypeController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Delete word type' })
     @ApiResponse({ status: HttpStatus.OK, type: WordTypeDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Word type not found' })

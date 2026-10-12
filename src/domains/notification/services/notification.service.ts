@@ -41,6 +41,30 @@ export class NotificationService {
         return new NotificationDto(notification);
     }
 
+    /** Caller-scoped lookup: non-recipients get 404 and only the caller's recipient row is returned. */
+    public async findOneForUser(id: string, userId: string): Promise<NotificationDto> {
+        const notification = await this.notificationRepository.findByIdForRecipient(id, userId);
+
+        if (!notification) {
+            throw new NotificationNotFoundException(id);
+        }
+
+        return new NotificationDto(notification);
+    }
+
+    /** Hides the notification for this user only; other recipients keep it. */
+    public async deleteForUser(id: string, userId: string): Promise<NotificationDto> {
+        const recipient = await this.notificationRepository.findRecipient(id, userId);
+
+        if (!recipient) {
+            throw new NotificationNotFoundException(id);
+        }
+
+        await this.notificationRepository.updateRecipient(id, userId, { isDeleted: true });
+
+        return this.findOneForUser(id, userId);
+    }
+
     public async create(createNotificationData: NotificationInput): Promise<NotificationDto> {
         const notification = await this.notificationRepository.createWithRecipients(createNotificationData);
 
@@ -79,7 +103,7 @@ export class NotificationService {
 
         await this.notificationRepository.updateRecipient(notificationId, userId, updateData);
 
-        return this.findOne(notificationId);
+        return this.findOneForUser(notificationId, userId);
     }
 
     public async markAsRead(notificationId: string, userId: string): Promise<NotificationDto> {
@@ -87,7 +111,7 @@ export class NotificationService {
             isRead: true,
         });
 
-        return this.findOne(notificationId);
+        return this.findOneForUser(notificationId, userId);
     }
 
     public async markAllAsRead(userId: string): Promise<number> {

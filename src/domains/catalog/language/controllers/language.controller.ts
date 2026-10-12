@@ -35,7 +35,7 @@ export class LanguageController {
 
     @Post()
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Create language' })
     @ApiResponse({ status: HttpStatus.CREATED, type: LanguageDto })
     public async create(@Body() input: LanguageInput): Promise<LanguageDto> {
@@ -46,7 +46,7 @@ export class LanguageController {
 
     @Put(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Update language' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language not found' })
@@ -58,7 +58,7 @@ export class LanguageController {
 
     @Delete(':id')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Delete language' })
     @ApiResponse({ status: HttpStatus.OK, type: LanguageDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Language not found' })
