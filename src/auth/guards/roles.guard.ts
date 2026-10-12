@@ -22,8 +22,9 @@ export class RolesGuard implements CanActivate {
             throw new UnauthorizedException('User not authenticated');
         }
 
-        const effectiveRoles = authUser.roles.length > 0 ? authUser.roles : request.currentUser?.role ? [request.currentUser.role] : [];
-        const hasRole = requiredRoles.some((role) => effectiveRoles.includes(role));
+        // The database role is the single source of truth; token role claims are never trusted.
+        const databaseRole = request.currentUser?.role;
+        const hasRole = databaseRole !== undefined && requiredRoles.includes(databaseRole);
         if (!hasRole) {
             throw new ForbiddenException(`Access denied. Required one of roles: ${requiredRoles.join(', ')}`);
         }

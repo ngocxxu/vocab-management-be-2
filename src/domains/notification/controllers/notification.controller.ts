@@ -94,10 +94,7 @@ export class NotificationController {
     @ApiResponse({ status: HttpStatus.OK, type: NotificationDto })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
     public async findOne(@Param('id') id: string, @CurrentUser() user: User): Promise<NotificationDto> {
-        if (user.role === UserRole.ADMIN) {
-            return this.notificationService.findOne(id);
-        }
-        return this.notificationService.findOneForUser(id, user.id);
+        return this.notificationService.findOneFor(id, user);
     }
 
     @Post()

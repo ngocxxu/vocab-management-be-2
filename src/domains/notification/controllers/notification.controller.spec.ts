@@ -12,8 +12,7 @@ describe('NotificationController caller scoping', () => {
             markAllAsRead: jest.fn().mockResolvedValue(2),
             updateUserStatus: jest.fn().mockResolvedValue({}),
             deleteForUser: jest.fn().mockResolvedValue({}),
-            findOne: jest.fn().mockResolvedValue({}),
-            findOneForUser: jest.fn().mockResolvedValue({}),
+            findOneFor: jest.fn().mockResolvedValue({}),
         };
         const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
         const controller = new NotificationController(logger as unknown as LoggerService, notificationService as unknown as NotificationService);
@@ -44,21 +43,13 @@ describe('NotificationController caller scoping', () => {
         expect(notificationService.deleteForUser).toHaveBeenCalledWith('n1', 'u1');
     });
 
-    it('findOne scopes a member to their own recipient entry', async () => {
+    it('findOne delegates visibility to the service with the calling user', async () => {
         const { controller, notificationService } = createController();
 
         await controller.findOne('n1', member);
-
-        expect(notificationService.findOneForUser).toHaveBeenCalledWith('n1', 'u1');
-        expect(notificationService.findOne).not.toHaveBeenCalled();
-    });
-
-    it('findOne returns the full notification for an admin', async () => {
-        const { controller, notificationService } = createController();
-
         await controller.findOne('n1', admin);
 
-        expect(notificationService.findOne).toHaveBeenCalledWith('n1');
-        expect(notificationService.findOneForUser).not.toHaveBeenCalled();
+        expect(notificationService.findOneFor).toHaveBeenNthCalledWith(1, 'n1', member);
+        expect(notificationService.findOneFor).toHaveBeenNthCalledWith(2, 'n1', admin);
     });
 });

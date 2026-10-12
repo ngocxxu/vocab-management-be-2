@@ -31,12 +31,13 @@ describe('AuthTokenService', () => {
         expect(authUser.roles).toEqual([]);
     });
 
-    it('keeps role claims from the application JWT', async () => {
+    it('ignores role claims in the application JWT', async () => {
         const service = createService(undefined);
         const token = jwt.sign({ sub: 'user-1', roles: ['ADMIN'] }, JWT_SECRET, { algorithm: 'HS256', issuer: JWT_ISSUER });
 
         const authUser = await service.resolveAuthUser(token, 'jwt');
 
-        expect(authUser.roles).toEqual(['ADMIN']);
+        expect(authUser.provider).toBe('jwt');
+        expect(authUser.roles).toEqual([]);
     });
 });

@@ -16,8 +16,7 @@ import { ApplicationModule } from './app/application.module';
 import { HttpExceptionFilter, PrismaExceptionFilter } from './common/filters';
 import { buildHttpErrorBody } from './common/http/error-response.util';
 import { WinstonLogger } from './common/logger/winston.logger';
-import { SharedModule, LogInterceptor } from './shared';
-import { createBasicAuthMiddleware } from './shared/utils/basic-auth.middleware';
+import { SharedModule, LogInterceptor, createBasicAuthMiddleware } from './shared';
 
 const API_DEFAULT_PORT = 3002;
 const API_DEFAULT_PREFIX = '/api/v1/';

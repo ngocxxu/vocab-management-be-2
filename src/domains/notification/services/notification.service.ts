@@ -1,6 +1,6 @@
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, User, UserRole } from '@prisma/client';
 import { NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
 import { NotificationForbiddenException, NotificationNotFoundException } from '../exceptions';
 import { NotificationRepository } from '../repositories';
@@ -39,6 +39,11 @@ export class NotificationService {
         }
 
         return new NotificationDto(notification);
+    }
+
+    /** Admins see the full notification; everyone else gets the caller-scoped view. */
+    public async findOneFor(id: string, user: Pick<User, 'id' | 'role'>): Promise<NotificationDto> {
+        return user.role === UserRole.ADMIN ? this.findOne(id) : this.findOneForUser(id, user.id);
     }
 
     /** Caller-scoped lookup: non-recipients get 404 and only the caller's recipient row is returned. */
@@ -107,6 +112,12 @@ export class NotificationService {
     }
 
     public async markAsRead(notificationId: string, userId: string): Promise<NotificationDto> {
+        const recipient = await this.notificationRepository.findRecipient(notificationId, userId);
+
+        if (!recipient) {
+            throw new NotificationNotFoundException(notificationId);
+        }
+
         await this.notificationRepository.updateRecipient(notificationId, userId, {
             isRead: true,
         });

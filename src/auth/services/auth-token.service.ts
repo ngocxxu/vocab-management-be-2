@@ -8,16 +8,6 @@ import { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
 import { JsonWebTokenError, JwtPayload, NotBeforeError, TokenExpiredError } from 'jsonwebtoken';
 
-function normalizeRoles(value: unknown): string[] {
-    if (Array.isArray(value)) {
-        return value.filter((r): r is string => typeof r === 'string');
-    }
-    if (typeof value === 'string' && value.length > 0) {
-        return [value];
-    }
-    return [];
-}
-
 function mapJwtPayload(payload: JwtPayload): AuthUser {
     const sub = payload.sub;
     if (!sub || typeof sub !== 'string') {
@@ -26,10 +16,11 @@ function mapJwtPayload(payload: JwtPayload): AuthUser {
     const record = payload as Record<string, unknown>;
     const emailRaw = record.email;
     const email = typeof emailRaw === 'string' ? emailRaw : null;
+    // The database role is the single source of truth, so a token role claim never grants access.
     return {
         id: sub,
         email,
-        roles: normalizeRoles(record.roles),
+        roles: [],
         provider: 'jwt',
     };
 }

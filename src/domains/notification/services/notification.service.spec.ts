@@ -1,3 +1,4 @@
+import { UserRole } from '@prisma/client';
 import { NotificationNotFoundException } from '../exceptions';
 import { NotificationRepository } from '../repositories';
 import { NotificationService } from './notification.service';
@@ -6,6 +7,8 @@ import { NotificationService } from './notification.service';
 type TScopedNotificationService = {
     deleteForUser: (id: string, userId: string) => Promise<unknown>;
     findOneForUser: (id: string, userId: string) => Promise<{ recipients?: Array<{ userId: string }> }>;
+    findOneFor: (id: string, user: { id: string; role: UserRole }) => Promise<unknown>;
+    markAsRead: (id: string, userId: string) => Promise<unknown>;
 };
 
 describe('NotificationService caller scoping', () => {
@@ -37,6 +40,7 @@ describe('NotificationService caller scoping', () => {
     const createService = (repo: Record<string, jest.Mock>) => {
         const notificationRepository = {
             findByIdForRecipient: jest.fn(),
+            findByIdWithRecipients: jest.fn(),
             findRecipient: jest.fn(),
             updateRecipient: jest.fn().mockResolvedValue({}),
             deleteById: jest.fn(),
@@ -85,5 +89,47 @@ describe('NotificationService caller scoping', () => {
 
         expect(result.recipients).toHaveLength(1);
         expect(result.recipients?.[0]?.userId).toBe('u1');
+    });
+
+    it('markAsRead rejects a non-recipient without touching any recipient row', async () => {
+        const { service, notificationRepository } = createService({
+            findRecipient: jest.fn().mockResolvedValue(null),
+        });
+
+        await expect(service.markAsRead('n1', 'u2')).rejects.toBeInstanceOf(NotificationNotFoundException);
+        expect(notificationRepository.updateRecipient).not.toHaveBeenCalled();
+    });
+
+    it('markAsRead marks only the caller recipient row as read', async () => {
+        const { service, notificationRepository } = createService({
+            findRecipient: jest.fn().mockResolvedValue({ id: 'r1' }),
+            findByIdForRecipient: jest.fn().mockResolvedValue(notification('u1')),
+        });
+
+        await service.markAsRead('n1', 'u1');
+
+        expect(notificationRepository.updateRecipient).toHaveBeenCalledWith('n1', 'u1', { isRead: true });
+    });
+
+    it('findOneFor returns the full notification for an admin', async () => {
+        const { service, notificationRepository } = createService({
+            findByIdWithRecipients: jest.fn().mockResolvedValue(notification('u1')),
+        });
+
+        await service.findOneFor('n1', { id: 'a1', role: UserRole.ADMIN });
+
+        expect(notificationRepository.findByIdWithRecipients).toHaveBeenCalledWith('n1');
+        expect(notificationRepository.findByIdForRecipient).not.toHaveBeenCalled();
+    });
+
+    it('findOneFor scopes a non-admin to their own recipient entry', async () => {
+        const { service, notificationRepository } = createService({
+            findByIdForRecipient: jest.fn().mockResolvedValue(notification('u1')),
+        });
+
+        await service.findOneFor('n1', { id: 'u1', role: UserRole.MEMBER });
+
+        expect(notificationRepository.findByIdForRecipient).toHaveBeenCalledWith('n1', 'u1');
+        expect(notificationRepository.findByIdWithRecipients).not.toHaveBeenCalled();
     });
 });
