@@ -13,6 +13,10 @@ export const validationSchema = Joi.object({
     SWAGGER_USER: Joi.string().required(),
     SWAGGER_PASSWORD: Joi.string().required(),
 
+    // Optional: unset means the queue dashboard answers 404 instead of opening.
+    BULL_BOARD_USER: Joi.string().allow(''),
+    BULL_BOARD_PASSWORD: Joi.string().allow(''),
+
     HEALTH_TOKEN: Joi.string().allow(''),
 
     // The only capture switch. The DSN says WHERE events go, never WHETHER.

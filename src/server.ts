@@ -17,6 +17,7 @@ import { HttpExceptionFilter, PrismaExceptionFilter } from './common/filters';
 import { buildHttpErrorBody } from './common/http/error-response.util';
 import { WinstonLogger } from './common/logger/winston.logger';
 import { SharedModule, LogInterceptor } from './shared';
+import { createBasicAuthMiddleware } from './shared/utils/basic-auth.middleware';
 
 const API_DEFAULT_PORT = 3002;
 const API_DEFAULT_PREFIX = '/api/v1/';
@@ -58,11 +59,22 @@ function getCorsOptions() {
     };
 }
 
-function createSwagger(app: INestApplication) {
+/**
+ * Serves the API docs. A non-root prefix gets basic auth on the UI and its JSON/YAML
+ * specs. A root prefix stays unprotected: guarding '/' would lock the whole API.
+ */
+function createSwagger(app: INestApplication, winstonLogger: WinstonLogger) {
+    const prefix = process.env.SWAGGER_PREFIX || '/';
     const options = new DocumentBuilder().setTitle(SWAGGER_TITLE).setDescription(SWAGGER_DESCRIPTION).addBearerAuth().build();
 
+    if (prefix === '/') {
+        winstonLogger.logWarn('Swagger is served at the root path without basic auth; set SWAGGER_PREFIX to a non-root path to protect it');
+    } else {
+        app.use([prefix, `${prefix}-json`, `${prefix}-yaml`], createBasicAuthMiddleware(process.env.SWAGGER_USER, process.env.SWAGGER_PASSWORD));
+    }
+
     const document = SwaggerModule.createDocument(app, options);
-    SwaggerModule.setup(process.env.SWAGGER_PREFIX || '/', app, document);
+    SwaggerModule.setup(prefix, app, document);
 }
 
 /**
@@ -195,8 +207,8 @@ async function bootstrap(): Promise<void> {
 
     app.setGlobalPrefix(process.env.API_PREFIX || API_DEFAULT_PREFIX);
 
-    if (!process.env.SWAGGER_ENABLE || process.env.SWAGGER_ENABLE === '1') {
-        createSwagger(app);
+    if (process.env.SWAGGER_ENABLE === '1') {
+        createSwagger(app, winstonLogger);
     }
 
     const logInterceptor = app.select(SharedModule).get(LogInterceptor);
