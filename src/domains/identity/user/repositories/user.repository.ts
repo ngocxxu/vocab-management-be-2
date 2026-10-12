@@ -1,7 +1,44 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
+import { getOrderBy } from '@/shared/utils/pagination.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, User, UserRole } from '@prisma/client';
+
+export type UserTransaction = Prisma.TransactionClient;
+
+/** Filter, sort and page window for `findPage`. Search matches email, first name or last name. */
+export type UserPageFilter = {
+    search?: string;
+    role?: UserRole;
+    isActive?: boolean;
+    sortBy: 'createdAt' | 'email';
+    sortOrder: 'asc' | 'desc';
+    skip: number;
+    take: number;
+};
+
+const MAX_SERIALIZABLE_ATTEMPTS = 3;
+const WRITE_CONFLICT_CODE = 'P2034';
+
+const isWriteConflict = (error: unknown): boolean => error instanceof Prisma.PrismaClientKnownRequestError && error.code === WRITE_CONFLICT_CODE;
+
+function buildWhere(filter: UserPageFilter): Prisma.UserWhereInput {
+    const search: Prisma.UserWhereInput = filter.search
+        ? {
+              OR: [
+                  { email: { contains: filter.search, mode: 'insensitive' } },
+                  { firstName: { contains: filter.search, mode: 'insensitive' } },
+                  { lastName: { contains: filter.search, mode: 'insensitive' } },
+              ],
+          }
+        : {};
+
+    return {
+        ...search,
+        ...(filter.role !== undefined && { role: filter.role }),
+        ...(filter.isActive !== undefined && { isActive: filter.isActive }),
+    };
+}
 
 @Injectable()
 export class UserRepository extends BaseRepository {
@@ -11,6 +48,37 @@ export class UserRepository extends BaseRepository {
 
     public async findAll(): Promise<User[]> {
         return this.prisma.user.findMany();
+    }
+
+    /** One page of users plus the total for the same filter, read in parallel. */
+    public async findPage(filter: UserPageFilter): Promise<[User[], number]> {
+        const where = buildWhere(filter);
+        const orderBy = getOrderBy(filter.sortBy, filter.sortOrder, 'createdAt') as Prisma.UserOrderByWithRelationInput;
+
+        return Promise.all([this.prisma.user.findMany({ where, orderBy, skip: filter.skip, take: filter.take }), this.prisma.user.count({ where })]);
+    }
+
+    /** Active admins other than `excludeId`. Used to keep at least one active admin. */
+    public async countActiveAdmins(excludeId: string, tx?: UserTransaction): Promise<number> {
+        return this.client(tx).user.count({
+            where: { role: UserRole.ADMIN, isActive: true, id: { not: excludeId } },
+        });
+    }
+
+    /**
+     * Runs `fn` as a serializable transaction. A write conflict (P2034) runs it again,
+     * up to three attempts in total. Any other error, or the last conflict, is rethrown.
+     */
+    public async runSerializableWithRetry<T>(fn: (tx: UserTransaction) => Promise<T>): Promise<T> {
+        for (let attempt = 1; ; attempt += 1) {
+            try {
+                return await this.inTransaction(fn, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+            } catch (error) {
+                if (!isWriteConflict(error) || attempt >= MAX_SERIALIZABLE_ATTEMPTS) {
+                    throw error;
+                }
+            }
+        }
     }
 
     public async findById(id: string): Promise<User | null> {
@@ -37,15 +105,15 @@ export class UserRepository extends BaseRepository {
         });
     }
 
-    public async update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
-        return this.prisma.user.update({
+    public async update(id: string, data: Prisma.UserUpdateInput, tx?: UserTransaction): Promise<User> {
+        return this.client(tx).user.update({
             where: { id },
             data,
         });
     }
 
-    public async delete(id: string): Promise<User> {
-        return this.prisma.user.delete({
+    public async delete(id: string, tx?: UserTransaction): Promise<User> {
+        return this.client(tx).user.delete({
             where: { id },
         });
     }

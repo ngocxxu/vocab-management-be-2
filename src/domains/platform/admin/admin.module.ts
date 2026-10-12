@@ -1,13 +1,15 @@
+import { UserModule } from '@/domains/identity/user';
 import { createBasicAuthMiddleware } from '@/shared';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { Module } from '@nestjs/common';
-import { AdminStatsController } from './controllers';
+import { AdminStatsController, AdminUsersController } from './controllers';
 import { AdminStatsRepository } from './repositories';
-import { AdminStatsService } from './services';
+import { AdminStatsService, AdminUsersService } from './services';
 
 @Module({
     imports: [
+        UserModule,
         // Async so the credentials are read after ConfigModule has loaded .env, not at import time.
         BullBoardModule.forRootAsync({
             useFactory: () => ({
@@ -17,7 +19,7 @@ import { AdminStatsService } from './services';
             }),
         }),
     ],
-    controllers: [AdminStatsController],
-    providers: [AdminStatsService, AdminStatsRepository],
+    controllers: [AdminStatsController, AdminUsersController],
+    providers: [AdminStatsService, AdminStatsRepository, AdminUsersService],
 })
 export class AdminModule {}
