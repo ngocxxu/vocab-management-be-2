@@ -3,7 +3,7 @@ import { CurrentUser, Roles } from '@/shared/decorators';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User, UserRole } from '@prisma/client';
-import { NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
+import { BroadcastHistoryDto, BroadcastNotificationInput, NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
 import { NotificationService } from '../services';
 
 @Controller('notifications')
@@ -87,6 +87,15 @@ export class NotificationController {
         return { count };
     }
 
+    @Get('broadcasts')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN])
+    @ApiOperation({ summary: 'List broadcasts with their recipient counts (Admin only)' })
+    @ApiResponse({ status: HttpStatus.OK, isArray: true, type: BroadcastHistoryDto })
+    public async findBroadcastHistory(): Promise<IResponse<BroadcastHistoryDto[]>> {
+        return this.notificationService.findBroadcastHistory();
+    }
+
     @Get(':id')
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
@@ -106,6 +115,24 @@ export class NotificationController {
         const notification = await this.notificationService.create(input);
         this.logger.info(`Created new notification with ID ${notification.id}`);
         return notification;
+    }
+
+    @Post('broadcast')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN])
+    @ApiOperation({ summary: 'Send a broadcast to all active users, an active role, or selected users (Admin only)' })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        schema: {
+            type: 'object',
+            properties: { count: { type: 'number', description: 'Number of users the broadcast reached' } },
+        },
+    })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'No active users match the target, or the expiry is in the past' })
+    public async broadcast(@Body() input: BroadcastNotificationInput): Promise<{ count: number }> {
+        const result = await this.notificationService.broadcast(input);
+        this.logger.info(`Broadcast sent to ${result.count} recipients`);
+        return result;
     }
 
     @Put(':id')

@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsDefined, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsDefined, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { HasKnownPlanLimit, PlanLimitsInput } from './plan-limits.input';
 
 export class CreatePlanInput {
@@ -54,4 +54,10 @@ export class CreatePlanInput {
     @IsInt()
     @Min(0)
     public sortOrder?: number;
+
+    @ApiPropertyOptional({ default: true, description: 'False creates the plan hidden from the public list' })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
+    public isActive?: boolean;
 }

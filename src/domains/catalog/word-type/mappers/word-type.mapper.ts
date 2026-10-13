@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { WordTypeDto, WordTypeInput } from '../dto';
+import { AdminWordTypeDto, WordTypeDto, WordTypeInput } from '../dto';
 
 type WordTypeEntity = ConstructorParameters<typeof WordTypeDto>[0];
 
@@ -21,5 +21,16 @@ export class WordTypeMapper {
 
     public toResponseList(entities: WordTypeEntity[]): WordTypeDto[] {
         return entities.map((e) => this.toResponse(e));
+    }
+
+    public toAdminResponse(entity: WordTypeEntity & { textTargetCount: number }): AdminWordTypeDto {
+        return {
+            id: entity.id,
+            name: entity.name,
+            description: entity.description,
+            textTargetCount: entity.textTargetCount,
+            createdAt: entity.createdAt,
+            updatedAt: entity.updatedAt,
+        };
     }
 }

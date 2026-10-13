@@ -1,6 +1,6 @@
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { WordTypeDto, WordTypeInput } from '../dto';
+import { AdminWordTypeDto, WordTypeDto, WordTypeInput } from '../dto';
 import { WordTypeNotFoundException } from '../exceptions';
 import { WordTypeMapper } from '../mappers';
 import { WordTypeRepository } from '../repositories';
@@ -49,5 +49,12 @@ export class WordTypeService {
         const wordType = await this.wordTypeRepository.delete(id);
 
         return this.wordTypeMapper.toResponse(wordType);
+    }
+
+    /** Every word type with how many text targets use it. Deleting one only clears the tag on those text targets. */
+    public async findAllForAdmin(): Promise<AdminWordTypeDto[]> {
+        const wordTypes = await this.wordTypeRepository.findAllWithTextTargetCount();
+
+        return wordTypes.map((wordType) => this.wordTypeMapper.toAdminResponse(wordType));
     }
 }

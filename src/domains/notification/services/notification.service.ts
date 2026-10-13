@@ -1,8 +1,16 @@
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, User, UserRole } from '@prisma/client';
-import { NotificationDto, NotificationInput, UpdateNotificationInput, UpdateNotificationStatusInput } from '../dto';
-import { NotificationForbiddenException, NotificationNotFoundException } from '../exceptions';
+import { NotificationAction, NotificationType, Prisma, User, UserRole } from '@prisma/client';
+import {
+    BroadcastHistoryDto,
+    BroadcastNotificationInput,
+    BroadcastTarget,
+    NotificationDto,
+    NotificationInput,
+    UpdateNotificationInput,
+    UpdateNotificationStatusInput,
+} from '../dto';
+import { NotificationExpiryInPastException, NotificationForbiddenException, NotificationNoRecipientsException, NotificationNotFoundException } from '../exceptions';
 import { NotificationRepository } from '../repositories';
 
 @Injectable()
@@ -68,6 +76,42 @@ export class NotificationService {
         await this.notificationRepository.updateRecipient(id, userId, { isDeleted: true });
 
         return this.findOneForUser(id, userId);
+    }
+
+    /** Every system broadcast with its recipient count. The recipient list itself is never loaded. */
+    public async findBroadcastHistory(): Promise<IResponse<BroadcastHistoryDto[]>> {
+        const broadcasts = await this.notificationRepository.findBroadcastHistoryRows();
+
+        return {
+            items: broadcasts.map((broadcast) => new BroadcastHistoryDto(broadcast)),
+            statusCode: HttpStatus.OK,
+        };
+    }
+
+    /** Sends one system notification to the resolved recipients. Returns the recipient count only. */
+    public async broadcast(input: BroadcastNotificationInput): Promise<{ count: number }> {
+        if (input.expiresAt.getTime() <= Date.now()) {
+            throw new NotificationExpiryInPastException();
+        }
+
+        const recipientUserIds = await this.resolveBroadcastRecipients(input);
+        if (recipientUserIds.length === 0) {
+            throw new NotificationNoRecipientsException();
+        }
+
+        await this.notificationRepository.createBroadcast(
+            {
+                type: NotificationType.SYSTEM,
+                action: NotificationAction.MULTI_CREATE,
+                priority: input.priority,
+                data: { message: input.message },
+                isActive: true,
+                expiresAt: input.expiresAt,
+            },
+            recipientUserIds,
+        );
+
+        return { count: recipientUserIds.length };
     }
 
     public async create(createNotificationData: NotificationInput): Promise<NotificationDto> {
@@ -142,5 +186,13 @@ export class NotificationService {
 
     public async cleanupExpired(): Promise<number> {
         return this.notificationRepository.deleteManyExpired();
+    }
+
+    private async resolveBroadcastRecipients(input: BroadcastNotificationInput): Promise<string[]> {
+        if (input.target === BroadcastTarget.USERS) {
+            return this.notificationRepository.findActiveUserIdsIn([...new Set(input.userIds ?? [])]);
+        }
+
+        return this.notificationRepository.findActiveUserIds(input.target === BroadcastTarget.ROLE ? input.role : undefined);
     }
 }

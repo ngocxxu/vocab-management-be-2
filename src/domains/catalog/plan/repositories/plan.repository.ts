@@ -19,6 +19,11 @@ export class PlanRepository extends BaseRepository {
         });
     }
 
+    /** Every plan row, inactive included. Only the admin list reads this; the public list uses findManyActive. */
+    public async findAll(): Promise<Plan[]> {
+        return this.prisma.plan.findMany({ orderBy: { sortOrder: 'asc' } });
+    }
+
     public async updateByRole(role: UserRole, data: Prisma.PlanUpdateInput): Promise<Plan> {
         return this.prisma.plan.update({
             where: { role },

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { AdminPlanDto } from '../dto/admin-plan.dto';
 import { CreatePlanInput } from '../dto/create-plan.input';
 import { PlanDto } from '../dto/plan.dto';
 import { UpdatePlanInput } from '../dto/update-plan.input';
@@ -34,6 +35,12 @@ export class PlanService {
         }
         const plan = await this.planRepository.updateByRole(role, { isActive: false });
         return this.planMapper.toDto(plan);
+    }
+
+    /** Every plan, inactive included, for the admin plans page. */
+    public async findAllForAdmin(): Promise<AdminPlanDto[]> {
+        const plans = await this.planRepository.findAll();
+        return plans.map((p) => this.planMapper.toAdminDto(p));
     }
 
     public async findAll(role?: UserRole): Promise<PlanDto[]> {
