@@ -5,6 +5,19 @@ import { Prisma } from '@prisma/client';
 import * as Joi from 'joi';
 import { ConfigInput } from '../dto';
 
+const AI_PROVIDER_VALUES = ['gemini', 'openrouter', 'groq', 'omniroute'] as const;
+
+// One validator for every AI provider key, so the allowed list has a single source. The label names the key in each message.
+const aiProviderValue = (label: string): Joi.StringSchema =>
+    Joi.string()
+        .valid(...AI_PROVIDER_VALUES)
+        .required()
+        .messages({
+            'string.base': `${label} must be a string`,
+            'any.required': `${label} is required`,
+            'any.only': `${label} must be one of: "gemini", "openrouter", "groq", or "omniroute"`,
+        });
+
 @Injectable()
 export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unknown, ConfigInput> {
     public constructor(@Inject(REQUEST) private readonly request: { params: { key: string } }) {
@@ -21,13 +34,7 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
         });
 
         if (key === 'ai.provider') {
-            return baseSchema.keys({
-                value: Joi.string().valid('gemini', 'openrouter', 'groq', 'omniroute').required().messages({
-                    'string.base': 'AI provider must be a string',
-                    'any.required': 'AI provider is required',
-                    'any.only': 'AI provider must be one of: "gemini", "openrouter", "groq", or "omniroute"',
-                }),
-            });
+            return baseSchema.keys({ value: aiProviderValue('AI provider') });
         }
 
         if (key === 'ai.model') {
@@ -39,14 +46,12 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
             });
         }
 
+        if (key === 'ai.chat.provider') {
+            return baseSchema.keys({ value: aiProviderValue('AI chat provider') });
+        }
+
         if (key === 'ai.audio.provider') {
-            return baseSchema.keys({
-                value: Joi.string().valid('gemini', 'openrouter', 'groq', 'omniroute').required().messages({
-                    'string.base': 'AI audio provider must be a string',
-                    'any.required': 'AI audio provider is required',
-                    'any.only': 'AI audio provider must be one of: "gemini", "openrouter", "groq", or "omniroute"',
-                }),
-            });
+            return baseSchema.keys({ value: aiProviderValue('AI audio provider') });
         }
 
         if (key === 'ai.audio.model') {
