@@ -2,15 +2,18 @@ import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { IResponse } from '@/shared';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { Auth0ManagementService } from '../../auth0-management';
 import { UserDto, UserInput } from '../dto';
 import { UserBadRequestException, UserNotFoundException, UserNotFoundInDatabaseException } from '../exceptions';
-import { UserRepository } from '../repositories';
+import { UserIdentityRepository, UserRepository } from '../repositories';
 
 @Injectable()
 export class UserService {
     public constructor(
         private readonly userRepository: UserRepository,
         private readonly supabaseAuth: SupabaseAuthProvider,
+        private readonly userIdentityRepository: UserIdentityRepository,
+        private readonly auth0Management: Auth0ManagementService,
     ) {}
 
     private get supabase() {
@@ -84,23 +87,12 @@ export class UserService {
             throw new UserBadRequestException('User not found');
         }
 
+        // Auth0 owns credentials and the login email, so neither can be changed through this endpoint.
         if (password) {
-            const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
-                password,
-            });
-            if (error) {
-                throw new UserBadRequestException(`Supabase update password error: ${error.message}`);
-            }
+            throw new UserBadRequestException('Passwords are managed by Auth0');
         }
-
         if (email && email !== existingUser.email) {
-            const { error } = await this.supabase.auth.admin.updateUserById(existingUser.supabaseUserId ?? '', {
-                email,
-            });
-
-            if (error) {
-                throw new UserBadRequestException(`Supabase update email error: ${error.message}`);
-            }
+            throw new UserBadRequestException('The email is managed by Auth0');
         }
 
         const updateData = {
@@ -137,9 +129,12 @@ export class UserService {
             throw new UserNotFoundInDatabaseException();
         }
 
-        await this.supabase.auth.admin.deleteUser(existingUser.supabaseUserId ?? '');
-
+        // Read first: the Identity rows cascade away with the user.
+        const identities = await this.userIdentityRepository.findByUserId(id);
         const user = await this.userRepository.delete(id);
+
+        // Best-effort and after the delete, so an outage at either provider can never block it.
+        await Promise.all([this.supabaseAuth.deleteUserBestEffort(id, existingUser.supabaseUserId), this.auth0Management.deleteIdentities(id, identities)]);
 
         return new UserDto({ ...user });
     }

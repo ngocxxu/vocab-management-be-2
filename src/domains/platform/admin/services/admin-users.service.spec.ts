@@ -1,7 +1,8 @@
-import type { UserRepository, UserTransaction } from '@/domains/identity/user/repositories';
+import type { Auth0ManagementService } from '@/domains/identity/auth0-management';
+import type { UserIdentityRepository, UserRepository, UserTransaction } from '@/domains/identity/user/repositories';
 import type { SupabaseAuthProvider } from '@/domains/media/supabase';
 import type { LoggerService } from '@/shared';
-import { BadGatewayException, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { User, UserRole } from '@prisma/client';
 import { AdminUsersQueryDto } from '../dto/admin-users-query.dto';
 import { AdminUserInvalidChangeException } from '../exceptions';
@@ -38,16 +39,28 @@ const createRepositoryMock = () => ({
 
 type TRepositoryMock = ReturnType<typeof createRepositoryMock>;
 
-const createSupabaseMock = (error: { status?: number; message: string } | null = null) => {
-    const deleteUser = jest.fn().mockResolvedValue({ data: {}, error });
-    const client = { auth: { admin: { deleteUser } } };
-    const provider = { getServiceRoleClient: () => client } as unknown as SupabaseAuthProvider;
+const createSupabaseMock = () => {
+    const deleteUser = jest.fn().mockResolvedValue(undefined);
+    const provider = { deleteUserBestEffort: deleteUser } as unknown as SupabaseAuthProvider;
     return { provider, deleteUser };
 };
 
-const createService = (repository: TRepositoryMock, supabase: ReturnType<typeof createSupabaseMock>) => {
+const IDENTITIES = [{ issuer: 'https://t.auth0.com/', subject: 'google-oauth2|1' }];
+
+const createAuth0Mock = () => ({ deleteIdentities: jest.fn().mockResolvedValue(undefined) });
+const createIdentityRepositoryMock = () => ({ findByUserId: jest.fn().mockResolvedValue(IDENTITIES) });
+
+type TExtras = { auth0?: ReturnType<typeof createAuth0Mock>; identities?: ReturnType<typeof createIdentityRepositoryMock> };
+
+const createService = (repository: TRepositoryMock, supabase: ReturnType<typeof createSupabaseMock>, extras: TExtras = {}) => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as unknown as LoggerService;
-    return new AdminUsersService(repository as unknown as UserRepository, supabase.provider, logger);
+    return new AdminUsersService(
+        repository as unknown as UserRepository,
+        (extras.identities ?? createIdentityRepositoryMock()) as unknown as UserIdentityRepository,
+        supabase.provider,
+        (extras.auth0 ?? createAuth0Mock()) as unknown as Auth0ManagementService,
+        logger,
+    );
 };
 
 describe('AdminUsersService.list', () => {
@@ -201,52 +214,57 @@ describe('AdminUsersService.remove', () => {
         await expect(service.remove(actor, 'u-missing')).rejects.toThrow(NotFoundException);
     });
 
-    it('returns 409 for the last active admin before touching Supabase', async () => {
+    it('returns 409 for the last active admin before reading or deleting anything', async () => {
         const repository = createRepositoryMock();
         repository.findById.mockResolvedValue(makeUser({ id: 'u-target', role: UserRole.ADMIN }));
         repository.countActiveAdmins.mockResolvedValue(0);
         const supabase = createSupabaseMock();
-        const service = createService(repository, supabase);
+        const auth0 = createAuth0Mock();
+        const identities = createIdentityRepositoryMock();
+        const service = createService(repository, supabase, { auth0, identities });
 
         await expect(service.remove(actor, 'u-target')).rejects.toThrow(ConflictException);
         expect(supabase.deleteUser).not.toHaveBeenCalled();
+        expect(auth0.deleteIdentities).not.toHaveBeenCalled();
+        expect(repository.delete).not.toHaveBeenCalled();
     });
 
-    it('deletes the Supabase account first, then the database row in a transaction', async () => {
+    it('deletes the database row first, then the Supabase and Auth0 accounts', async () => {
         const repository = createRepositoryMock();
         repository.findById.mockResolvedValue(makeUser({ id: 'u-target' }));
         const supabase = createSupabaseMock();
-        const service = createService(repository, supabase);
+        const auth0 = createAuth0Mock();
+        const identities = createIdentityRepositoryMock();
+        const service = createService(repository, supabase, { auth0, identities });
 
         const removed = await service.remove(actor, 'u-target');
 
         expect(removed.id).toBe('u-target');
-        expect(supabase.deleteUser).toHaveBeenCalledWith('sb-target');
         expect(repository.delete).toHaveBeenCalledWith('u-target', TX);
-        expect(supabase.deleteUser.mock.invocationCallOrder[0]).toBeLessThan(repository.delete.mock.invocationCallOrder[0] ?? Infinity);
+        expect(supabase.deleteUser).toHaveBeenCalledWith('u-target', 'sb-target');
+        expect(identities.findByUserId).toHaveBeenCalledWith('u-target', TX);
+        expect(auth0.deleteIdentities).toHaveBeenCalledWith('u-target', IDENTITIES);
+        const order = (mock: jest.Mock) => mock.mock.invocationCallOrder[0] ?? Infinity;
+        expect(order(identities.findByUserId)).toBeLessThan(order(repository.delete));
+        expect(order(repository.delete)).toBeLessThan(order(supabase.deleteUser));
+        expect(order(repository.delete)).toBeLessThan(order(auth0.deleteIdentities));
     });
 
-    it('treats a Supabase 404 as already deleted and still removes the row', async () => {
+    it('calls no external service when the database delete fails', async () => {
         const repository = createRepositoryMock();
         repository.findById.mockResolvedValue(makeUser({ id: 'u-target' }));
-        const service = createService(repository, createSupabaseMock({ status: 404, message: 'User not found' }));
+        repository.delete.mockRejectedValue(new Error('db down'));
+        const supabase = createSupabaseMock();
+        const auth0 = createAuth0Mock();
+        const service = createService(repository, supabase, { auth0 });
 
-        await service.remove(actor, 'u-target');
+        await expect(service.remove(actor, 'u-target')).rejects.toThrow('db down');
 
-        expect(repository.delete).toHaveBeenCalledWith('u-target', TX);
+        expect(supabase.deleteUser).not.toHaveBeenCalled();
+        expect(auth0.deleteIdentities).not.toHaveBeenCalled();
     });
 
-    it('aborts without touching the database when Supabase fails with another error', async () => {
-        const repository = createRepositoryMock();
-        repository.findById.mockResolvedValue(makeUser({ id: 'u-target' }));
-        const service = createService(repository, createSupabaseMock({ status: 500, message: 'upstream down' }));
-
-        await expect(service.remove(actor, 'u-target')).rejects.toThrow(BadGatewayException);
-        expect(repository.runSerializableWithRetry).not.toHaveBeenCalled();
-        expect(repository.delete).not.toHaveBeenCalled();
-    });
-
-    it('skips Supabase when the user has no Supabase account and still removes the row', async () => {
+    it('passes a missing Supabase account through and still removes the row', async () => {
         const repository = createRepositoryMock();
         repository.findById.mockResolvedValue(makeUser({ id: 'u-target', supabaseUserId: null }));
         const supabase = createSupabaseMock();
@@ -254,7 +272,7 @@ describe('AdminUsersService.remove', () => {
 
         await service.remove(actor, 'u-target');
 
-        expect(supabase.deleteUser).not.toHaveBeenCalled();
+        expect(supabase.deleteUser).toHaveBeenCalledWith('u-target', null);
         expect(repository.delete).toHaveBeenCalledWith('u-target', TX);
     });
 });
