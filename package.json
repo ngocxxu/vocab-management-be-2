@@ -10,7 +10,7 @@
         "clean": "rimraf ./dist",
         "start": "node dist/server.js",
         "dev": "env-cmd -f .env nodemon",
-        "build": "npm run clean && tsc && tsc-alias -p tsconfig.json",
+        "build": "npm run clean && tsc && tsc-alias -p tsconfig.json && tsc -p tsconfig.seed.json",
         "test": "env-cmd -f .env jest --config=jest.json",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "lint": "eslint -c .eslintrc.js --ext .ts --max-warnings 0 \"src/**/*.ts\"",

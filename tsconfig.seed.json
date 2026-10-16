@@ -1,0 +1,10 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "incremental": false,
+        "rootDir": ".",
+        "outDir": "./dist/seed"
+    },
+    "include": ["scripts/seed-auth0-identities.ts"],
+    "exclude": ["node_modules", "**/*.spec.ts"]
+}
