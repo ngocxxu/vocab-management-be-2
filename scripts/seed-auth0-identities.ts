@@ -40,7 +40,18 @@ async function loadSupabaseGoogleUsers(): Promise<SupabaseGoogleUser[]> {
         if (error) {
             throw new Error(`Supabase listUsers failed: ${error.message}`);
         }
-        for (const user of data.users) {
+        for (const listed of data.users) {
+            // listUsers can return users without `identities` (seen on a hosted project); app_metadata still lists the providers,
+            // so fetch the single user, which does carry them. Users without Google never need the extra call.
+            const hasGoogle = Array.isArray(listed.app_metadata?.providers) && listed.app_metadata.providers.includes('google');
+            let user = listed;
+            if (hasGoogle && !listed.identities?.length) {
+                const { data: single, error: singleError } = await supabase.auth.admin.getUserById(listed.id);
+                if (singleError || !single.user) {
+                    throw new Error(`Supabase getUserById failed for a Google user: ${singleError?.message ?? 'no user returned'}`);
+                }
+                user = single.user;
+            }
             const googleIdentities = (user.identities ?? [])
                 .filter((identity) => identity.provider === 'google')
                 .map((identity) => ({
