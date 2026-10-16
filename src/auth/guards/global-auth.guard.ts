@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 
+import { ALLOW_UNPROVISIONED_KEY } from '../decorators/allow-unprovisioned.decorator';
 import { AUTH_STRATEGY_KEY, AuthStrategyValue } from '../decorators/auth-strategy.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthIdentityService } from '../services/auth-identity.service';
@@ -38,7 +39,8 @@ export class GlobalAuthGuard implements CanActivate {
         }
 
         const authUser = await this.authTokenService.resolveAuthUser(token, strategy);
-        await bindAuthUserToRequest(this.authIdentityService, request, authUser);
+        const allowUnprovisioned = this.reflector.getAllAndOverride<boolean>(ALLOW_UNPROVISIONED_KEY, [context.getHandler(), context.getClass()]) ?? false;
+        await bindAuthUserToRequest(this.authIdentityService, request, authUser, allowUnprovisioned);
 
         return true;
     }

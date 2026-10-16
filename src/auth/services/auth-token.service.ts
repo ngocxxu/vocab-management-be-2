@@ -5,7 +5,7 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Request } from 'express';
-import { decodeJwt, jwtVerify } from 'jose';
+import { decodeJwt, JWTPayload, jwtVerify } from 'jose';
 
 import { Auth0JwksProvider } from './auth0-jwks.provider';
 
@@ -81,10 +81,13 @@ export class AuthTokenService {
             if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
                 throw new UnauthorizedException('Invalid or expired token');
             }
+            const claims = this.readNamespacedClaims(payload);
             // Roles come only from the database, so token role claims are never read.
             return {
                 id: payload.sub,
-                email: typeof payload.email === 'string' ? payload.email : null,
+                email: claims.email,
+                emailVerified: claims.emailVerified,
+                profile: claims.profile,
                 roles: [],
                 provider: 'auth0',
                 issuer,
@@ -99,6 +102,21 @@ export class AuthTokenService {
             this.logger.warn(`Auth0 token rejected: ${error instanceof Error ? error.name : 'unknown error'}`);
             throw new UnauthorizedException('Invalid or expired token');
         }
+    }
+
+    /** Auth0 only puts custom claims in access tokens under a namespace; without one nothing is read and the email counts as unverified. */
+    private readNamespacedClaims(payload: JWTPayload): { email: string | null; emailVerified: boolean; profile: AuthUser['profile'] } {
+        const namespace = this.configService.get<string>('auth0.claimNamespace');
+        const text = (name: string): string | undefined => {
+            const value = namespace ? payload[`${namespace}${name}`] : undefined;
+            return typeof value === 'string' && value.length > 0 ? value : undefined;
+        };
+        return {
+            email: text('email') ?? null,
+            // Only a real boolean `true` verifies; the string "true" does not.
+            emailVerified: namespace ? payload[`${namespace}email_verified`] === true : false,
+            profile: { firstName: text('given_name'), lastName: text('family_name'), avatar: text('picture') },
+        };
     }
 
     private async verifySupabase(token: string): Promise<AuthUser> {

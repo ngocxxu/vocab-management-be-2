@@ -16,17 +16,18 @@ export class AuthIdentityService {
      * Maps a verified token to the internal User.
      * Auth0 identities resolve only through issuer + subject; email is never used to find or link a user,
      * and an unmapped identity is rejected. Supabase users resolve by `supabaseUserId` and may be null (not yet synced).
+     * With `allowUnprovisioned` an unmapped Auth0 identity returns null instead (only the Provisioning endpoint).
      * A deactivated user is rejected here so HTTP and WebSocket authentication share the same rule.
      */
-    public async resolveLocalUser(authUser: AuthUser): Promise<User | null> {
-        const user = await this.findLocalUser(authUser);
+    public async resolveLocalUser(authUser: AuthUser, options: { allowUnprovisioned?: boolean } = {}): Promise<User | null> {
+        const user = await this.findLocalUser(authUser, options.allowUnprovisioned ?? false);
         if (user && !user.isActive) {
             throw new UnauthorizedException('This account has been deleted');
         }
         return user;
     }
 
-    private async findLocalUser(authUser: AuthUser): Promise<User | null> {
+    private async findLocalUser(authUser: AuthUser, allowUnprovisioned: boolean): Promise<User | null> {
         if (authUser.provider !== 'auth0') {
             return this.userRepository.findBySupabaseUserId(authUser.id);
         }
@@ -34,7 +35,7 @@ export class AuthIdentityService {
             throw new IdentityUnauthorizedException();
         }
         const user = await this.userIdentityRepository.findUserByIdentity(authUser.issuer, authUser.subject);
-        if (!user) {
+        if (!user && !allowUnprovisioned) {
             throw new IdentityUnauthorizedException();
         }
         return user;

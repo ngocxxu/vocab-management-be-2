@@ -1,3 +1,4 @@
+import type { AuthUser } from '@/auth';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
 import { jwtDecode } from '@/shared/utils/jwt.util';
@@ -5,9 +6,16 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, User, UserRole } from '@prisma/client';
 import { AuthError } from '@supabase/supabase-js';
 import { UserDto } from '../../user/dto';
-import { UserRepository } from '../../user/repositories';
+import { UserIdentityRepository, UserRepository } from '../../user/repositories';
 import { OAuthResponseDto, SessionDto, SignUpInput } from '../dto';
-import { AuthBadRequestException, AuthConflictException, AuthSupabaseMessageException, AuthUnauthorizedException, InvalidCredentialsException } from '../exceptions';
+import {
+    AuthBadRequestException,
+    AuthConflictException,
+    AuthForbiddenException,
+    AuthSupabaseMessageException,
+    AuthUnauthorizedException,
+    InvalidCredentialsException,
+} from '../exceptions';
 import { SignInResponse, SignUpServiceResponse } from '../utils';
 
 @Injectable()
@@ -23,6 +31,7 @@ export class AuthService {
         private readonly userRepository: UserRepository,
         private readonly supabaseAuth: SupabaseAuthProvider,
         private readonly logger: LoggerService,
+        private readonly userIdentityRepository: UserIdentityRepository,
     ) {}
 
     private get auth() {
@@ -298,6 +307,57 @@ export class AuthService {
         }
 
         return { message: 'Confirmation email resent successfully' };
+    }
+
+    /**
+     * Provisioning: maps a verified Auth0 login to a User, creating the User and its Identity together on the first call.
+     * Idempotent, and safe under concurrent first calls. The email is only ever used to detect a collision, never to link:
+     * an email that already belongs to another User is refused with `account_link_required` and an admin links it by hand.
+     */
+    public async syncAuth0User(authUser: AuthUser): Promise<User> {
+        const { issuer, subject } = authUser;
+        if (authUser.provider !== 'auth0' || !issuer || !subject) {
+            throw new AuthForbiddenException('auth0_identity_required');
+        }
+
+        const existing = await this.userIdentityRepository.findUserByIdentity(issuer, subject);
+        if (existing) {
+            return existing;
+        }
+
+        if (!authUser.email || !authUser.emailVerified) {
+            throw new AuthForbiddenException('email_not_verified');
+        }
+        const email = authUser.email.trim().toLowerCase();
+
+        if (await this.userRepository.findByEmailIgnoreCase(email)) {
+            throw new AuthConflictException('account_link_required');
+        }
+
+        try {
+            const created = await this.userRepository.create({
+                email,
+                firstName: authUser.profile?.firstName ?? email.split('@')[0],
+                lastName: authUser.profile?.lastName ?? '',
+                avatar: authUser.profile?.avatar ?? null,
+                role: UserRole.GUEST,
+                isActive: true,
+                emailConfirmed: true,
+                identities: { create: { issuer, subject } },
+            });
+            this.logger.info(`Provisioned user ${created.id} for an Auth0 identity`);
+            return created;
+        } catch (error: unknown) {
+            if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+                throw error;
+            }
+            // Lost a race. If the winner created this same identity, return its User; otherwise the email is someone else's.
+            const winner = await this.userIdentityRepository.findUserByIdentity(issuer, subject);
+            if (winner) {
+                return winner;
+            }
+            throw new AuthConflictException('account_link_required');
+        }
     }
 
     public async syncOAuthUser(accessToken: string, refreshToken: string): Promise<SignInResponse> {

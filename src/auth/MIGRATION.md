@@ -30,3 +30,10 @@ Out of scope for this package: refresh issuance, rotation, and Supabase session 
 ## Scope
 
 Roughly **9 controllers** / **~48** `@CurrentUser()` call sites still assume Prisma **`User`** until migrated.
+
+## Provisioning (`POST /auth/sync`)
+
+The only route that accepts an Auth0 token with no mapped Identity (`@AllowUnprovisioned()`); every other route returns 401 `identity_not_provisioned` until it has run. It creates the `User` and its `UserIdentity` together, is idempotent, and creates exactly one `User` when two first calls race.
+
+- Needs a verified email from the access token's **namespaced** claims (`<AUTH0_CLAIM_NAMESPACE>email`, `<ns>email_verified`; optionally `<ns>given_name`, `<ns>family_name`, `<ns>picture`), added by an Auth0 post-login Action. Only a boolean `true` counts as verified. Without a namespace nothing is read and sync returns 403 `email_not_verified`.
+- If the email already belongs to another User it returns 409 `account_link_required` and writes nothing. Email is only used to detect that collision, never to link; an admin links the account by hand.

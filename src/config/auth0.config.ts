@@ -9,4 +9,6 @@ const withTrailingSlash = (value: string): string => (value.endsWith('/') ? valu
 export default registerAs('auth0', () => ({
     issuer: process.env.AUTH0_ISSUER ? withTrailingSlash(process.env.AUTH0_ISSUER) : undefined,
     audience: process.env.AUTH0_AUDIENCE || undefined,
+    /** Prefix of the custom claims the Auth0 post-login Action adds (Auth0 only allows namespaced custom claims). */
+    claimNamespace: process.env.AUTH0_CLAIM_NAMESPACE ? withTrailingSlash(process.env.AUTH0_CLAIM_NAMESPACE) : undefined,
 }));

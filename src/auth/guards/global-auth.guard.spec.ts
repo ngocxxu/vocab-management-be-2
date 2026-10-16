@@ -12,8 +12,10 @@ describe('GlobalAuthGuard', () => {
 
     type TestRequest = { method: string; headers: { authorization?: string }; authUser?: AuthUser; currentUser?: User };
 
-    const createGuard = (options: { authUser?: AuthUser; resolveLocalUser?: jest.Mock; token?: string | null; isPublic?: boolean }) => {
-        const reflector = { getAllAndOverride: jest.fn().mockReturnValue(options.isPublic ?? false) } as unknown as Reflector;
+    const createGuard = (options: { authUser?: AuthUser; resolveLocalUser?: jest.Mock; token?: string | null; isPublic?: boolean; allowUnprovisioned?: boolean }) => {
+        const reflector = {
+            getAllAndOverride: jest.fn((key: string) => (key === 'allowUnprovisioned' ? (options.allowUnprovisioned ?? false) : (options.isPublic ?? false))),
+        } as unknown as Reflector;
         const tokens = {
             extractBearerToken: () => (options.token === undefined ? 'valid' : options.token),
             resolveAuthUser: jest.fn().mockResolvedValue(options.authUser ?? auth0User),
@@ -60,6 +62,27 @@ describe('GlobalAuthGuard', () => {
 
         expect(request.authUser).toEqual(supabaseUser);
         expect(request.currentUser).toBeUndefined();
+    });
+
+    it('lets an unmapped Auth0 identity through only on routes that allow it', async () => {
+        const resolveLocalUser = jest.fn().mockResolvedValue(null);
+        const { guard } = createGuard({ resolveLocalUser, allowUnprovisioned: true });
+        const request = newRequest();
+
+        await guard.canActivate(context(request));
+
+        expect(resolveLocalUser).toHaveBeenCalledWith(auth0User, { allowUnprovisioned: true });
+        expect(request.authUser?.subject).toBe('google-oauth2|1');
+        expect(request.currentUser).toBeUndefined();
+    });
+
+    it('does not allow unprovisioned identities by default', async () => {
+        const resolveLocalUser = jest.fn().mockResolvedValue(null);
+        const { guard } = createGuard({ resolveLocalUser });
+
+        await guard.canActivate(context(newRequest()));
+
+        expect(resolveLocalUser).toHaveBeenCalledWith(auth0User, { allowUnprovisioned: false });
     });
 
     it('requires a bearer token on protected routes', async () => {

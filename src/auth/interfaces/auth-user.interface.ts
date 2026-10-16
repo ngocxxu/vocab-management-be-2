@@ -8,6 +8,10 @@ export interface AuthUser {
     issuer?: string;
     /** Token subject (`sub`). Set for Auth0 tokens; never used as the internal user id. */
     subject?: string;
+    /** True only when the token's namespaced `email_verified` claim is exactly `true`. */
+    emailVerified?: boolean;
+    /** Namespaced profile claims, used to fill a new User on Provisioning. */
+    profile?: { firstName?: string; lastName?: string; avatar?: string };
     /** OAuth client the token was issued to (`azp`), or null for tokens without one. */
     clientId?: string | null;
 }

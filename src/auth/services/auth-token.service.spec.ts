@@ -24,7 +24,7 @@ describe('AuthTokenService', () => {
 
     const createService = (options: { supabaseUser?: unknown; auth0?: { issuer?: string; audience?: string } } = {}) => {
         const auth0 = options.auth0 ?? { issuer: ISSUER, audience: AUDIENCE };
-        const values: Record<string, string | undefined> = { 'auth0.issuer': auth0.issuer, 'auth0.audience': auth0.audience };
+        const values: Record<string, string | undefined> = { 'auth0.issuer': auth0.issuer, 'auth0.audience': auth0.audience, 'auth0.claimNamespace': 'https://vocab.app/' };
         const config = { get: (key: string) => values[key] } as unknown as ConfigService;
         const getUser = jest.fn().mockResolvedValue({ data: { user: options.supabaseUser }, error: options.supabaseUser ? null : { message: 'bad' } });
         const supabaseAuth = { getAnonClient: () => ({ auth: { getUser } }) } as unknown as SupabaseAuthProvider;
@@ -53,6 +53,31 @@ describe('AuthTokenService', () => {
             const authUser = await service.resolveAuthUser(token, 'auth0');
 
             expect(authUser).toMatchObject({ provider: 'auth0', issuer: ISSUER, subject: 'google-oauth2|123', clientId: 'client-1', roles: [] });
+        });
+
+        it('reads email and profile only from namespaced claims', async () => {
+            const { service } = createService();
+            const token = await sign({
+                email: 'plain@example.com',
+                'https://vocab.app/email': 'owner@example.com',
+                'https://vocab.app/email_verified': true,
+                'https://vocab.app/given_name': 'Ada',
+                'https://vocab.app/family_name': 'Lovelace',
+                'https://vocab.app/picture': 'https://img/a.png',
+            });
+
+            const authUser = await service.resolveAuthUser(token, 'auth0');
+
+            expect(authUser).toMatchObject({ email: 'owner@example.com', emailVerified: true, profile: { firstName: 'Ada', lastName: 'Lovelace', avatar: 'https://img/a.png' } });
+        });
+
+        it('treats a missing or non-boolean email_verified claim as unverified', async () => {
+            const { service } = createService();
+            const token = await sign({ 'https://vocab.app/email': 'owner@example.com', 'https://vocab.app/email_verified': 'true' });
+
+            const authUser = await service.resolveAuthUser(token, 'auth0');
+
+            expect(authUser.emailVerified).toBe(false);
         });
 
         it('never grants roles from token claims', async () => {

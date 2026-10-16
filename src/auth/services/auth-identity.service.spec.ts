@@ -29,6 +29,12 @@ describe('AuthIdentityService', () => {
         await expect(create().resolveLocalUser(auth0User)).rejects.toBeInstanceOf(IdentityUnauthorizedException);
     });
 
+    it('returns null instead of rejecting an unmapped identity when unprovisioned users are allowed', async () => {
+        const user = await create().resolveLocalUser(auth0User, { allowUnprovisioned: true });
+
+        expect(user).toBeNull();
+    });
+
     it('never falls back to email matching for Auth0 identities', async () => {
         const supabase = jest.fn();
 
