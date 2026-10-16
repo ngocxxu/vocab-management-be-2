@@ -1,5 +1,5 @@
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createLocalJWKSet, exportJWK, generateKeyPair, JWK, JWTPayload, KeyLike, SignJWT } from 'jose';
 import { AuthTokenService } from './auth-token.service';
@@ -189,6 +189,16 @@ describe('AuthTokenService', () => {
     });
 
     describe('supabase tokens', () => {
+        it('logs a greppable line for every accepted Supabase token', async () => {
+            const { service } = createService({ supabaseUser: { id: 'supabase-user-1', email: 'user@example.com' } });
+            const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+            await service.resolveAuthUser('supabase-token', 'supabase');
+
+            expect(log).toHaveBeenCalledWith('supabase_token_accepted user=supabase-user-1');
+            log.mockRestore();
+        });
+
         it('ignores role claims in Supabase user metadata', async () => {
             const { service } = createService({
                 supabaseUser: { id: 'supabase-user-1', email: 'user@example.com', user_metadata: { roles: ['ADMIN'] }, app_metadata: { roles: ['ADMIN'] } },

@@ -127,6 +127,8 @@ export class AuthTokenService {
         if (error || !user) {
             throw new UnauthorizedException('Invalid or expired token');
         }
+        // Cutover signal: when this line stops appearing for 14 days, the Supabase path can go (docs/runbooks/auth0-cutover.md).
+        this.logger.log(`supabase_token_accepted user=${user.id}`);
         return mapSupabaseAuthUser(user);
     }
 }
