@@ -194,6 +194,21 @@ describe('POST /auth/sync (HTTP)', () => {
         expect(fakes.users).toHaveLength(2);
     });
 
+    it('gives a linked password user their original User back, without creating a second one', async () => {
+        // The state the link script leaves behind: the original User plus an Identity for the new Auth0 login.
+        const original = { email: 'pw.user@example.com', firstName: 'Pat', lastName: 'Word', identities: { create: { issuer: ISSUER, subject: 'auth0|pw1' } } };
+        const owner = await fakes.userRepository.create(original as Prisma.UserCreateInput);
+        const token = as('t-pw', login('auth0|pw1', { email: 'pw.user@example.com' }));
+
+        const synced = await sync(token);
+        const seen = await probe(token);
+
+        expect(synced.status).toBe(200);
+        expect(synced.body.id).toBe(owner.id);
+        expect(seen.body.userId).toBe(owner.id);
+        expect(fakes.users).toHaveLength(1);
+    });
+
     it('requires a token on the sync route', async () => {
         const response = await request(app.getHttpServer()).post('/auth/sync');
 

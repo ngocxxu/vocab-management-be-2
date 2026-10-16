@@ -25,7 +25,8 @@
         "db:reset": "prisma migrate reset",
         "db:migrate": "prisma migrate dev",
         "db:generate": "prisma generate",
-        "auth0:seed-identities": "ts-node scripts/seed-auth0-identities.ts"
+        "auth0:seed-identities": "ts-node scripts/seed-auth0-identities.ts",
+        "auth0:link-identities": "ts-node scripts/link-auth0-identities.ts"
     },
     "prisma": {
         "seed": "ts-node prisma/seed.ts"
