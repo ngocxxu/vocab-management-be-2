@@ -1,29 +1,15 @@
 import type { AuthStrategyValue } from '../decorators/auth-strategy.decorator';
 import type { AuthUser } from '../interfaces/auth-user.interface';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Request } from 'express';
-import * as jwt from 'jsonwebtoken';
-import { JsonWebTokenError, JwtPayload, NotBeforeError, TokenExpiredError } from 'jsonwebtoken';
+import { decodeJwt, jwtVerify } from 'jose';
 
-function mapJwtPayload(payload: JwtPayload): AuthUser {
-    const sub = payload.sub;
-    if (!sub || typeof sub !== 'string') {
-        throw new UnauthorizedException('Invalid token payload');
-    }
-    const record = payload as Record<string, unknown>;
-    const emailRaw = record.email;
-    const email = typeof emailRaw === 'string' ? emailRaw : null;
-    // The database role is the single source of truth, so a token role claim never grants access.
-    return {
-        id: sub,
-        email,
-        roles: [],
-        provider: 'jwt',
-    };
-}
+import { Auth0JwksProvider } from './auth0-jwks.provider';
+
+const AUTH0_ALGORITHMS = ['RS256'];
 
 function mapSupabaseAuthUser(user: SupabaseUser): AuthUser {
     // user_metadata is writable by the signed-in user, so Supabase claims never grant roles.
@@ -38,9 +24,12 @@ function mapSupabaseAuthUser(user: SupabaseUser): AuthUser {
 
 @Injectable()
 export class AuthTokenService {
+    private readonly logger = new Logger(AuthTokenService.name);
+
     public constructor(
         private readonly configService: ConfigService,
         private readonly supabaseAuth: SupabaseAuthProvider,
+        private readonly auth0Jwks: Auth0JwksProvider,
     ) {}
 
     public extractBearerToken(request: Request): string | null {
@@ -53,38 +42,62 @@ export class AuthTokenService {
     }
 
     public async resolveAuthUser(token: string, strategy: AuthStrategyValue): Promise<AuthUser> {
-        if (strategy === 'jwt') {
-            return this.verifyJwt(token);
+        if (strategy === 'auth0') {
+            return this.verifyAuth0(token);
         }
         if (strategy === 'supabase') {
             return this.verifySupabase(token);
         }
-        return this.verifyCombined(token);
+        // The unverified `iss` only picks the verifier. A token claiming the Auth0 issuer is fully verified
+        // by Auth0 rules and never retried against Supabase, so a forged `iss` gains nothing.
+        return this.isIssuedByAuth0(token) ? this.verifyAuth0(token) : this.verifySupabase(token);
     }
 
-    private verifyJwt(token: string): AuthUser {
+    private isIssuedByAuth0(token: string): boolean {
+        const issuer = this.configService.get<string>('auth0.issuer');
+        if (!issuer) {
+            return false;
+        }
         try {
-            const secret = this.configService.getOrThrow<string>('jwt.secret');
-            const issuer = this.configService.getOrThrow<string>('jwt.issuer');
-            const payload = jwt.verify(token, secret, {
-                algorithms: ['HS256'],
+            return decodeJwt(token).iss === issuer;
+        } catch {
+            return false;
+        }
+    }
+
+    private async verifyAuth0(token: string): Promise<AuthUser> {
+        const issuer = this.configService.get<string>('auth0.issuer');
+        const audience = this.configService.get<string>('auth0.audience');
+        if (!issuer || !audience) {
+            throw new UnauthorizedException('Invalid or expired token');
+        }
+        try {
+            const { payload } = await jwtVerify(token, this.auth0Jwks.getKeyResolver(), {
                 issuer,
+                audience,
+                algorithms: AUTH0_ALGORITHMS,
+                requiredClaims: ['sub', 'exp'],
             });
-            if (typeof payload === 'string') {
-                throw new UnauthorizedException('Invalid token');
+            if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+                throw new UnauthorizedException('Invalid or expired token');
             }
-            return mapJwtPayload(payload);
-        } catch (err) {
-            if (err instanceof UnauthorizedException) {
-                throw err;
+            // Roles come only from the database, so token role claims are never read.
+            return {
+                id: payload.sub,
+                email: typeof payload.email === 'string' ? payload.email : null,
+                roles: [],
+                provider: 'auth0',
+                issuer,
+                subject: payload.sub,
+                clientId: typeof payload.azp === 'string' ? payload.azp : null,
+            };
+        } catch (error) {
+            if (error instanceof UnauthorizedException) {
+                throw error;
             }
-            if (err instanceof TokenExpiredError || err instanceof NotBeforeError) {
-                throw new UnauthorizedException(err.message);
-            }
-            if (err instanceof JsonWebTokenError) {
-                throw new UnauthorizedException(err.message);
-            }
-            throw new UnauthorizedException('Invalid token');
+            // Callers get one generic message; the cause (expired, wrong audience, key fetch failure) stays in the log.
+            this.logger.warn(`Auth0 token rejected: ${error instanceof Error ? error.name : 'unknown error'}`);
+            throw new UnauthorizedException('Invalid or expired token');
         }
     }
 
@@ -97,31 +110,5 @@ export class AuthTokenService {
             throw new UnauthorizedException('Invalid or expired token');
         }
         return mapSupabaseAuthUser(user);
-    }
-
-    private async verifyCombined(token: string): Promise<AuthUser> {
-        try {
-            const secret = this.configService.getOrThrow<string>('jwt.secret');
-            const issuer = this.configService.getOrThrow<string>('jwt.issuer');
-            const payload = jwt.verify(token, secret, {
-                algorithms: ['HS256'],
-                issuer,
-            });
-            if (typeof payload === 'string') {
-                return this.verifySupabase(token);
-            }
-            return mapJwtPayload(payload);
-        } catch (err) {
-            if (err instanceof UnauthorizedException) {
-                throw err;
-            }
-            if (err instanceof TokenExpiredError || err instanceof NotBeforeError) {
-                throw new UnauthorizedException(err.message);
-            }
-            if (err instanceof JsonWebTokenError) {
-                return this.verifySupabase(token);
-            }
-            throw new UnauthorizedException('Invalid token');
-        }
     }
 }

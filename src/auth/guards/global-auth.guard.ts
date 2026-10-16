@@ -1,5 +1,4 @@
 import type { AuthUser } from '../interfaces/auth-user.interface';
-import { PrismaService } from '@/shared/services/prisma.service';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { User } from '@prisma/client';
@@ -7,6 +6,7 @@ import { Request } from 'express';
 
 import { AUTH_STRATEGY_KEY, AuthStrategyValue } from '../decorators/auth-strategy.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { AuthIdentityService } from '../services/auth-identity.service';
 import { AuthTokenService } from '../services/auth-token.service';
 import { bindAuthUserToRequest } from '../utils/bind-request-user.util';
 
@@ -15,7 +15,7 @@ export class GlobalAuthGuard implements CanActivate {
     public constructor(
         private readonly reflector: Reflector,
         private readonly authTokenService: AuthTokenService,
-        private readonly prisma: PrismaService,
+        private readonly authIdentityService: AuthIdentityService,
     ) {}
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -38,7 +38,7 @@ export class GlobalAuthGuard implements CanActivate {
         }
 
         const authUser = await this.authTokenService.resolveAuthUser(token, strategy);
-        await bindAuthUserToRequest(this.prisma, request, authUser);
+        await bindAuthUserToRequest(this.authIdentityService, request, authUser);
 
         return true;
     }

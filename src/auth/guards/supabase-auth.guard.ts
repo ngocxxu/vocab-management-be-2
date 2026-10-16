@@ -1,9 +1,9 @@
 import type { AuthUser } from '../interfaces/auth-user.interface';
-import { PrismaService } from '@/shared/services/prisma.service';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 
+import { AuthIdentityService } from '../services/auth-identity.service';
 import { AuthTokenService } from '../services/auth-token.service';
 import { bindAuthUserToRequest } from '../utils/bind-request-user.util';
 
@@ -11,7 +11,7 @@ import { bindAuthUserToRequest } from '../utils/bind-request-user.util';
 export class SupabaseAuthGuard implements CanActivate {
     public constructor(
         private readonly authTokenService: AuthTokenService,
-        private readonly prisma: PrismaService,
+        private readonly authIdentityService: AuthIdentityService,
     ) {}
 
     public async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -21,7 +21,7 @@ export class SupabaseAuthGuard implements CanActivate {
             throw new UnauthorizedException('No authentication token provided');
         }
         const authUser = await this.authTokenService.resolveAuthUser(token, 'supabase');
-        await bindAuthUserToRequest(this.prisma, request, authUser);
+        await bindAuthUserToRequest(this.authIdentityService, request, authUser);
         return true;
     }
 }
