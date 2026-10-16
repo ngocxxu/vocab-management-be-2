@@ -1,3 +1,4 @@
+export * from './allow-unprovisioned.decorator';
 export * from './auth-strategy.decorator';
 export * from './current-user.decorator';
 export * from './public.decorator';

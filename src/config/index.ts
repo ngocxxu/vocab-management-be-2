@@ -1,4 +1,5 @@
 import appConfig from './app.config';
+import auth0Config from './auth0.config';
 import databaseConfig from './database.config';
 import firebaseConfig from './firebase.config';
 import jwtConfig from './jwt.config';
@@ -9,6 +10,6 @@ import supabaseConfig from './supabase.config';
 
 export { validationSchema } from './validation.schema';
 
-export const envConfigLoaders = [appConfig, databaseConfig, redisConfig, firebaseConfig, supabaseConfig, jwtConfig, mailConfig, qdrantConfig];
+export const envConfigLoaders = [appConfig, databaseConfig, redisConfig, firebaseConfig, supabaseConfig, jwtConfig, auth0Config, mailConfig, qdrantConfig];
 
-export { appConfig, databaseConfig, firebaseConfig, jwtConfig, mailConfig, qdrantConfig, redisConfig, supabaseConfig };
+export { appConfig, auth0Config, databaseConfig, firebaseConfig, jwtConfig, mailConfig, qdrantConfig, redisConfig, supabaseConfig };

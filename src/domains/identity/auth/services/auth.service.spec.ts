@@ -38,7 +38,12 @@ describe('AuthService role assignment', () => {
             createClientWithAccessToken: () => overrides.userClient,
         };
         const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        const service = new AuthService(userRepository as unknown as UserRepository, supabaseAuth as unknown as SupabaseAuthProvider, logger as unknown as LoggerService);
+        const service = new AuthService(
+            userRepository as unknown as UserRepository,
+            supabaseAuth as unknown as SupabaseAuthProvider,
+            logger as unknown as LoggerService,
+            {} as never,
+        );
         return { service, userRepository };
     };
 

@@ -1,7 +1,10 @@
+import { AllowUnprovisioned } from '@/auth/decorators';
+import { CurrentUser as CurrentAuthUser } from '@/auth/decorators/current-user.decorator';
+import type { AuthUser } from '@/auth/interfaces/auth-user.interface';
 import { LoggerService } from '@/shared';
 import { CurrentUser, ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
 import { jwtDecode } from '@/shared/utils/jwt.util';
-import { BadRequestException, Body, Controller, Get, HttpStatus, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { Request } from 'express';
@@ -130,6 +133,21 @@ export class AuthController {
         this.logger.info('OAuth user synced successfully');
 
         return result.session;
+    }
+
+    // No RolesGuard here on purpose: a user being provisioned has no database role yet. The global guard still requires a valid Auth0 token.
+    @Post('sync')
+    @HttpCode(HttpStatus.OK)
+    @AllowUnprovisioned()
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Provision the User for the signed-in Auth0 identity (idempotent); call once after the Auth0 callback' })
+    @ApiResponse({ status: HttpStatus.OK, type: UserDto, description: 'The User for this identity, created on the first call' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing access token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'email_not_verified' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'account_link_required: the email belongs to another User; an admin must link the account' })
+    public async syncAuth0User(@CurrentAuthUser() authUser: AuthUser): Promise<UserDto> {
+        const user = await this.authService.syncAuth0User(authUser);
+        return new UserDto(user);
     }
 
     @Get('verify')

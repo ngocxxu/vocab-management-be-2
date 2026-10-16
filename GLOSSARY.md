@@ -35,3 +35,19 @@ _Avoid_: Search (too generic — always say which kind)
 **Substring fallback**:
 The degraded search path used when the Gemini or Qdrant circuit breaker is open: a plain substring match against Postgres. Lower quality, but keeps search working during an outage.
 _Avoid_: Search, backup search
+
+**User**:
+A person's account in Vocab. Identified internally by `users.id`, which never changes and is the only id that ownership, roles and quotas refer to. A User may have several Identities.
+_Avoid_: Account (ambiguous with the login at the provider), Profile
+
+**Identity**:
+One external login (a token issuer plus the subject that issuer assigns) mapped to exactly one User. Found only by issuer + subject, never by email. A valid token whose Identity is not mapped yet is rejected as not provisioned.
+_Avoid_: Login, Auth user, Supabase user
+
+**Provisioning**:
+Creating a User, together with its first Identity, the first time a verified login arrives with no mapped Identity. Happens once per login and is safe to repeat.
+_Avoid_: Sign-up, Registration, Auto-create
+
+**Account link**:
+Attaching an Identity to a User that already exists. Never automatic and never decided by email: when a new login's email already belongs to a User, Provisioning stops and a person links the account by hand.
+_Avoid_: Merge, Auto-link

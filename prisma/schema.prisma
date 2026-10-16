@@ -153,6 +153,23 @@ model LanguageFolder {
   @@map("language_folder")
 }
 
+/// External login identity (token issuer + subject) mapped to one internal User.
+/// Never matched by email; `userId` is the stable internal id.
+model UserIdentity {
+  id        String   @id @default(cuid()) @map("id")
+  issuer    String   @map("issuer")
+  subject   String   @map("subject")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([issuer, subject])
+  @@index([userId])
+  @@map("user_identity")
+}
+
 model ApiKey {
   id         String        @id @default(cuid()) @map("id")
   name       String        @map("name")
@@ -504,6 +521,7 @@ model User {
   isActive               Boolean                 @default(true) @map("is_active")
   emailConfirmed         Boolean                 @default(false) @map("email_confirmed")
   supabaseUserId         String?                 @unique @map("supabase_user_id")
+  identities             UserIdentity[]
   chatLastReadAt         DateTime?               @map("chat_last_read_at")
   createdAt              DateTime                @default(now()) @map("created_at")
   updatedAt              DateTime                @updatedAt @map("updated_at")

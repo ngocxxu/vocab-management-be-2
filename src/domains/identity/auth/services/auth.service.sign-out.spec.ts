@@ -10,7 +10,7 @@ function buildService(adminResult: { error: AuthError | null } = { error: null }
         getServiceRoleClient: () => ({ auth: { admin: { signOut: adminSignOut } } }),
     };
 
-    const service = new AuthService({} as never, supabaseAuth as never, {} as never);
+    const service = new AuthService({} as never, supabaseAuth as never, {} as never, {} as never);
 
     return { service, adminSignOut, sharedClientSignOut };
 }

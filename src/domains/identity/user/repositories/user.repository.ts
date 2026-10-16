@@ -78,6 +78,13 @@ export class UserRepository extends BaseRepository {
         });
     }
 
+    /** Emails are stored as typed (not lower-cased), so a collision check must ignore case to see every existing owner. */
+    public async findByEmailIgnoreCase(email: string): Promise<User | null> {
+        return this.prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
+        });
+    }
+
     public async create(data: Prisma.UserCreateInput): Promise<User> {
         return this.prisma.user.create({
             data,

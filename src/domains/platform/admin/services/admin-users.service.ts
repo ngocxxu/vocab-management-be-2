@@ -1,15 +1,16 @@
+import { Auth0ManagementService } from '@/domains/identity/auth0-management';
 import type { UserDto } from '@/domains/identity/user/dto';
 import { UserNotFoundInDatabaseException } from '@/domains/identity/user/exceptions';
-import { UserRepository, UserTransaction } from '@/domains/identity/user/repositories';
+import { UserIdentityRepository, UserRepository, UserTransaction } from '@/domains/identity/user/repositories';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { getPagination } from '@/shared/utils/pagination.util';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { User, UserRole } from '@prisma/client';
 import { AdminUsersQueryDto } from '../dto/admin-users-query.dto';
 import { UpdateAdminUserInput } from '../dto/update-admin-user.input';
-import { AdminLastActiveAdminException, AdminUserDeleteFailedException, AdminUserInvalidChangeException, AdminUserSelfActionException } from '../exceptions';
+import { AdminLastActiveAdminException, AdminUserInvalidChangeException, AdminUserSelfActionException } from '../exceptions';
 import { toAdminUserDto, toAdminUserPage } from '../mappers';
 
 type UserChange = { role?: UserRole; isActive?: boolean };
@@ -20,13 +21,11 @@ const isActiveAdmin = (user: User): boolean => user.role === UserRole.ADMIN && u
 export class AdminUsersService {
     public constructor(
         private readonly userRepository: UserRepository,
+        private readonly userIdentityRepository: UserIdentityRepository,
         private readonly supabaseAuth: SupabaseAuthProvider,
+        private readonly auth0Management: Auth0ManagementService,
         private readonly logger: LoggerService,
     ) {}
-
-    private get supabase() {
-        return this.supabaseAuth.getServiceRoleClient();
-    }
 
     /** A page of users filtered by search, role and status, sorted and paged in the database. */
     public async list(query: AdminUsersQueryDto): Promise<PaginationDto<UserDto>> {
@@ -74,23 +73,27 @@ export class AdminUsersService {
     }
 
     /**
-     * Deletes a user from Supabase, then from the database. A user with no Supabase account
-     * loses only the database row. The last active admin cannot be deleted.
+     * Permanently deletes a user from the database, then removes their Supabase and Auth0 accounts. The external
+     * cleanup is best-effort and never blocks the delete: a leftover account is captured so it can be removed by
+     * hand. The last active admin cannot be deleted.
      */
     public async remove(actor: User, id: string): Promise<UserDto> {
         const target = await this.findTarget(id);
         this.assertNotSelf(actor, target, 'delete');
-        // Refused before Supabase is touched, so a refused delete leaves the account intact.
+        // Refused before anything is read or deleted, so a refused delete leaves the account intact.
         await this.assertKeepsAnotherAdmin(target);
 
-        // Supabase goes first: if it fails, the local row stays and the admin can retry.
-        await this.deleteSupabaseAccount(target.supabaseUserId);
-
-        // Checked again inside the transaction: another admin may have been removed while Supabase was called.
-        const removed = await this.userRepository.runSerializableWithRetry(async (tx) => {
+        // Checked again inside the transaction: another admin may have been removed in the meantime.
+        const { removed, identities } = await this.userRepository.runSerializableWithRetry(async (tx) => {
             await this.assertKeepsAnotherAdmin(target, tx);
-            return this.userRepository.delete(id, tx);
+            // Read in the same transaction as the delete: the Identity rows cascade away with the user, and a login
+            // provisioned a moment earlier must not slip past the Auth0 cleanup.
+            const found = await this.userIdentityRepository.findByUserId(target.id, tx);
+            return { removed: await this.userRepository.delete(id, tx), identities: found };
         });
+
+        // After the row is gone nothing external can block the delete; an outage only leaves an account to clean up.
+        await Promise.all([this.supabaseAuth.deleteUserBestEffort(target.id, target.supabaseUserId), this.auth0Management.deleteIdentities(target.id, identities)]);
 
         this.logger.info(`admin.user.delete actor=${actor.id} target=${id} email=${target.email}`);
 
@@ -123,19 +126,5 @@ export class AdminUsersService {
         if (others === 0) {
             throw new AdminLastActiveAdminException();
         }
-    }
-
-    /** A user without a Supabase account has nothing to delete there. A 404 means it is already gone. */
-    private async deleteSupabaseAccount(supabaseUserId: string | null): Promise<void> {
-        if (!supabaseUserId) {
-            return;
-        }
-
-        const { error } = await this.supabase.auth.admin.deleteUser(supabaseUserId);
-        if (!error || error.status === HttpStatus.NOT_FOUND) {
-            return;
-        }
-
-        throw new AdminUserDeleteFailedException(error.message);
     }
 }

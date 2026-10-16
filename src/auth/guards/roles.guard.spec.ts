@@ -30,7 +30,7 @@ describe('RolesGuard', () => {
     it('rejects a token that claims ADMIN when the database role is not ADMIN', () => {
         const guard = createGuard([UserRole.ADMIN]);
         const context = createContext({
-            authUser: { id: 'user-1', email: 'user@example.com', roles: [UserRole.ADMIN], provider: 'jwt' },
+            authUser: { id: 'user-1', email: 'user@example.com', roles: [UserRole.ADMIN], provider: 'auth0' },
             currentUser: { role: UserRole.GUEST },
         });
 
@@ -40,7 +40,7 @@ describe('RolesGuard', () => {
     it('rejects a token that claims ADMIN when no database user is bound', () => {
         const guard = createGuard([UserRole.ADMIN]);
         const context = createContext({
-            authUser: { id: 'user-1', email: 'user@example.com', roles: [UserRole.ADMIN], provider: 'jwt' },
+            authUser: { id: 'user-1', email: 'user@example.com', roles: [UserRole.ADMIN], provider: 'auth0' },
         });
 
         expect(() => guard.canActivate(context)).toThrow(ForbiddenException);

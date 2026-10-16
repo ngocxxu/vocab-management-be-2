@@ -1,6 +1,7 @@
 import { LanguageModule } from '@/domains/catalog/language';
 import { PlanModule } from '@/domains/catalog/plan';
 import { WordTypeModule } from '@/domains/catalog/word-type';
+import { Auth0ManagementModule } from '@/domains/identity/auth0-management';
 import { UserModule } from '@/domains/identity/user';
 import { createBasicAuthMiddleware } from '@/shared';
 import { ExpressAdapter } from '@bull-board/express';
@@ -13,6 +14,7 @@ import { AdminStatsService, AdminUsersService } from './services';
 @Module({
     imports: [
         UserModule,
+        Auth0ManagementModule,
         PlanModule,
         LanguageModule,
         WordTypeModule,
