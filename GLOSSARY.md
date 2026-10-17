@@ -48,6 +48,10 @@ _Avoid_: Login, Auth user, Supabase user
 Creating a User, together with its first Identity, the first time a verified login arrives with no mapped Identity. Happens once per login and is safe to repeat.
 _Avoid_: Sign-up, Registration, Auto-create
 
+**Provider sign-up**:
+Creating a login at the identity provider (a password account on Auth0, a first Google sign-in). It creates no User: Provisioning does that on the first verified login. A password provider sign-up is refused when its email already belongs to a User.
+_Avoid_: Registration, Provisioning (a different step)
+
 **Account link**:
-Attaching an Identity to a User that already exists. Never automatic and never decided by email: when a new login's email already belongs to a User, Provisioning stops and a person links the account by hand.
+Attaching an Identity to a User that already exists. Never automatic and never decided by email: when a new login's email already belongs to a User, Provisioning stops. The User then links the new login themselves from a session already authenticated as that User, signing in with the new login to prove they control both. An admin can still link by hand as a fallback. The new login must have a verified email, which need not equal the User's email.
 _Avoid_: Merge, Auto-link
