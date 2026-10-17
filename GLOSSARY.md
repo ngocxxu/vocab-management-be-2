@@ -55,3 +55,7 @@ _Avoid_: Registration, Provisioning (a different step)
 **Account link**:
 Attaching an Identity to a User that already exists. Never automatic and never decided by email: when a new login's email already belongs to a User, Provisioning stops. The User then links the new login themselves from a session already authenticated as that User, signing in with the new login to prove they control both. An admin can still link by hand as a fallback. The new login must have a verified email, which need not equal the User's email.
 _Avoid_: Merge, Auto-link
+
+**Sign-in method**:
+What a User calls an Identity on screen ("Google", "password"). User-facing text uses "sign-in method"; code and this glossary use Identity.
+_Avoid_: Login, Account (in user-facing text)

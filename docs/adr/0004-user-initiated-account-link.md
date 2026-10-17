@@ -8,4 +8,6 @@ We chose this over keeping the admin-only link, and over linking silently by ver
 
 We also refuse a password Provider sign-up whose email already belongs to a User, so the collision is caught at sign-up instead of at the first login. The message tells the User the email exists. We accept that this reveals that an address is registered.
 
+The link lives in our Identity table, not in Auth0's own account linking: Auth0's merge would give the second login the first login's `sub` and hide it from our mapping. The User proves the second login with a fresh Auth0 token sent with the link request: the FE forces a new sign-in (`prompt=login`) and the BE rejects a token issued more than five minutes earlier. Only Auth0 tokens are accepted for the second login. The endpoint is throttled, and every link attempt is logged without the email.
+
 This must land before the Supabase contract step (#35): the admin link script matches on `users.supabase_user_id`, the User-initiated link does not, so dropping that column no longer strands unlinked Users.
