@@ -54,6 +54,15 @@ export class OAuthResponseDto {
     }
 }
 
+export class LinkNonceDto {
+    @ApiProperty({ description: 'Single-use nonce, valid for 5 minutes. Send it to Auth0 as the `nonce` parameter of the second login.', example: 'k3J9...' })
+    public readonly nonce: string;
+
+    public constructor(nonce: string) {
+        this.nonce = nonce;
+    }
+}
+
 export class SignInMethodsDto {
     @ApiProperty({ description: 'Provider labels of the sign-in methods the User has connected. Never the provider user id.', example: ['google', 'password'], type: [String] })
     public readonly methods: string[];

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import type { AuthUser } from '@/auth';
+import type { Auth0IdToken, AuthUser } from '@/auth';
 import { GlobalAuthGuard } from '@/auth/guards/global-auth.guard';
 import { AuthIdentityService } from '@/auth/services/auth-identity.service';
 import { AuthTokenService } from '@/auth/services/auth-token.service';
@@ -15,6 +15,7 @@ import request from 'supertest';
 
 import { UserIdentityRepository, UserRepository } from '../user/repositories';
 import { AuthController } from './controllers';
+import { LinkNonceRepository } from './repositories';
 import { AccountLinkService, AuthService } from './services';
 
 const ISSUER = 'https://vocab-development.jp.auth0.com/';
@@ -85,13 +86,30 @@ function createFakes() {
             identities.push({ userId, issuer, subject });
         },
     };
-    return { users, identities, userRepository, identityRepository };
+    const nonces: { nonce: string; userId: string; expiresAt: number; used: boolean }[] = [];
+    const nonceRepository = {
+        create: async (userId: string, nonce: string, expiresAt: Date) => {
+            await settle();
+            nonces.push({ nonce, userId, expiresAt: expiresAt.getTime(), used: false });
+        },
+        consume: async (nonce: string, userId: string, now: Date) => {
+            await settle();
+            const row = nonces.find((entry) => entry.nonce === nonce && entry.userId === userId && !entry.used && entry.expiresAt > now.getTime());
+            if (!row) {
+                return false;
+            }
+            row.used = true;
+            return true;
+        },
+    };
+    return { users, identities, userRepository, identityRepository, nonceRepository };
 }
 
 describe('POST /auth/sync (HTTP)', () => {
     let app: INestApplication;
     let fakes: ReturnType<typeof createFakes>;
     const tokens = new Map<string, AuthUser>();
+    const idTokens = new Map<string, Auth0IdToken>();
 
     const as = (token: string, authUser: AuthUser) => {
         tokens.set(token, authUser);
@@ -103,6 +121,7 @@ describe('POST /auth/sync (HTTP)', () => {
     beforeEach(async () => {
         fakes = createFakes();
         tokens.clear();
+        idTokens.clear();
         const authTokenService = {
             extractBearerToken: (req: { headers: { authorization?: string } }) => req.headers.authorization?.replace('Bearer ', '') ?? null,
             resolveAuthUser: async (token: string) => {
@@ -111,6 +130,13 @@ describe('POST /auth/sync (HTTP)', () => {
                     throw new (await import('@nestjs/common')).UnauthorizedException('Invalid or expired token');
                 }
                 return authUser;
+            },
+            verifyIdToken: async (token: string) => {
+                const idToken = idTokens.get(token);
+                if (!idToken) {
+                    throw new (await import('@nestjs/common')).UnauthorizedException('id_token_invalid');
+                }
+                return idToken;
             },
         };
         const moduleRef = await Test.createTestingModule({
@@ -123,6 +149,7 @@ describe('POST /auth/sync (HTTP)', () => {
                 { provide: AuthTokenService, useValue: authTokenService },
                 { provide: UserRepository, useValue: fakes.userRepository },
                 { provide: UserIdentityRepository, useValue: fakes.identityRepository },
+                { provide: LinkNonceRepository, useValue: fakes.nonceRepository },
                 { provide: SupabaseAuthProvider, useValue: {} },
                 { provide: LoggerService, useValue: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
             ],
@@ -229,17 +256,34 @@ describe('POST /auth/sync (HTTP)', () => {
 
     describe('account link (HTTP)', () => {
         const now = () => Math.floor(Date.now() / 1000);
-        const link = async (sessionToken: string, linkToken: string) =>
-            request(app.getHttpServer()).post('/auth/identities/link').set('Authorization', `Bearer ${sessionToken}`).send({ linkToken });
+        const nonceFor = async (sessionToken: string) =>
+            (await request(app.getHttpServer()).post('/auth/identities/link-nonce').set('Authorization', `Bearer ${sessionToken}`)).body.nonce as string;
+        /** The ID token Auth0 would return for the second login, carrying the nonce that login was started with. */
+        const idTokenOf = (name: string, subject: string, nonce: string, overrides: Partial<Auth0IdToken> = {}) => {
+            idTokens.set(name, { issuer: ISSUER, subject, nonce, authTime: now() - 10, email: `${subject.replace(/\W/g, '')}@example.com`, emailVerified: true, ...overrides });
+            return name;
+        };
+        const link = async (sessionToken: string, idToken: string) =>
+            request(app.getHttpServer()).post('/auth/identities/link').set('Authorization', `Bearer ${sessionToken}`).send({ idToken });
         const methods = async (sessionToken: string) => request(app.getHttpServer()).get('/auth/identities').set('Authorization', `Bearer ${sessionToken}`);
+
+        it('issues a nonce to the signed-in User', async () => {
+            const session = as('t-ada', login('google-oauth2|ada'));
+            await sync(session);
+
+            const response = await request(app.getHttpServer()).post('/auth/identities/link-nonce').set('Authorization', `Bearer ${session}`);
+
+            expect(response.status).toBe(201);
+            expect(response.body.nonce).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        });
 
         it('connects a second sign-in method to the signed-in User, who can then sign in with either', async () => {
             const session = as('t-ada', login('google-oauth2|ada'));
             await sync(session);
-            const second = as('t-ada-pw', login('auth0|ada-pw', { email: 'ada.pw@example.com', issuedAt: now() - 10 }));
+            const idToken = idTokenOf('id-ada-pw', 'auth0|ada-pw', await nonceFor(session));
 
-            const response = await link(session, second);
-            const viaSecond = await probe(second);
+            const response = await link(session, idToken);
+            const viaSecond = await probe(as('t-ada-pw', login('auth0|ada-pw')));
 
             expect(response.status).toBe(200);
             expect(response.body.methods).toEqual(['google', 'password']);
@@ -252,20 +296,19 @@ describe('POST /auth/sync (HTTP)', () => {
             const bob = as('t-bob', login('google-oauth2|bob'));
             await sync(ada);
             await sync(bob);
-            const bobsOtherLogin = as('t-bob-pw', login('auth0|bob-pw', { issuedAt: now() - 10 }));
-            await link(bob, bobsOtherLogin);
+            await link(bob, idTokenOf('id-bob-pw', 'auth0|bob-pw', await nonceFor(bob)));
 
-            const response = await link(ada, bobsOtherLogin);
+            const response = await link(ada, idTokenOf('id-bob-pw-again', 'auth0|bob-pw', await nonceFor(ada)));
 
             expect(response.status).toBe(409);
             expect(response.body.message).toBe('identity_already_linked');
             expect((await methods(ada)).body.methods).toEqual(['google']);
         });
 
-        it('refuses a link token older than five minutes with 403 link_proof_stale', async () => {
+        it('refuses a sign-in older than five minutes with 403 link_proof_stale', async () => {
             const session = as('t-ada', login('google-oauth2|ada'));
             await sync(session);
-            const stale = as('t-ada-pw', login('auth0|ada-pw', { issuedAt: now() - 301 }));
+            const stale = idTokenOf('id-ada-pw', 'auth0|ada-pw', await nonceFor(session), { authTime: now() - 301 });
 
             const response = await link(session, stale);
 
@@ -276,7 +319,7 @@ describe('POST /auth/sync (HTTP)', () => {
         it('refuses an unverified second login with 403 email_not_verified', async () => {
             const session = as('t-ada', login('google-oauth2|ada'));
             await sync(session);
-            const unverified = as('t-ada-pw', login('auth0|ada-pw', { emailVerified: false, issuedAt: now() - 10 }));
+            const unverified = idTokenOf('id-ada-pw', 'auth0|ada-pw', await nonceFor(session), { emailVerified: false });
 
             const response = await link(session, unverified);
 
@@ -284,12 +327,49 @@ describe('POST /auth/sync (HTTP)', () => {
             expect(response.body.message).toBe('email_not_verified');
         });
 
+        it('refuses a nonce that was already used with 403 link_nonce_invalid', async () => {
+            const session = as('t-ada', login('google-oauth2|ada'));
+            await sync(session);
+            const nonce = await nonceFor(session);
+            await link(session, idTokenOf('id-ada-pw', 'auth0|ada-pw', nonce));
+
+            const response = await link(session, idTokenOf('id-ada-pw-2', 'auth0|ada-pw-2', nonce));
+
+            expect(response.status).toBe(403);
+            expect(response.body.message).toBe('link_nonce_invalid');
+            expect((await methods(session)).body.methods).toEqual(['google', 'password']);
+        });
+
+        it("refuses another User's nonce with 403 link_nonce_invalid", async () => {
+            const ada = as('t-ada', login('google-oauth2|ada'));
+            const bob = as('t-bob', login('google-oauth2|bob'));
+            await sync(ada);
+            await sync(bob);
+            const bobsNonce = await nonceFor(bob);
+
+            const response = await link(ada, idTokenOf('id-mallory', 'auth0|mallory', bobsNonce));
+
+            expect(response.status).toBe(403);
+            expect(response.body.message).toBe('link_nonce_invalid');
+            expect((await methods(ada)).body.methods).toEqual(['google']);
+        });
+
+        it('refuses an ID token that does not verify with 401 id_token_invalid', async () => {
+            const session = as('t-ada', login('google-oauth2|ada'));
+            await sync(session);
+
+            const response = await link(session, 'not-an-id-token');
+
+            expect(response.status).toBe(401);
+            expect(response.body.message).toBe('id_token_invalid');
+        });
+
         it("lists only the caller's own sign-in methods, as labels", async () => {
             const ada = as('t-ada', login('google-oauth2|ada'));
             const bob = as('t-bob', login('google-oauth2|bob'));
             await sync(ada);
             await sync(bob);
-            await link(bob, as('t-bob-pw', login('auth0|bob-pw', { issuedAt: now() - 10 })));
+            await link(bob, idTokenOf('id-bob-pw', 'auth0|bob-pw', await nonceFor(bob)));
 
             const response = await methods(ada);
 
@@ -298,17 +378,21 @@ describe('POST /auth/sync (HTTP)', () => {
             expect(JSON.stringify(response.body)).not.toContain('ada');
         });
 
-        it('requires a signed-in session on both routes', async () => {
-            const link401 = await request(app.getHttpServer()).post('/auth/identities/link').send({ linkToken: 'x' });
+        it('requires a signed-in session on every route', async () => {
+            const nonce401 = await request(app.getHttpServer()).post('/auth/identities/link-nonce');
+            const link401 = await request(app.getHttpServer()).post('/auth/identities/link').send({ idToken: 'x' });
             const list401 = await request(app.getHttpServer()).get('/auth/identities');
 
-            expect([link401.status, list401.status]).toEqual([401, 401]);
+            expect([nonce401.status, link401.status, list401.status]).toEqual([401, 401, 401]);
         });
 
-        it('limits the link route to 5 attempts a minute', () => {
-            const handler = Object.getOwnPropertyDescriptor(AuthController.prototype, 'linkIdentity')?.value as object;
+        it.each([
+            ['issueLinkNonce', 10],
+            ['linkIdentity', 5],
+        ])('limits %s to %i attempts a minute', (method, limit) => {
+            const handler = Object.getOwnPropertyDescriptor(AuthController.prototype, method)?.value as object;
 
-            expect(Reflect.getMetadata('THROTTLER:LIMITdefault', handler)).toBe(5);
+            expect(Reflect.getMetadata('THROTTLER:LIMITdefault', handler)).toBe(limit);
             expect(Reflect.getMetadata('THROTTLER:TTLdefault', handler)).toBe(60000);
         });
     });

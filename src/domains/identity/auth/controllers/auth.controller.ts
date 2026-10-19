@@ -14,6 +14,7 @@ import { UserDto } from '../../user/dto';
 import {
     ChangePasswordInput,
     LinkIdentityInput,
+    LinkNonceDto,
     OAuthInput,
     OAuthResponseDto,
     OAuthSyncInput,
@@ -165,6 +166,19 @@ export class AuthController {
         return new SignInMethodsDto(await this.accountLinkService.listSignInMethods(user.id));
     }
 
+    @Post('identities/link-nonce')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Throttle({ default: { limit: 10, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Start connecting another sign-in method: a single-use nonce bound to the signed-in User, valid for 5 minutes' })
+    @ApiResponse({ status: HttpStatus.CREATED, type: LinkNonceDto, description: 'The nonce to send to Auth0 with the second login' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many nonce requests' })
+    public async issueLinkNonce(@CurrentUser() user: User): Promise<LinkNonceDto> {
+        return new LinkNonceDto(await this.accountLinkService.issueNonce(user));
+    }
+
     @Post('identities/link')
     @HttpCode(HttpStatus.OK)
     @UseGuards(RolesGuard)
@@ -172,14 +186,14 @@ export class AuthController {
     // Tight on purpose: a link is a security-sensitive change, and a stolen proof should not be retried at speed.
     @Throttle({ default: { limit: 5, ttl: 60000 } })
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Connect another sign-in method to the signed-in User (idempotent). The session is the User; the body token proves control of the new method.' })
+    @ApiOperation({ summary: 'Connect another sign-in method to the signed-in User (idempotent). The session is the User; the body ID token proves control of the new method.' })
     @ApiResponse({ status: HttpStatus.OK, type: SignInMethodsDto, description: 'The sign-in methods after linking' })
-    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token, or an invalid link token' })
-    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'email_not_verified or link_proof_stale (the link token is older than 5 minutes)' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token, or id_token_invalid' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'link_nonce_invalid, link_proof_stale (auth_time older than 5 minutes) or email_not_verified' })
     @ApiResponse({ status: HttpStatus.CONFLICT, description: 'identity_already_linked: that sign-in method belongs to another User' })
     @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many link attempts' })
     public async linkIdentity(@CurrentUser() user: User, @Body() input: LinkIdentityInput): Promise<SignInMethodsDto> {
-        await this.accountLinkService.linkAuth0Identity(user, input.linkToken);
+        await this.accountLinkService.linkAuth0Identity(user, input.idToken);
         return new SignInMethodsDto(await this.accountLinkService.listSignInMethods(user.id));
     }
 
