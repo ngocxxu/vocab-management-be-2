@@ -93,6 +93,7 @@ export class AuthTokenService {
                 issuer,
                 subject: payload.sub,
                 clientId: typeof payload.azp === 'string' ? payload.azp : null,
+                issuedAt: typeof payload.iat === 'number' ? payload.iat : undefined,
             };
         } catch (error) {
             if (error instanceof UnauthorizedException) {

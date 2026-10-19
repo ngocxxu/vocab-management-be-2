@@ -53,3 +53,12 @@ export class OAuthResponseDto {
         this.provider = entity.provider;
     }
 }
+
+export class SignInMethodsDto {
+    @ApiProperty({ description: 'Provider labels of the sign-in methods the User has connected. Never the provider user id.', example: ['google', 'password'], type: [String] })
+    public readonly methods: string[];
+
+    public constructor(methods: string[]) {
+        this.methods = methods;
+    }
+}

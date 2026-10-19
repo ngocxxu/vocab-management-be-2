@@ -143,3 +143,14 @@ export class OAuthSyncInput {
     @IsNotEmpty()
     public readonly refreshToken: string;
 }
+
+export class LinkIdentityInput {
+    @ApiProperty({
+        description: 'Fresh Auth0 access token of the sign-in method being connected. Proves the User controls it.',
+        example: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+    })
+    @IsJWT()
+    @IsNotEmpty()
+    @MaxLength(8192)
+    public readonly linkToken: string;
+}

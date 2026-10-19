@@ -15,7 +15,7 @@ import request from 'supertest';
 
 import { UserIdentityRepository, UserRepository } from '../user/repositories';
 import { AuthController } from './controllers';
-import { AuthService } from './services';
+import { AccountLinkService, AuthService } from './services';
 
 const ISSUER = 'https://vocab-development.jp.auth0.com/';
 
@@ -73,8 +73,19 @@ function createFakes() {
             const identity = identities.find((entry) => entry.issuer === issuer && entry.subject === subject);
             return users.find((user) => user.id === identity?.userId) ?? null;
         },
+        findByUserId: async (userId: string) => {
+            await settle();
+            return identities.filter((entry) => entry.userId === userId).map(({ issuer, subject }) => ({ issuer, subject }));
+        },
+        link: async (userId: string, issuer: string, subject: string) => {
+            await settle();
+            if (identities.some((entry) => entry.issuer === issuer && entry.subject === subject)) {
+                throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
+            }
+            identities.push({ userId, issuer, subject });
+        },
     };
-    return { users, userRepository, identityRepository };
+    return { users, identities, userRepository, identityRepository };
 }
 
 describe('POST /auth/sync (HTTP)', () => {
@@ -106,6 +117,7 @@ describe('POST /auth/sync (HTTP)', () => {
             controllers: [AuthController, ProbeController],
             providers: [
                 AuthService,
+                AccountLinkService,
                 AuthIdentityService,
                 { provide: APP_GUARD, useClass: GlobalAuthGuard },
                 { provide: AuthTokenService, useValue: authTokenService },
@@ -213,5 +225,91 @@ describe('POST /auth/sync (HTTP)', () => {
         const response = await request(app.getHttpServer()).post('/auth/sync');
 
         expect(response.status).toBe(401);
+    });
+
+    describe('account link (HTTP)', () => {
+        const now = () => Math.floor(Date.now() / 1000);
+        const link = async (sessionToken: string, linkToken: string) =>
+            request(app.getHttpServer()).post('/auth/identities/link').set('Authorization', `Bearer ${sessionToken}`).send({ linkToken });
+        const methods = async (sessionToken: string) => request(app.getHttpServer()).get('/auth/identities').set('Authorization', `Bearer ${sessionToken}`);
+
+        it('connects a second sign-in method to the signed-in User, who can then sign in with either', async () => {
+            const session = as('t-ada', login('google-oauth2|ada'));
+            await sync(session);
+            const second = as('t-ada-pw', login('auth0|ada-pw', { email: 'ada.pw@example.com', issuedAt: now() - 10 }));
+
+            const response = await link(session, second);
+            const viaSecond = await probe(second);
+
+            expect(response.status).toBe(200);
+            expect(response.body.methods).toEqual(['google', 'password']);
+            expect(fakes.users).toHaveLength(1);
+            expect(viaSecond.body.userId).toBe(fakes.users[0].id);
+        });
+
+        it('refuses a sign-in method that belongs to another User with 409 identity_already_linked', async () => {
+            const ada = as('t-ada', login('google-oauth2|ada'));
+            const bob = as('t-bob', login('google-oauth2|bob'));
+            await sync(ada);
+            await sync(bob);
+            const bobsOtherLogin = as('t-bob-pw', login('auth0|bob-pw', { issuedAt: now() - 10 }));
+            await link(bob, bobsOtherLogin);
+
+            const response = await link(ada, bobsOtherLogin);
+
+            expect(response.status).toBe(409);
+            expect(response.body.message).toBe('identity_already_linked');
+            expect((await methods(ada)).body.methods).toEqual(['google']);
+        });
+
+        it('refuses a link token older than five minutes with 403 link_proof_stale', async () => {
+            const session = as('t-ada', login('google-oauth2|ada'));
+            await sync(session);
+            const stale = as('t-ada-pw', login('auth0|ada-pw', { issuedAt: now() - 301 }));
+
+            const response = await link(session, stale);
+
+            expect(response.status).toBe(403);
+            expect(response.body.message).toBe('link_proof_stale');
+        });
+
+        it('refuses an unverified second login with 403 email_not_verified', async () => {
+            const session = as('t-ada', login('google-oauth2|ada'));
+            await sync(session);
+            const unverified = as('t-ada-pw', login('auth0|ada-pw', { emailVerified: false, issuedAt: now() - 10 }));
+
+            const response = await link(session, unverified);
+
+            expect(response.status).toBe(403);
+            expect(response.body.message).toBe('email_not_verified');
+        });
+
+        it("lists only the caller's own sign-in methods, as labels", async () => {
+            const ada = as('t-ada', login('google-oauth2|ada'));
+            const bob = as('t-bob', login('google-oauth2|bob'));
+            await sync(ada);
+            await sync(bob);
+            await link(bob, as('t-bob-pw', login('auth0|bob-pw', { issuedAt: now() - 10 })));
+
+            const response = await methods(ada);
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({ methods: ['google'] });
+            expect(JSON.stringify(response.body)).not.toContain('ada');
+        });
+
+        it('requires a signed-in session on both routes', async () => {
+            const link401 = await request(app.getHttpServer()).post('/auth/identities/link').send({ linkToken: 'x' });
+            const list401 = await request(app.getHttpServer()).get('/auth/identities');
+
+            expect([link401.status, list401.status]).toEqual([401, 401]);
+        });
+
+        it('limits the link route to 5 attempts a minute', () => {
+            const handler = Object.getOwnPropertyDescriptor(AuthController.prototype, 'linkIdentity')?.value as object;
+
+            expect(Reflect.getMetadata('THROTTLER:LIMITdefault', handler)).toBe(5);
+            expect(Reflect.getMetadata('THROTTLER:TTLdefault', handler)).toBe(60000);
+        });
     });
 });

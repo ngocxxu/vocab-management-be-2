@@ -1,11 +1,13 @@
+import { AuthModule as TokenAuthModule } from '@/auth/auth.module';
 import { Module } from '@nestjs/common';
 import { UserModule } from '../user';
 import { AuthController } from './controllers';
-import { AuthService } from './services';
+import { AccountLinkService, AuthService } from './services';
 
 @Module({
-    imports: [UserModule],
-    providers: [AuthService],
+    // TokenAuthModule exports AuthTokenService, which AccountLinkService uses to verify the token of the sign-in method being connected.
+    imports: [UserModule, TokenAuthModule],
+    providers: [AuthService, AccountLinkService],
     controllers: [AuthController],
     exports: [],
 })

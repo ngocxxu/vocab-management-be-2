@@ -8,6 +8,7 @@ export {
     ResendConfirmationInput,
     OAuthSyncInput,
     ChangePasswordInput,
+    LinkIdentityInput,
 } from './auth.input';
-export { OAuthResponseDto, SessionDto } from './auth.dto';
+export { OAuthResponseDto, SessionDto, SignInMethodsDto } from './auth.dto';
 export { SignUpResponseDto } from './sign-up-response.dto';

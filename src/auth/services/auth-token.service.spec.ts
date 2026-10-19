@@ -55,6 +55,17 @@ describe('AuthTokenService', () => {
             expect(authUser).toMatchObject({ provider: 'auth0', issuer: ISSUER, subject: 'google-oauth2|123', clientId: 'client-1', roles: [] });
         });
 
+        it('exposes when the token was issued, in seconds, so callers can demand a fresh sign-in', async () => {
+            const { service } = createService();
+            const before = Math.floor(Date.now() / 1000);
+            const token = await sign();
+
+            const authUser = await service.resolveAuthUser(token, 'auth0');
+
+            expect(authUser.issuedAt).toBeGreaterThanOrEqual(before);
+            expect(authUser.issuedAt).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+        });
+
         it('reads email and profile only from namespaced claims', async () => {
             const { service } = createService();
             const token = await sign({

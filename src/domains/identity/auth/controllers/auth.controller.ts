@@ -1,17 +1,19 @@
 import { AllowUnprovisioned } from '@/auth/decorators';
 import { CurrentUser as CurrentAuthUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthUser } from '@/auth/interfaces/auth-user.interface';
-import { LoggerService } from '@/shared';
-import { CurrentUser, ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
+import { LoggerService, RolesGuard } from '@/shared';
+import { CurrentUser, ExcludeFromSwaggerIf, Public, Roles } from '@/shared/decorators';
 import { jwtDecode } from '@/shared/utils/jwt.util';
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { User } from '@prisma/client';
+import { Throttle } from '@nestjs/throttler';
+import { User, UserRole } from '@prisma/client';
 import { Request } from 'express';
 
 import { UserDto } from '../../user/dto';
 import {
     ChangePasswordInput,
+    LinkIdentityInput,
     OAuthInput,
     OAuthResponseDto,
     OAuthSyncInput,
@@ -20,13 +22,14 @@ import {
     ResetPasswordInput,
     SessionDto,
     SignInInput,
+    SignInMethodsDto,
     SignUpInput,
     SignUpResponseDto,
     VerifyOtpInput,
 } from '../dto';
 import { AuthUnauthorizedException } from '../exceptions';
 import { ChangePasswordPipe, OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
-import { AuthService } from '../services';
+import { AccountLinkService, AuthService } from '../services';
 
 const isProduction = (process.env.NODE_ENV ?? '') === 'production';
 
@@ -36,6 +39,7 @@ export class AuthController {
     public constructor(
         private readonly logger: LoggerService,
         private readonly authService: AuthService,
+        private readonly accountLinkService: AccountLinkService,
     ) {}
 
     @Post('signup')
@@ -148,6 +152,35 @@ export class AuthController {
     public async syncAuth0User(@CurrentAuthUser() authUser: AuthUser): Promise<UserDto> {
         const user = await this.authService.syncAuth0User(authUser);
         return new UserDto(user);
+    }
+
+    @Get('identities')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "List the signed-in User's sign-in methods as provider labels (never the provider user id)" })
+    @ApiResponse({ status: HttpStatus.OK, type: SignInMethodsDto })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing access token' })
+    public async listSignInMethods(@CurrentUser() user: User): Promise<SignInMethodsDto> {
+        return new SignInMethodsDto(await this.accountLinkService.listSignInMethods(user.id));
+    }
+
+    @Post('identities/link')
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    // Tight on purpose: a link is a security-sensitive change, and a stolen proof should not be retried at speed.
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Connect another sign-in method to the signed-in User (idempotent). The session is the User; the body token proves control of the new method.' })
+    @ApiResponse({ status: HttpStatus.OK, type: SignInMethodsDto, description: 'The sign-in methods after linking' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token, or an invalid link token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'email_not_verified or link_proof_stale (the link token is older than 5 minutes)' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'identity_already_linked: that sign-in method belongs to another User' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many link attempts' })
+    public async linkIdentity(@CurrentUser() user: User, @Body() input: LinkIdentityInput): Promise<SignInMethodsDto> {
+        await this.accountLinkService.linkAuth0Identity(user, input.linkToken);
+        return new SignInMethodsDto(await this.accountLinkService.listSignInMethods(user.id));
     }
 
     @Get('verify')

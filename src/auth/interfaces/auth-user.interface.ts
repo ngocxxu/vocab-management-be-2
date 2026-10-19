@@ -14,4 +14,6 @@ export interface AuthUser {
     profile?: { firstName?: string; lastName?: string; avatar?: string };
     /** OAuth client the token was issued to (`azp`), or null for tokens without one. */
     clientId?: string | null;
+    /** When the token was issued (`iat`, seconds since the epoch). Set for Auth0 tokens that carry it. */
+    issuedAt?: number;
 }
