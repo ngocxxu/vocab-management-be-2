@@ -10,7 +10,7 @@ We also refuse a password Provider sign-up whose email already belongs to a User
 
 ## How the proof works
 
-The link is a row in our own Identity table (`user_identity`), not Auth0's account linking. Auth0's merge would give the second login the first login's `sub` and hide it from our mapping. No Management API call is made.
+The link is a row in our own Identity table (`user_identity`), not Auth0's account linking. Auth0's merge would give the second login the first login's `sub` and hide it from our mapping. No Management API call is made to link a login the User signs in with (Google). Adding a password is the one exception, described in "Adding a password" below.
 
 The proof has four parts, and each one closes a different gap:
 
@@ -20,6 +20,22 @@ The proof has four parts, and each one closes a different gap:
 4. **Session of the User.** The link request carries the session token of the User who requested the nonce. The User who consumes the nonce must be that same User. A nonce alone is not enough.
 
 The second login must have a verified email, and that email is not compared with the User's email.
+
+## Adding a password: the backend creates the login
+
+A User who signed in only with Google has no password login, and the public password sign-up refuses their email, because it already belongs to a User. We do not open an exception in that refusal. The Pre User Registration Action cannot trust any signal that comes through the browser: it cannot read the query string, a hidden form field can be edited, and the caller of the sign-up API chooses the `client_id`. A second database connection for the link flow splits passwords across two connections, and Universal Login uses only one of them for a normal login. Research: `reports/Options for allowing the link sign-up.md`.
+
+Instead, the backend does it from an authenticated session (#45):
+
+1. It creates the password login for the User's own confirmed email through the Management API, with a random password that is thrown away.
+2. It writes the Identity at once. It created the login, so it knows the subject, and no nonce or ID token is needed.
+3. The User sets the password through a password-change email. Receiving that email proves control of the mailbox, and the ticket marks the email as verified.
+
+The public sign-up form takes no part, so the Action keeps one rule for every public sign-up on the main connection, with no exception. The password lives on the main connection, so a normal login and "forgot password" work.
+
+This is a second way to write to `user_identity`, so it gets the same protection as the link endpoint: it is throttled, every attempt is logged with the User id and issuer and never the email, and the email is the User's own, never one the caller sends. The password-change link goes to the mailbox only and is never returned to the browser. If a password login with that email already exists, the backend does not link it, because it did not create it. It sends the User to the nonce flow above.
+
+Pre User Registration may also run for the Management API call. If it does, the Action must allow only a creation the backend announced (#41). Whether it runs is not documented and must be tested on a dev tenant.
 
 ## Consequences
 

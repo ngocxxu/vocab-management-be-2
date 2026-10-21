@@ -8,15 +8,17 @@ import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
 import { Controller, Get, Req } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common/interfaces/nest-application.interface';
+import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { Prisma, User } from '@prisma/client';
 import request from 'supertest';
 
+import { Auth0ManagementService } from '../auth0-management';
 import { UserIdentityRepository, UserRepository } from '../user/repositories';
 import { AuthController } from './controllers';
 import { LinkNonceRepository } from './repositories';
-import { AccountLinkService, AuthService } from './services';
+import { AccountLinkService, AddPasswordService, AuthService } from './services';
 
 const ISSUER = 'https://vocab-development.jp.auth0.com/';
 
@@ -110,6 +112,12 @@ describe('POST /auth/sync (HTTP)', () => {
     let fakes: ReturnType<typeof createFakes>;
     const tokens = new Map<string, AuthUser>();
     const idTokens = new Map<string, Auth0IdToken>();
+    const auth0Management = {
+        createPasswordUser: jest.fn<Promise<string | null>, [string]>(),
+        sendPasswordSetEmail: jest.fn<Promise<void>, [string]>(),
+        deleteIdentities: jest.fn<Promise<void>, [string, { issuer: string; subject: string }[]]>(),
+        getLastPasswordReset: jest.fn<Promise<string | null>, [string]>(),
+    };
 
     const as = (token: string, authUser: AuthUser) => {
         tokens.set(token, authUser);
@@ -122,6 +130,10 @@ describe('POST /auth/sync (HTTP)', () => {
         fakes = createFakes();
         tokens.clear();
         idTokens.clear();
+        auth0Management.createPasswordUser.mockReset().mockResolvedValue('auth0|new123');
+        auth0Management.sendPasswordSetEmail.mockReset().mockResolvedValue();
+        auth0Management.deleteIdentities.mockReset().mockResolvedValue();
+        auth0Management.getLastPasswordReset.mockReset().mockResolvedValue('2026-10-17T09:00:00.000Z');
         const authTokenService = {
             extractBearerToken: (req: { headers: { authorization?: string } }) => req.headers.authorization?.replace('Bearer ', '') ?? null,
             resolveAuthUser: async (token: string) => {
@@ -144,7 +156,10 @@ describe('POST /auth/sync (HTTP)', () => {
             providers: [
                 AuthService,
                 AccountLinkService,
+                AddPasswordService,
                 AuthIdentityService,
+                { provide: Auth0ManagementService, useValue: auth0Management },
+                { provide: ConfigService, useValue: { get: (key: string) => (key === 'auth0.issuer' ? ISSUER : undefined) } },
                 { provide: APP_GUARD, useClass: GlobalAuthGuard },
                 { provide: AuthTokenService, useValue: authTokenService },
                 { provide: UserRepository, useValue: fakes.userRepository },
@@ -374,7 +389,7 @@ describe('POST /auth/sync (HTTP)', () => {
             const response = await methods(ada);
 
             expect(response.status).toBe(200);
-            expect(response.body).toEqual({ methods: ['google'] });
+            expect(response.body).toEqual({ methods: ['google'], pending: [] });
             expect(JSON.stringify(response.body)).not.toContain('ada');
         });
 
@@ -386,9 +401,68 @@ describe('POST /auth/sync (HTTP)', () => {
             expect([nonce401.status, link401.status, list401.status]).toEqual([401, 401, 401]);
         });
 
+        describe('adding a password', () => {
+            const addPassword = async (sessionToken: string) => request(app.getHttpServer()).post('/auth/identities/password').set('Authorization', `Bearer ${sessionToken}`);
+
+            it('creates the password login, connects it to the same User, and has the email sent', async () => {
+                const session = as('t-ada', login('google-oauth2|ada', { email: 'ada@example.com' }));
+                await sync(session);
+
+                const response = await addPassword(session);
+                const viaPassword = await probe(as('t-ada-pw', login('auth0|new123')));
+
+                expect(response.status).toBe(200);
+                expect(response.body).toEqual({ emailSent: true });
+                expect(auth0Management.createPasswordUser).toHaveBeenCalledWith('ada@example.com');
+                expect(viaPassword.body.userId).toBe(fakes.users[0].id);
+                auth0Management.getLastPasswordReset.mockResolvedValue(null);
+                expect((await methods(session)).body).toEqual({ methods: ['google'], pending: ['password'] });
+            });
+
+            it('shows the password as connected once it has been set', async () => {
+                const session = as('t-ada', login('google-oauth2|ada', { email: 'ada@example.com' }));
+                await sync(session);
+                await addPassword(session);
+                auth0Management.getLastPasswordReset.mockResolvedValue('2026-10-17T09:00:00.000Z');
+
+                expect((await methods(session)).body).toEqual({ methods: ['google', 'password'], pending: [] });
+            });
+
+            it('resends the email on a second request instead of creating another login', async () => {
+                const session = as('t-ada', login('google-oauth2|ada'));
+                await sync(session);
+
+                await addPassword(session);
+                const again = await addPassword(session);
+
+                expect(again.status).toBe(200);
+                expect(auth0Management.createPasswordUser).toHaveBeenCalledTimes(1);
+                expect(auth0Management.sendPasswordSetEmail).toHaveBeenCalledTimes(2);
+            });
+
+            it('answers 409 password_login_exists when a login with that email already exists, and changes nothing', async () => {
+                const session = as('t-ada', login('google-oauth2|ada'));
+                await sync(session);
+                auth0Management.createPasswordUser.mockResolvedValue(null);
+
+                const response = await addPassword(session);
+
+                expect(response.status).toBe(409);
+                expect(response.body.message).toBe('password_login_exists');
+                expect((await methods(session)).body.methods).toEqual(['google']);
+            });
+
+            it('requires a signed-in session', async () => {
+                const response = await request(app.getHttpServer()).post('/auth/identities/password');
+
+                expect(response.status).toBe(401);
+            });
+        });
+
         it.each([
             ['issueLinkNonce', 10],
             ['linkIdentity', 5],
+            ['addPassword', 3],
         ])('limits %s to %i attempts a minute', (method, limit) => {
             const handler = Object.getOwnPropertyDescriptor(AuthController.prototype, method)?.value as object;
 

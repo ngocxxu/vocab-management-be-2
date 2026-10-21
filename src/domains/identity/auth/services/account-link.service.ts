@@ -5,6 +5,7 @@ import { captureSentryException } from '@/shared/utils/sentry.util';
 import { Injectable } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { Auth0ManagementService } from '../../auth0-management';
 import { UserIdentityRepository } from '../../user/repositories';
 import { AuthConflictException, AuthForbiddenException } from '../exceptions';
 import { LinkNonceRepository } from '../repositories';
@@ -29,6 +30,7 @@ export class AccountLinkService {
         private readonly userIdentityRepository: UserIdentityRepository,
         private readonly linkNonceRepository: LinkNonceRepository,
         private readonly logger: LoggerService,
+        private readonly auth0Management: Auth0ManagementService,
     ) {}
 
     /** Step 1 of an Account link: a single-use nonce bound to the signed-in User. The FE sends it to Auth0 so the ID token carries it back. */
@@ -81,9 +83,23 @@ export class AccountLinkService {
     }
 
     /** The User's sign-in methods as provider labels only; the subject and issuer never leave the server. */
-    public async listSignInMethods(userId: string): Promise<string[]> {
+    /**
+     * The User's sign-in methods as provider labels. A password Identity exists as soon as the login is created, but it only
+     * counts as connected once the User has set the password. Until then it is `pending` (the set-password email is still open).
+     */
+    public async listSignInMethods(userId: string): Promise<{ methods: string[]; pending: string[] }> {
         const identities = await this.userIdentityRepository.findByUserId(userId);
-        return [...new Set(identities.map(({ subject }) => signInMethodFromSubject(subject)))].sort();
+        const entries = await Promise.all(
+            identities.map(async ({ subject }) => {
+                const label = signInMethodFromSubject(subject);
+                if (label !== 'password') {
+                    return { label, isPending: false };
+                }
+                return { label, isPending: (await this.auth0Management.getLastPasswordReset(subject)) === null };
+            }),
+        );
+        const labelsWhere = (isPending: boolean): string[] => [...new Set(entries.filter((entry) => entry.isPending === isPending).map(({ label }) => label))].sort();
+        return { methods: labelsWhere(false), pending: labelsWhere(true) };
     }
 
     /** Verifies the second login's ID token. One that does not verify is logged (issuer unknown) and rethrown unchanged. */

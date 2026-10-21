@@ -67,6 +67,7 @@ export const validationSchema = Joi.object({
     // When an issuer is set the audience must be too, otherwise any Auth0 tenant token would pass.
     AUTH0_ISSUER: Joi.string().uri({ scheme: 'https' }).allow(''),
     AUTH0_CLIENT_ID: Joi.string().allow(''),
+    AUTH0_PASSWORD_CONNECTION: Joi.string().allow(''),
     AUTH0_CLAIM_NAMESPACE: Joi.string().allow(''),
     AUTH0_M2M_CLIENT_ID: Joi.string().allow(''),
     AUTH0_M2M_CLIENT_SECRET: Joi.string()

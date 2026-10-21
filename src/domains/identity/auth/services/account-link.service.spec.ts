@@ -4,6 +4,7 @@ import { LoggerService } from '@/shared/services/logger.service';
 import { captureSentryException } from '@/shared/utils/sentry.util';
 import { UnauthorizedException } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
+import { Auth0ManagementService } from '../../auth0-management';
 import { UserIdentityRepository } from '../../user/repositories';
 import { AuthConflictException, AuthForbiddenException } from '../exceptions';
 import { LinkNonceRepository } from '../repositories';
@@ -38,7 +39,14 @@ const proof = (overrides: Partial<Auth0IdToken> = {}): Auth0IdToken => ({
 const nonceRow = (overrides: Partial<NonceRow> = {}): NonceRow => ({ nonce: 'nonce-a', userId: 'user-a', expiresAt: NOW_MS + 300_000, used: false, ...overrides });
 
 /** In-memory stand-ins with the same unique constraint on (issuer, subject) and the same single-use nonce rule as the database. */
-function createFakes(options: { tokens?: Record<string, Auth0IdToken | Error>; nonces?: NonceRow[]; raceWinnerUserId?: string } = {}) {
+function createFakes(
+    options: {
+        tokens?: Record<string, Auth0IdToken | Error>;
+        nonces?: NonceRow[];
+        raceWinnerUserId?: string;
+        passwordSetAt?: Record<string, string | null>;
+    } = {},
+) {
     const users: User[] = [user('user-a', 'a@example.com'), user('user-b', 'b@example.com')];
     const identities: { userId: string; issuer: string; subject: string }[] = [{ userId: 'user-a', issuer: ISSUER, subject: 'google-oauth2|first' }];
     const tokens = options.tokens ?? { 'token-b': proof() };
@@ -94,13 +102,18 @@ function createFakes(options: { tokens?: Record<string, Auth0IdToken | Error>; n
         }),
     };
     const logger = { info: jest.fn(), warn: jest.fn() };
+    const passwordSetAt = options.passwordSetAt ?? { 'auth0|second': '2026-10-17T09:00:00Z' };
+    const auth0Management = {
+        getLastPasswordReset: jest.fn(async (subject: string) => Promise.resolve(passwordSetAt[subject] ?? null)),
+    };
     const service = new AccountLinkService(
         authTokenService as unknown as AuthTokenService,
         identityRepository as unknown as UserIdentityRepository,
         nonceRepository as unknown as LinkNonceRepository,
         logger as unknown as LoggerService,
+        auth0Management as unknown as Auth0ManagementService,
     );
-    return { service, identities, nonces, identityRepository, nonceRepository, authTokenService, logger, userA: users[0] };
+    return { service, identities, nonces, identityRepository, nonceRepository, authTokenService, logger, auth0Management, userA: users[0] };
 }
 
 describe('AccountLinkService.issueNonce', () => {
@@ -371,6 +384,25 @@ describe('AccountLinkService.listSignInMethods', () => {
 
         const methods = await service.listSignInMethods('user-a');
 
-        expect(methods).toEqual(['google', 'password']);
+        expect(methods).toEqual({ methods: ['google', 'password'], pending: [] });
+    });
+
+    it('lists a password as pending until the User has set it', async () => {
+        const { service, identities } = createFakes({ passwordSetAt: { 'auth0|second': null } });
+        identities.push({ userId: 'user-a', issuer: ISSUER, subject: 'auth0|second' });
+
+        const methods = await service.listSignInMethods('user-a');
+
+        expect(methods).toEqual({ methods: ['google'], pending: ['password'] });
+    });
+
+    it('asks Auth0 only about password Identities', async () => {
+        const { service, auth0Management, identities } = createFakes();
+        identities.push({ userId: 'user-a', issuer: ISSUER, subject: 'auth0|second' });
+
+        await service.listSignInMethods('user-a');
+
+        expect(auth0Management.getLastPasswordReset).toHaveBeenCalledTimes(1);
+        expect(auth0Management.getLastPasswordReset).toHaveBeenCalledWith('auth0|second');
     });
 });

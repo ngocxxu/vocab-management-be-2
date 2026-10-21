@@ -1,11 +1,13 @@
 import { captureSentryException } from '@/shared/utils/sentry.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
 import CircuitBreaker from 'opossum';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
 const NOT_FOUND = 404;
+const CONFLICT = 409;
 const TOO_MANY_REQUESTS = 429;
 
 /**
@@ -40,14 +42,12 @@ interface CachedToken {
 @Injectable()
 export class Auth0ManagementService {
     private readonly logger = new Logger(Auth0ManagementService.name);
-    private readonly breaker: CircuitBreaker<[string], void>;
+    private readonly breaker: CircuitBreaker<[() => Promise<unknown>], unknown>;
     private token?: CachedToken;
     private tokenRequest?: Promise<string>;
 
     public constructor(private readonly configService: ConfigService) {
-        this.breaker = new CircuitBreaker(async (auth0UserId: string): Promise<void> => {
-            await this.requestDelete(auth0UserId);
-        }, BREAKER_OPTIONS);
+        this.breaker = new CircuitBreaker(async (call: () => Promise<unknown>): Promise<unknown> => call(), BREAKER_OPTIONS);
         this.breaker.on('open', () => this.logger.warn('Auth0 Management circuit opened, failing fast until it half-opens'));
         this.breaker.on('close', () => this.logger.log('Auth0 Management circuit closed'));
     }
@@ -55,7 +55,86 @@ export class Auth0ManagementService {
     /** Deletes one Auth0 user by its `user_id` (the token `sub`). A user that is already gone counts as deleted. */
     public async deleteUser(auth0UserId: string): Promise<void> {
         this.readSettings();
-        await this.breaker.fire(auth0UserId);
+        await this.breaker.fire(async () => this.requestDelete(auth0UserId));
+    }
+
+    /**
+     * Creates a password login on the main database connection for `email` and returns its `user_id`, or `null` when a login with
+     * that email already exists there. The password is random and thrown away: the User sets a real one through the email from
+     * `sendPasswordSetEmail`. The marker is in `app_metadata` on purpose: the public sign-up can set `user_metadata` but not this.
+     */
+    public async createPasswordUser(email: string): Promise<string | null> {
+        const { issuer } = this.readSettings();
+        const connection = this.readPasswordConnection();
+        return this.breaker.fire(async () => {
+            const response = await fetch(`${issuer}api/v2/users`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await this.getToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    connection,
+                    email,
+                    password: `${randomBytes(32).toString('base64url')}aA1!`,
+                    email_verified: false,
+                    verify_email: false,
+                    app_metadata: { created_by: 'vocab-backend' },
+                }),
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+            if (response.status === CONFLICT) {
+                return null;
+            }
+            if (!response.ok) {
+                throw new Auth0ManagementError(`Auth0 Management API responded ${response.status}`, response.status);
+            }
+            const body = (await response.json()) as { user_id?: string };
+            if (!body.user_id) {
+                throw new Auth0ManagementError('Auth0 Management API returned no user_id');
+            }
+            return body.user_id;
+        }) as Promise<string | null>;
+    }
+
+    /**
+     * When the User last set a password on the database connection, or `null` when they never have (the set-password email is
+     * still open). A user Auth0 no longer has also reads as `null`.
+     */
+    public async getLastPasswordReset(auth0UserId: string): Promise<string | null> {
+        const { issuer } = this.readSettings();
+        return this.breaker.fire(async () => {
+            const response = await fetch(`${issuer}api/v2/users/${encodeURIComponent(auth0UserId)}`, {
+                headers: { Authorization: `Bearer ${await this.getToken()}` },
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+            if (response.status === NOT_FOUND) {
+                return null;
+            }
+            if (!response.ok) {
+                throw new Auth0ManagementError(`Auth0 Management API responded ${response.status}`, response.status);
+            }
+            const body = (await response.json()) as { last_password_reset?: string };
+            return body.last_password_reset ?? null;
+        }) as Promise<string | null>;
+    }
+
+    /** Asks Auth0 to email the User a password-set link. Auth0 sends it, so the link never passes through this server or the browser. */
+    public async sendPasswordSetEmail(email: string): Promise<void> {
+        const { issuer } = this.readSettings();
+        const clientId = this.configService.get<string>('auth0.clientId');
+        if (!clientId) {
+            throw new Auth0ManagementError('AUTH0_CLIENT_ID is not configured');
+        }
+        const connection = this.readPasswordConnection();
+        await this.breaker.fire(async () => {
+            const response = await fetch(`${issuer}dbconnections/change_password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_id: clientId, email, connection }),
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                throw new Auth0ManagementError(`Auth0 password-change request responded ${response.status}`, response.status);
+            }
+        });
     }
 
     /**
@@ -87,6 +166,14 @@ export class Auth0ManagementService {
             throw new Auth0ManagementError('Auth0 Management API is not configured');
         }
         return { issuer, clientId, clientSecret };
+    }
+
+    private readPasswordConnection(): string {
+        const connection = this.configService.get<string>('auth0.passwordConnection');
+        if (!connection) {
+            throw new Auth0ManagementError('Auth0 password connection is not configured');
+        }
+        return connection;
     }
 
     private async requestDelete(auth0UserId: string): Promise<void> {
