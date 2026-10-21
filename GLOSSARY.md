@@ -59,3 +59,7 @@ _Avoid_: Merge, Auto-link
 **Sign-in method**:
 What a User calls an Identity on screen ("Google", "password"). User-facing text uses "sign-in method"; code and this glossary use Identity.
 _Avoid_: Login, Account (in user-facing text)
+
+**Session verification**:
+The `GET /auth/verify` round-trip a client makes to learn which User the presented token belongs to. Distinct from the token validation the global guard runs on every authenticated request: that one decides whether a request may proceed, this one returns the User.
+_Avoid_: Token verification, Auth check, Verify (too generic: say which one)
