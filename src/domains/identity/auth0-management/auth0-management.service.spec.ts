@@ -16,6 +16,9 @@ describe('Auth0ManagementService', () => {
     let changePasswordStatus: number;
     let userStatus: number;
     let userBody: Record<string, unknown>;
+    let usersByEmailStatus: number;
+    let usersByEmailBody: unknown[];
+    let verificationStatus: number;
     const realFetch = global.fetch;
 
     const createService = (overrides: Record<string, string | undefined> = {}) => {
@@ -38,6 +41,9 @@ describe('Auth0ManagementService', () => {
         changePasswordStatus = 200;
         userStatus = 200;
         userBody = { user_id: 'auth0|a', last_password_reset: '2026-10-17T09:00:00.000Z' };
+        usersByEmailStatus = 200;
+        usersByEmailBody = [];
+        verificationStatus = 201;
         (captureSentryException as jest.Mock).mockClear();
         global.fetch = jest.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
             const target = String(url);
@@ -50,6 +56,12 @@ describe('Auth0ManagementService', () => {
             }
             if (target.includes('/api/v2/users/') && (init.method ?? 'GET') === 'GET') {
                 return Promise.resolve(new Response(JSON.stringify(userBody), { status: userStatus }));
+            }
+            if (target.includes('/api/v2/users-by-email')) {
+                return Promise.resolve(new Response(JSON.stringify(usersByEmailBody), { status: usersByEmailStatus }));
+            }
+            if (target.endsWith('/api/v2/jobs/verification-email')) {
+                return Promise.resolve(new Response(JSON.stringify({ status: 'completed' }), { status: verificationStatus }));
             }
             if (target.endsWith('/dbconnections/change_password')) {
                 return Promise.resolve(new Response('We sent you an email', { status: changePasswordStatus }));
@@ -252,6 +264,60 @@ describe('Auth0ManagementService', () => {
             userStatus = 500;
 
             await expect(createService().getLastPasswordReset('auth0|a')).rejects.toThrow('Auth0 Management API responded 500');
+        });
+    });
+
+    describe('findDatabaseUsersByEmail', () => {
+        it('returns the database logins for the address, with whether each has verified it, and leaves out social logins', async () => {
+            usersByEmailBody = [
+                { user_id: 'auth0|unverified', email_verified: false },
+                { user_id: 'auth0|verified', email_verified: true },
+                { user_id: 'google-oauth2|123', email_verified: true },
+            ];
+
+            const users = await createService().findDatabaseUsersByEmail('ada+x@example.com');
+
+            expect(users).toEqual([
+                { subject: 'auth0|unverified', emailVerified: false },
+                { subject: 'auth0|verified', emailVerified: true },
+            ]);
+            const lookup = calls.find((call) => call.url.includes('/api/v2/users-by-email'));
+            expect(lookup?.url).toBe(`${ISSUER}api/v2/users-by-email?email=ada%2Bx%40example.com`);
+            expect((lookup?.init.headers as Record<string, string>).Authorization).toBe('Bearer mgmt-token');
+        });
+
+        it('returns an empty list when the address has no login', async () => {
+            await expect(createService().findDatabaseUsersByEmail('nobody@example.com')).resolves.toEqual([]);
+        });
+
+        it('throws on failure, so the caller does not treat an outage as "no login"', async () => {
+            usersByEmailStatus = 500;
+
+            await expect(createService().findDatabaseUsersByEmail('ada@example.com')).rejects.toThrow('Auth0 Management API responded 500');
+        });
+    });
+
+    describe('sendVerificationEmail', () => {
+        const verifications = () => calls.filter((call) => call.url.endsWith('/api/v2/jobs/verification-email'));
+
+        it('asks Auth0 to send the verification email for the user, through the web client', async () => {
+            await createService().sendVerificationEmail('auth0|unverified');
+
+            expect(verifications()).toHaveLength(1);
+            expect(JSON.parse(String(verifications()[0].init.body))).toEqual({ user_id: 'auth0|unverified', client_id: 'web-client' });
+            expect((verifications()[0].init.headers as Record<string, string>).Authorization).toBe('Bearer mgmt-token');
+        });
+
+        it('throws when Auth0 refuses', async () => {
+            verificationStatus = 400;
+
+            await expect(createService().sendVerificationEmail('auth0|unverified')).rejects.toThrow('400');
+        });
+
+        it('throws without calling Auth0 when the client id is not configured', async () => {
+            await expect(createService({ 'auth0.clientId': undefined }).sendVerificationEmail('auth0|unverified')).rejects.toThrow('AUTH0_CLIENT_ID');
+
+            expect(verifications()).toHaveLength(0);
         });
     });
 

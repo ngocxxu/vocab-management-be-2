@@ -14,6 +14,7 @@ export enum RedisPrefix {
     QUOTA = 'quota:',
     VOCAB_RELATED = 'vocab-related:',
     CHAT = 'chat:',
+    VERIFICATION_RESEND = 'verification-resend:',
 }
 
 export class RedisKeyManager {

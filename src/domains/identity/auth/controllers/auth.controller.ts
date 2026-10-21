@@ -31,7 +31,7 @@ import {
 } from '../dto';
 import { AuthUnauthorizedException } from '../exceptions';
 import { ChangePasswordPipe, OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
-import { AccountLinkService, AddPasswordService, AuthService } from '../services';
+import { AccountLinkService, AddPasswordService, AuthService, ResendVerificationEmailService } from '../services';
 
 const isProduction = (process.env.NODE_ENV ?? '') === 'production';
 
@@ -43,6 +43,7 @@ export class AuthController {
         private readonly authService: AuthService,
         private readonly accountLinkService: AccountLinkService,
         private readonly addPasswordService: AddPasswordService,
+        private readonly resendVerificationEmailService: ResendVerificationEmailService,
     ) {}
 
     @Post('signup')
@@ -342,21 +343,16 @@ export class AuthController {
     }
 
     @Post('resend-confirmation')
+    @HttpCode(HttpStatus.OK)
     @Public()
-    @ApiOperation({ summary: 'Resend email confirmation' })
-    @ApiResponse({
-        status: HttpStatus.OK,
-        description: 'Confirmation email sent successfully',
-    })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description: 'Failed to send confirmation email',
-    })
-    public async resendConfirmation(@Body(ResendConfirmationPipe) input: ResendConfirmationInput) {
-        const { email } = input;
-
-        await this.authService.resendConfirmation(email);
-
-        this.logger.info(`Confirmation email resent to: ${email}`);
+    // Tight on purpose: each send makes Auth0 email someone's inbox. The per-address cooldown sits in the service.
+    @Throttle({ default: { limit: 3, ttl: 60000 } })
+    @ApiOperation({ summary: 'Send a new verification email to an unverified sign-in with this address (always answers the same)' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'Always the same answer, whether or not an unverified login exists' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many attempts' })
+    public async resendConfirmation(@Body(ResendConfirmationPipe) input: ResendConfirmationInput): Promise<{ accepted: true }> {
+        // Never logs the address: the service logs counts only.
+        await this.resendVerificationEmailService.resend(input.email);
+        return { accepted: true };
     }
 }

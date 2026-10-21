@@ -6,6 +6,7 @@ import { AuthIdentityService } from '@/auth/services/auth-identity.service';
 import { AuthTokenService } from '@/auth/services/auth-token.service';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
+import { RedisService } from '@/shared/services/redis.service';
 import { Controller, Get, Req } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common/interfaces/nest-application.interface';
 import { ConfigService } from '@nestjs/config';
@@ -18,7 +19,7 @@ import { Auth0ManagementService } from '../auth0-management';
 import { UserIdentityRepository, UserRepository } from '../user/repositories';
 import { AuthController } from './controllers';
 import { LinkNonceRepository } from './repositories';
-import { AccountLinkService, AddPasswordService, AuthService } from './services';
+import { AccountLinkService, AddPasswordService, AuthService, ResendVerificationEmailService } from './services';
 
 const ISSUER = 'https://vocab-development.jp.auth0.com/';
 
@@ -117,6 +118,8 @@ describe('POST /auth/sync (HTTP)', () => {
         sendPasswordSetEmail: jest.fn<Promise<void>, [string]>(),
         deleteIdentities: jest.fn<Promise<void>, [string, { issuer: string; subject: string }[]]>(),
         getLastPasswordReset: jest.fn<Promise<string | null>, [string]>(),
+        findDatabaseUsersByEmail: jest.fn<Promise<{ subject: string; emailVerified: boolean }[]>, [string]>(),
+        sendVerificationEmail: jest.fn<Promise<void>, [string]>(),
     };
 
     const as = (token: string, authUser: AuthUser) => {
@@ -157,8 +160,10 @@ describe('POST /auth/sync (HTTP)', () => {
                 AuthService,
                 AccountLinkService,
                 AddPasswordService,
+                ResendVerificationEmailService,
                 AuthIdentityService,
                 { provide: Auth0ManagementService, useValue: auth0Management },
+                { provide: RedisService, useValue: { setIfAbsent: jest.fn(async () => Promise.resolve(true)), del: jest.fn() } },
                 { provide: ConfigService, useValue: { get: (key: string) => (key === 'auth0.issuer' ? ISSUER : undefined) } },
                 { provide: APP_GUARD, useClass: GlobalAuthGuard },
                 { provide: AuthTokenService, useValue: authTokenService },
@@ -267,6 +272,35 @@ describe('POST /auth/sync (HTTP)', () => {
         const response = await request(app.getHttpServer()).post('/auth/sync');
 
         expect(response.status).toBe(401);
+    });
+
+    describe('resend confirmation (HTTP)', () => {
+        const resend = async (email: string) => request(app.getHttpServer()).post('/auth/resend-confirmation').send({ email });
+
+        beforeEach(() => {
+            auth0Management.findDatabaseUsersByEmail.mockReset().mockResolvedValue([]);
+            auth0Management.sendVerificationEmail.mockReset().mockResolvedValue();
+        });
+
+        it('sends a verification email to an unverified login, and answers the same as for an unknown address', async () => {
+            auth0Management.findDatabaseUsersByEmail.mockResolvedValue([{ subject: 'auth0|pending', emailVerified: false }]);
+
+            const known = await resend('ada@example.com');
+            const unknown = await resend('nobody@example.com');
+
+            expect(known.status).toBe(200);
+            expect(known.body).toEqual({ accepted: true });
+            expect(unknown.body).toEqual(known.body);
+            expect(auth0Management.sendVerificationEmail).toHaveBeenCalledWith('auth0|pending');
+        });
+
+        it('answers the same and sends nothing for an address with no unverified login', async () => {
+            const response = await resend('nobody@example.com');
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({ accepted: true });
+            expect(auth0Management.sendVerificationEmail).not.toHaveBeenCalled();
+        });
     });
 
     describe('account link (HTTP)', () => {
