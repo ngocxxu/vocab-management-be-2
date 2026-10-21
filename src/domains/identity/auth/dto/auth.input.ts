@@ -143,3 +143,14 @@ export class OAuthSyncInput {
     @IsNotEmpty()
     public readonly refreshToken: string;
 }
+
+export class LinkIdentityInput {
+    @ApiProperty({
+        description: 'Auth0 ID token of the sign-in method being connected, obtained with the nonce from link-nonce, prompt=login and max_age=300. Proves the User controls it.',
+        example: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+    })
+    @IsJWT()
+    @IsNotEmpty()
+    @MaxLength(8192)
+    public readonly idToken: string;
+}

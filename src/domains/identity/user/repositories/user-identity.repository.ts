@@ -14,6 +14,11 @@ export class UserIdentityRepository extends BaseRepository {
         return this.client(tx).userIdentity.findMany({ where: { userId }, select: { issuer: true, subject: true } });
     }
 
+    /** Attach an Identity to an existing User. Throws the unique violation (P2002) when that issuer + subject is already mapped. */
+    public async link(userId: string, issuer: string, subject: string, tx?: Prisma.TransactionClient): Promise<void> {
+        await this.client(tx).userIdentity.create({ data: { userId, issuer, subject } });
+    }
+
     /** The internal User an external login identity (token issuer + subject) is mapped to, or null. */
     public async findUserByIdentity(issuer: string, subject: string): Promise<User | null> {
         const identity = await this.prisma.userIdentity.findUnique({

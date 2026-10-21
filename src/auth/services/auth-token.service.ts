@@ -1,5 +1,5 @@
 import type { AuthStrategyValue } from '../decorators/auth-strategy.decorator';
-import type { AuthUser } from '../interfaces/auth-user.interface';
+import type { Auth0IdToken, AuthUser } from '../interfaces/auth-user.interface';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -51,6 +51,44 @@ export class AuthTokenService {
         // The unverified `iss` only picks the verifier. A token claiming the Auth0 issuer is fully verified
         // by Auth0 rules and never retried against Supabase, so a forged `iss` gains nothing.
         return this.isIssuedByAuth0(token) ? this.verifyAuth0(token) : this.verifySupabase(token);
+    }
+
+    /**
+     * Verifies an Auth0 ID token (never an access token, never Supabase): RS256 signature, issuer, `aud` = the web app's client id, `exp`.
+     * Used as the proof in the account link (ADR 0004). Every failure is the same `id_token_invalid`; the cause stays in the log.
+     */
+    public async verifyIdToken(idToken: string): Promise<Auth0IdToken> {
+        const issuer = this.configService.get<string>('auth0.issuer');
+        const clientId = this.configService.get<string>('auth0.clientId');
+        if (!issuer || !clientId) {
+            throw new UnauthorizedException('id_token_invalid');
+        }
+        try {
+            const { payload } = await jwtVerify(idToken, this.auth0Jwks.getKeyResolver(), {
+                issuer,
+                audience: clientId,
+                algorithms: AUTH0_ALGORITHMS,
+                requiredClaims: ['sub', 'exp'],
+            });
+            if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+                throw new UnauthorizedException('id_token_invalid');
+            }
+            return {
+                issuer,
+                subject: payload.sub,
+                nonce: typeof payload.nonce === 'string' && payload.nonce.length > 0 ? payload.nonce : undefined,
+                authTime: typeof payload.auth_time === 'number' ? payload.auth_time : undefined,
+                email: typeof payload.email === 'string' && payload.email.length > 0 ? payload.email : null,
+                // Only a real boolean `true` verifies; the string "true" does not.
+                emailVerified: payload.email_verified === true,
+            };
+        } catch (error) {
+            if (error instanceof UnauthorizedException) {
+                throw error;
+            }
+            this.logger.warn(`Auth0 ID token rejected: ${error instanceof Error ? error.name : 'unknown error'}`);
+            throw new UnauthorizedException('id_token_invalid');
+        }
     }
 
     private isIssuedByAuth0(token: string): boolean {

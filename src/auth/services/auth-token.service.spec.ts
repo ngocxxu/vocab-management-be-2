@@ -8,6 +8,7 @@ import { Auth0JwksProvider } from './auth0-jwks.provider';
 const ISSUER = 'https://vocab-development.jp.auth0.com/';
 const AUDIENCE = 'https://api.vocab.test';
 const KID = 'test-key';
+const CLIENT_ID = 'web-client';
 
 describe('AuthTokenService', () => {
     let privateKey: KeyLike;
@@ -22,9 +23,14 @@ describe('AuthTokenService', () => {
         otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
     });
 
-    const createService = (options: { supabaseUser?: unknown; auth0?: { issuer?: string; audience?: string } } = {}) => {
-        const auth0 = options.auth0 ?? { issuer: ISSUER, audience: AUDIENCE };
-        const values: Record<string, string | undefined> = { 'auth0.issuer': auth0.issuer, 'auth0.audience': auth0.audience, 'auth0.claimNamespace': 'https://vocab.app/' };
+    const createService = (options: { supabaseUser?: unknown; auth0?: { issuer?: string; audience?: string; clientId?: string } } = {}) => {
+        const auth0 = options.auth0 ?? { issuer: ISSUER, audience: AUDIENCE, clientId: CLIENT_ID };
+        const values: Record<string, string | undefined> = {
+            'auth0.issuer': auth0.issuer,
+            'auth0.audience': auth0.audience,
+            'auth0.claimNamespace': 'https://vocab.app/',
+            'auth0.clientId': auth0.clientId,
+        };
         const config = { get: (key: string) => values[key] } as unknown as ConfigService;
         const getUser = jest.fn().mockResolvedValue({ data: { user: options.supabaseUser }, error: options.supabaseUser ? null : { message: 'bad' } });
         const supabaseAuth = { getAnonClient: () => ({ auth: { getUser } }) } as unknown as SupabaseAuthProvider;
@@ -208,6 +214,60 @@ describe('AuthTokenService', () => {
 
             expect(authUser.provider).toBe('supabase');
             expect(authUser.roles).toEqual([]);
+        });
+    });
+
+    describe('verifyIdToken', () => {
+        const signIdToken = async (claims: JWTPayload = {}, overrides: Parameters<typeof sign>[1] = {}) => sign(claims, { aud: CLIENT_ID, ...overrides });
+
+        it('accepts an ID token of the web app and exposes the claims the account link reads', async () => {
+            const { service } = createService();
+            const token = await signIdToken({ nonce: 'n-1', auth_time: 1_792_400_000, email: 'b@example.com', email_verified: true });
+
+            const idToken = await service.verifyIdToken(token);
+
+            expect(idToken).toEqual({ issuer: ISSUER, subject: 'google-oauth2|123', nonce: 'n-1', authTime: 1_792_400_000, email: 'b@example.com', emailVerified: true });
+        });
+
+        it('leaves nonce and auth_time empty when the token has none', async () => {
+            const { service } = createService();
+
+            const idToken = await service.verifyIdToken(await signIdToken());
+
+            expect(idToken.nonce).toBeUndefined();
+            expect(idToken.authTime).toBeUndefined();
+        });
+
+        it('counts the email as verified only for a real boolean true', async () => {
+            const { service } = createService();
+
+            expect((await service.verifyIdToken(await signIdToken({ email_verified: 'true' }))).emailVerified).toBe(false);
+            expect((await service.verifyIdToken(await signIdToken({ email_verified: false }))).emailVerified).toBe(false);
+        });
+
+        it.each([
+            ['an access token for the API (wrong audience)', async () => sign({}, { aud: AUDIENCE })],
+            ['an ID token of another client', async () => signIdToken({}, { aud: 'other-client' })],
+            ['another issuer', async () => signIdToken({}, { iss: 'https://evil.example/' })],
+            ['a signature from another key', async () => signIdToken({}, { key: otherPrivateKey })],
+            ['an expired token', async () => signIdToken({}, { exp: Math.floor(Date.now() / 1000) - 60 })],
+            ['a token without a subject', async () => signIdToken({}, { sub: null })],
+        ])('refuses %s with id_token_invalid', async (_label, makeToken) => {
+            const { service } = createService();
+
+            await expect(service.verifyIdToken(await makeToken())).rejects.toMatchObject({ message: 'id_token_invalid' });
+        });
+
+        it('refuses a malformed token with id_token_invalid', async () => {
+            const { service } = createService();
+
+            await expect(service.verifyIdToken('not-a-jwt')).rejects.toMatchObject({ message: 'id_token_invalid' });
+        });
+
+        it('refuses everything while the client id is not configured', async () => {
+            const { service } = createService({ auth0: { issuer: ISSUER, audience: AUDIENCE, clientId: undefined } });
+
+            await expect(service.verifyIdToken(await signIdToken())).rejects.toMatchObject({ message: 'id_token_invalid' });
         });
     });
 });

@@ -15,3 +15,15 @@ export interface AuthUser {
     /** OAuth client the token was issued to (`azp`), or null for tokens without one. */
     clientId?: string | null;
 }
+
+/** The claims the account link reads from a verified Auth0 ID token. Standard OIDC claims, not the namespaced access-token ones. */
+export interface Auth0IdToken {
+    issuer: string;
+    subject: string;
+    /** The nonce the FE sent to `/authorize`, copied by Auth0 into the ID token. */
+    nonce?: string;
+    /** When the user really signed in (`auth_time`, seconds since the epoch). Present when `prompt=login` or `max_age` was sent. */
+    authTime?: number;
+    email: string | null;
+    emailVerified: boolean;
+}

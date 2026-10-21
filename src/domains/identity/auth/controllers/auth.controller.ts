@@ -1,32 +1,37 @@
 import { AllowUnprovisioned } from '@/auth/decorators';
 import { CurrentUser as CurrentAuthUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthUser } from '@/auth/interfaces/auth-user.interface';
-import { LoggerService } from '@/shared';
-import { CurrentUser, ExcludeFromSwaggerIf, Public } from '@/shared/decorators';
+import { LoggerService, RolesGuard } from '@/shared';
+import { CurrentUser, ExcludeFromSwaggerIf, Public, Roles } from '@/shared/decorators';
 import { jwtDecode } from '@/shared/utils/jwt.util';
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { User } from '@prisma/client';
+import { Throttle } from '@nestjs/throttler';
+import { User, UserRole } from '@prisma/client';
 import { Request } from 'express';
 
 import { UserDto } from '../../user/dto';
 import {
     ChangePasswordInput,
+    LinkIdentityInput,
+    LinkNonceDto,
     OAuthInput,
     OAuthResponseDto,
     OAuthSyncInput,
+    PasswordSetupDto,
     RefreshTokenInput,
     ResendConfirmationInput,
     ResetPasswordInput,
     SessionDto,
     SignInInput,
+    SignInMethodsDto,
     SignUpInput,
     SignUpResponseDto,
     VerifyOtpInput,
 } from '../dto';
 import { AuthUnauthorizedException } from '../exceptions';
 import { ChangePasswordPipe, OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
-import { AuthService } from '../services';
+import { AccountLinkService, AddPasswordService, AuthService } from '../services';
 
 const isProduction = (process.env.NODE_ENV ?? '') === 'production';
 
@@ -36,6 +41,8 @@ export class AuthController {
     public constructor(
         private readonly logger: LoggerService,
         private readonly authService: AuthService,
+        private readonly accountLinkService: AccountLinkService,
+        private readonly addPasswordService: AddPasswordService,
     ) {}
 
     @Post('signup')
@@ -148,6 +155,68 @@ export class AuthController {
     public async syncAuth0User(@CurrentAuthUser() authUser: AuthUser): Promise<UserDto> {
         const user = await this.authService.syncAuth0User(authUser);
         return new UserDto(user);
+    }
+
+    @Get('identities')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "List the signed-in User's sign-in methods as provider labels (never the provider user id)" })
+    @ApiResponse({ status: HttpStatus.OK, type: SignInMethodsDto })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing access token' })
+    public async listSignInMethods(@CurrentUser() user: User): Promise<SignInMethodsDto> {
+        const { methods, pending } = await this.accountLinkService.listSignInMethods(user.id);
+        return new SignInMethodsDto(methods, pending);
+    }
+
+    @Post('identities/link-nonce')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @Throttle({ default: { limit: 10, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Start connecting another sign-in method: a single-use nonce bound to the signed-in User, valid for 5 minutes' })
+    @ApiResponse({ status: HttpStatus.CREATED, type: LinkNonceDto, description: 'The nonce to send to Auth0 with the second login' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many nonce requests' })
+    public async issueLinkNonce(@CurrentUser() user: User): Promise<LinkNonceDto> {
+        return new LinkNonceDto(await this.accountLinkService.issueNonce(user));
+    }
+
+    @Post('identities/password')
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    // Tight on purpose: every call can make Auth0 send an email, and the first one creates a login.
+    @Throttle({ default: { limit: 3, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "Add a password sign-in method: creates the login for the User's own email and has Auth0 email a link to set the password (idempotent)" })
+    @ApiResponse({ status: HttpStatus.OK, type: PasswordSetupDto, description: 'Auth0 was asked to send the email' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'email_not_verified: the User has no confirmed email' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'password_login_exists: a login with this email exists; connect it with the link flow' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many attempts' })
+    public async addPassword(@CurrentUser() user: User): Promise<PasswordSetupDto> {
+        await this.addPasswordService.addPassword(user);
+        return new PasswordSetupDto(true);
+    }
+
+    @Post('identities/link')
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    // Tight on purpose: a link is a security-sensitive change, and a stolen proof should not be retried at speed.
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Connect another sign-in method to the signed-in User (idempotent). The session is the User; the body ID token proves control of the new method.' })
+    @ApiResponse({ status: HttpStatus.OK, type: SignInMethodsDto, description: 'The sign-in methods after linking' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing session token, or id_token_invalid' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'link_nonce_invalid, link_proof_stale (auth_time older than 5 minutes) or email_not_verified' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'identity_already_linked: that sign-in method belongs to another User' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many link attempts' })
+    public async linkIdentity(@CurrentUser() user: User, @Body() input: LinkIdentityInput): Promise<SignInMethodsDto> {
+        await this.accountLinkService.linkAuth0Identity(user, input.idToken);
+        const { methods, pending } = await this.accountLinkService.listSignInMethods(user.id);
+        return new SignInMethodsDto(methods, pending);
     }
 
     @Get('verify')

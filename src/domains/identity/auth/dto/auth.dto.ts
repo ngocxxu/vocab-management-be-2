@@ -53,3 +53,38 @@ export class OAuthResponseDto {
         this.provider = entity.provider;
     }
 }
+
+export class LinkNonceDto {
+    @ApiProperty({ description: 'Single-use nonce, valid for 5 minutes. Send it to Auth0 as the `nonce` parameter of the second login.', example: 'k3J9...' })
+    public readonly nonce: string;
+
+    public constructor(nonce: string) {
+        this.nonce = nonce;
+    }
+}
+
+export class PasswordSetupDto {
+    @ApiProperty({ description: 'Auth0 has been asked to email the User a link to set the password. The link itself is never returned.', example: true })
+    public readonly emailSent: boolean;
+
+    public constructor(emailSent: boolean) {
+        this.emailSent = emailSent;
+    }
+}
+
+export class SignInMethodsDto {
+    @ApiProperty({ description: 'Provider labels of the sign-in methods the User has connected. Never the provider user id.', example: ['google', 'password'], type: [String] })
+    public readonly methods: string[];
+
+    @ApiProperty({
+        description: 'Provider labels whose login exists but whose password is not set yet (the set-password email is still open).',
+        example: ['password'],
+        type: [String],
+    })
+    public readonly pending: string[];
+
+    public constructor(methods: string[], pending: string[]) {
+        this.methods = methods;
+        this.pending = pending;
+    }
+}
