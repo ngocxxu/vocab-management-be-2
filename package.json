@@ -1,6 +1,6 @@
 {
     "name": "vocab-management",
-    "version": "1.75.0",
+    "version": "1.75.1",
     "private": true,
     "packageManager": "pnpm@10.0.0",
     "engines": {
