@@ -63,6 +63,15 @@ export class LinkNonceDto {
     }
 }
 
+export class VerificationEmailDto {
+    @ApiProperty({ description: 'Auth0 has been asked to email the login a new verification link. The link itself is never returned.', example: true })
+    public readonly emailSent: boolean;
+
+    public constructor(emailSent: boolean) {
+        this.emailSent = emailSent;
+    }
+}
+
 export class PasswordSetupDto {
     @ApiProperty({ description: 'Auth0 has been asked to email the User a link to set the password. The link itself is never returned.', example: true })
     public readonly emailSent: boolean;

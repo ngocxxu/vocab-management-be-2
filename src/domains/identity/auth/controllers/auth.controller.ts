@@ -27,11 +27,12 @@ import {
     SignInMethodsDto,
     SignUpInput,
     SignUpResponseDto,
+    VerificationEmailDto,
     VerifyOtpInput,
 } from '../dto';
 import { AuthUnauthorizedException } from '../exceptions';
 import { ChangePasswordPipe, OAuthPipe, OAuthSyncPipe, RefreshTokenPipe, ResendConfirmationPipe, ResetPasswordPipe, SignInPipe, SignUpPipe, VerifyOtpPipe } from '../pipes';
-import { AccountLinkService, AddPasswordService, AuthService } from '../services';
+import { AccountLinkService, AddPasswordService, AuthService, ResendVerificationEmailService } from '../services';
 
 const isProduction = (process.env.NODE_ENV ?? '') === 'production';
 
@@ -43,6 +44,7 @@ export class AuthController {
         private readonly authService: AuthService,
         private readonly accountLinkService: AccountLinkService,
         private readonly addPasswordService: AddPasswordService,
+        private readonly resendVerificationEmailService: ResendVerificationEmailService,
     ) {}
 
     @Post('signup')
@@ -155,6 +157,22 @@ export class AuthController {
     public async syncAuth0User(@CurrentAuthUser() authUser: AuthUser): Promise<UserDto> {
         const user = await this.authService.syncAuth0User(authUser);
         return new UserDto(user);
+    }
+
+    // Like sync, no RolesGuard: the login being verified has no database role yet. The global guard still requires a valid Auth0 token.
+    @Post('resend-verification')
+    @HttpCode(HttpStatus.OK)
+    @AllowUnprovisioned()
+    // Tight on purpose: each send makes Auth0 email an inbox. The per-login cooldown sits in the service.
+    @Throttle({ default: { limit: 3, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "Ask Auth0 to send a new verification email to the signed-in login's own address (the address is never taken from the request)" })
+    @ApiResponse({ status: HttpStatus.OK, type: VerificationEmailDto, description: 'Auth0 was asked to send the email, or there was nothing to send' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing access token' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many attempts' })
+    public async resendVerification(@CurrentAuthUser() authUser: AuthUser): Promise<VerificationEmailDto> {
+        await this.resendVerificationEmailService.resend(authUser);
+        return new VerificationEmailDto(true);
     }
 
     @Get('identities')

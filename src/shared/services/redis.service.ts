@@ -70,6 +70,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         await this.redisClient.setex(fullKey, finalTtl, value);
     }
 
+    /** Sets the key with a TTL only if it does not exist yet. Returns false when it already did. Atomic (SET NX EX). */
+    public async setIfAbsent(prefix: RedisPrefix, key: string, value: string, ttlSeconds: number): Promise<boolean> {
+        const fullKey = RedisKeyManager.generateKey(prefix, key);
+        const result = await this.redisClient.set(fullKey, value, 'EX', ttlSeconds, 'NX');
+        return result === 'OK';
+    }
+
     public async get(prefix: RedisPrefix, key: string): Promise<string | null> {
         const fullKey = RedisKeyManager.generateKey(prefix, key);
         return this.redisClient.get(fullKey);

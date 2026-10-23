@@ -10,5 +10,5 @@ export {
     ChangePasswordInput,
     LinkIdentityInput,
 } from './auth.input';
-export { LinkNonceDto, OAuthResponseDto, PasswordSetupDto, SessionDto, SignInMethodsDto } from './auth.dto';
+export { LinkNonceDto, OAuthResponseDto, PasswordSetupDto, SessionDto, SignInMethodsDto, VerificationEmailDto } from './auth.dto';
 export { SignUpResponseDto } from './sign-up-response.dto';

@@ -116,13 +116,27 @@ export class Auth0ManagementService {
         }) as Promise<string | null>;
     }
 
+    /** Asks Auth0 to email a database user the verification link. Auth0 sends it, so the link never passes through this server. */
+    public async sendVerificationEmail(subject: string): Promise<void> {
+        const { issuer } = this.readSettings();
+        const clientId = this.readClientId();
+        await this.breaker.fire(async () => {
+            const response = await fetch(`${issuer}api/v2/jobs/verification-email`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await this.getToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: subject, client_id: clientId }),
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                throw new Auth0ManagementError(`Auth0 Management API responded ${response.status}`, response.status);
+            }
+        });
+    }
+
     /** Asks Auth0 to email the User a password-set link. Auth0 sends it, so the link never passes through this server or the browser. */
     public async sendPasswordSetEmail(email: string): Promise<void> {
         const { issuer } = this.readSettings();
-        const clientId = this.configService.get<string>('auth0.clientId');
-        if (!clientId) {
-            throw new Auth0ManagementError('AUTH0_CLIENT_ID is not configured');
-        }
+        const clientId = this.readClientId();
         const connection = this.readPasswordConnection();
         await this.breaker.fire(async () => {
             const response = await fetch(`${issuer}dbconnections/change_password`, {
@@ -166,6 +180,14 @@ export class Auth0ManagementService {
             throw new Auth0ManagementError('Auth0 Management API is not configured');
         }
         return { issuer, clientId, clientSecret };
+    }
+
+    private readClientId(): string {
+        const clientId = this.configService.get<string>('auth0.clientId');
+        if (!clientId) {
+            throw new Auth0ManagementError('AUTH0_CLIENT_ID is not configured');
+        }
+        return clientId;
     }
 
     private readPasswordConnection(): string {

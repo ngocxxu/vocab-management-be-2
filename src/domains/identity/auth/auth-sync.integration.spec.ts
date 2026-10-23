@@ -6,6 +6,7 @@ import { AuthIdentityService } from '@/auth/services/auth-identity.service';
 import { AuthTokenService } from '@/auth/services/auth-token.service';
 import { SupabaseAuthProvider } from '@/domains/media/supabase';
 import { LoggerService } from '@/shared/services/logger.service';
+import { RedisService } from '@/shared/services/redis.service';
 import { Controller, Get, Req } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common/interfaces/nest-application.interface';
 import { ConfigService } from '@nestjs/config';
@@ -18,7 +19,7 @@ import { Auth0ManagementService } from '../auth0-management';
 import { UserIdentityRepository, UserRepository } from '../user/repositories';
 import { AuthController } from './controllers';
 import { LinkNonceRepository } from './repositories';
-import { AccountLinkService, AddPasswordService, AuthService } from './services';
+import { AccountLinkService, AddPasswordService, AuthService, ResendVerificationEmailService } from './services';
 
 const ISSUER = 'https://vocab-development.jp.auth0.com/';
 
@@ -117,6 +118,7 @@ describe('POST /auth/sync (HTTP)', () => {
         sendPasswordSetEmail: jest.fn<Promise<void>, [string]>(),
         deleteIdentities: jest.fn<Promise<void>, [string, { issuer: string; subject: string }[]]>(),
         getLastPasswordReset: jest.fn<Promise<string | null>, [string]>(),
+        sendVerificationEmail: jest.fn<Promise<void>, [string]>(),
     };
 
     const as = (token: string, authUser: AuthUser) => {
@@ -157,8 +159,10 @@ describe('POST /auth/sync (HTTP)', () => {
                 AuthService,
                 AccountLinkService,
                 AddPasswordService,
+                ResendVerificationEmailService,
                 AuthIdentityService,
                 { provide: Auth0ManagementService, useValue: auth0Management },
+                { provide: RedisService, useValue: { setIfAbsent: jest.fn(async () => Promise.resolve(true)), del: jest.fn() } },
                 { provide: ConfigService, useValue: { get: (key: string) => (key === 'auth0.issuer' ? ISSUER : undefined) } },
                 { provide: APP_GUARD, useClass: GlobalAuthGuard },
                 { provide: AuthTokenService, useValue: authTokenService },
@@ -267,6 +271,45 @@ describe('POST /auth/sync (HTTP)', () => {
         const response = await request(app.getHttpServer()).post('/auth/sync');
 
         expect(response.status).toBe(401);
+    });
+
+    describe('resend verification (HTTP)', () => {
+        const resend = async (token?: string) => {
+            const call = request(app.getHttpServer()).post('/auth/resend-verification');
+            return token ? call.set('Authorization', `Bearer ${token}`) : call;
+        };
+        const unverified = (subject: string): AuthUser => ({ id: subject, email: 'ada@example.com', roles: [], provider: 'auth0', issuer: ISSUER, subject, emailVerified: false });
+
+        beforeEach(() => {
+            auth0Management.sendVerificationEmail.mockReset().mockResolvedValue();
+        });
+
+        it('requires a token', async () => {
+            const response = await resend();
+
+            expect(response.status).toBe(401);
+            expect(auth0Management.sendVerificationEmail).not.toHaveBeenCalled();
+        });
+
+        it('emails the login in the token, with no email accepted from the request', async () => {
+            const token = as('unverified-token', unverified('auth0|pending'));
+
+            const response = await request(app.getHttpServer()).post('/auth/resend-verification').set('Authorization', `Bearer ${token}`).send({ email: 'victim@example.com' });
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({ emailSent: true });
+            expect(auth0Management.sendVerificationEmail).toHaveBeenCalledTimes(1);
+            expect(auth0Management.sendVerificationEmail).toHaveBeenCalledWith('auth0|pending');
+        });
+
+        it('sends nothing for a login that is already verified', async () => {
+            const token = as('verified-token', { ...unverified('auth0|done'), emailVerified: true });
+
+            const response = await resend(token);
+
+            expect(response.status).toBe(200);
+            expect(auth0Management.sendVerificationEmail).not.toHaveBeenCalled();
+        });
     });
 
     describe('account link (HTTP)', () => {
