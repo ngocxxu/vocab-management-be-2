@@ -30,6 +30,17 @@ function assertFsrsQuestionType(questionType: QuestionType | undefined): void {
     }
 }
 
+/** Random is a choice of its own: one card per word, so it cannot share a trainer with Recognise or Recall cards. */
+export function isRandomWithOthers(directions: FsrsDirection[]): boolean {
+    return directions.includes(FsrsDirection.RANDOM) && directions.length > 1;
+}
+
+function assertRandomIsAlone(directions: FsrsDirection[] | undefined): void {
+    if (directions && isRandomWithOthers(directions)) {
+        throw new VocabTrainerBadRequestException('Random cannot be combined with another direction');
+    }
+}
+
 function isSameSet(a: FsrsDirection[], b: FsrsDirection[]): boolean {
     return a.length === b.length && a.every((direction) => b.includes(direction));
 }
@@ -42,6 +53,7 @@ export function assertValidTrainerCreate(input: FsrsInputFields): void {
         return;
     }
 
+    assertRandomIsAlone(input.fsrsDirections);
     assertFsrsQuestionType(input.questionType);
 }
 

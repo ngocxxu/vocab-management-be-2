@@ -279,6 +279,80 @@ describeWithDb('FsrsSessionService (real Postgres)', () => {
         });
     });
 
+    describe('direction choices', () => {
+        test('a Random card is shown in one of the two directions, with the sides of that direction', async () => {
+            // Arrange
+            await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { fsrsDirections: [FsrsDirection.RANDOM] } });
+            const word = await addWord('apple', ['quả táo']);
+            await addCard(word, FsrsDirection.RANDOM);
+
+            // Act
+            const queue = await service.getQueue(userId, trainerId, {}, NOW);
+
+            // Assert
+            const [item] = queue.items;
+            expect([S2T, T2S]).toContain(item?.direction);
+            expect(item?.frontText).toEqual(item?.direction === S2T ? ['apple'] : ['quả táo']);
+        });
+
+        test('checkAnswer accepts the answer of the direction the card is shown in', async () => {
+            // Arrange
+            await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { fsrsDirections: [FsrsDirection.RANDOM] } });
+            const word = await addWord('apple', ['quả táo']);
+            await addCard(word, FsrsDirection.RANDOM);
+            const [item] = (await service.getQueue(userId, trainerId, {}, NOW)).items;
+
+            // Act
+            const check = await service.checkAnswer(userId, trainerId, { cardId: item?.cardId ?? '', answer: item?.acceptedAnswers[0] ?? '' });
+
+            // Assert
+            expect(check.suggestedRating).toBe('GOOD');
+        });
+
+        test('the shown direction is the same on two calls the same day', async () => {
+            // Arrange
+            await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { fsrsDirections: [FsrsDirection.RANDOM] } });
+            await addCard(await addWord('apple', ['quả táo']), FsrsDirection.RANDOM);
+
+            // Act
+            const first = await service.getQueue(userId, trainerId, {}, NOW);
+            const second = await service.getQueue(userId, trainerId, {}, NOW);
+
+            // Assert
+            expect(second.items.map((i) => i.direction)).toEqual(first.items.map((i) => i.direction));
+        });
+
+        test('a Random trainer has one card per word: 10 words give 10 cards', async () => {
+            // Arrange
+            await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { fsrsNewPerDay: null, fsrsDirections: [FsrsDirection.RANDOM] } });
+            for (let i = 1; i <= 10; i++) {
+                await addCard(await addWord(`r${i}`), FsrsDirection.RANDOM);
+            }
+
+            // Act
+            const queue = await service.getQueue(userId, trainerId, { limit: 20 }, NOW);
+
+            // Assert
+            expect(queue.items).toHaveLength(10);
+        });
+
+        test('a trainer with both directions asks 20 cards for 10 words', async () => {
+            // Arrange
+            await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { fsrsNewPerDay: null } });
+            for (let i = 1; i <= 10; i++) {
+                const word = await addWord(`b${i}`);
+                await addCard(word, S2T);
+                await addCard(word, T2S);
+            }
+
+            // Act
+            const queue = await service.getQueue(userId, trainerId, { limit: 20 }, NOW);
+
+            // Assert
+            expect(queue.items).toHaveLength(20);
+        });
+    });
+
     describe('getSummary', () => {
         test('counts overdue, due today, new, mastered and leech cards', async () => {
             // Arrange

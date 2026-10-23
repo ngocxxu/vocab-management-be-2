@@ -77,9 +77,11 @@ enum FsrsState {
 
 /// Which side of a word is shown as the question. One card is scheduled per direction, because remembering the
 /// meaning from the word and remembering the word from the meaning are different memories.
+/// RANDOM is the exception: one card per word that is shown in a random direction each time. It is never combined with the other two.
 enum FsrsDirection {
   SOURCE_TO_TARGET
   TARGET_TO_SOURCE
+  RANDOM
 }
 
 /// FSRS review rating (ts-fsrs `Rating`). AGAIN = forgot, the rest = remembered.
@@ -336,7 +338,7 @@ model VocabTrainer {
   fsrsDesiredRetention Float           @default(0.9) @map("fsrs_desired_retention") // Target recall probability at review time, 0.70-0.97
   fsrsMaximumInterval  Int             @default(36500) @map("fsrs_maximum_interval") // Longest gap between reviews, in days (1-36500)
   fsrsNewPerDay        Int?            @map("fsrs_new_per_day") // Max NEW cards introduced per local day; null = unlimited
-  fsrsDirections       FsrsDirection[] @default([SOURCE_TO_TARGET, TARGET_TO_SOURCE]) @map("fsrs_directions") // Directions that get a card; at least one, fixed at creation
+  fsrsDirections       FsrsDirection[] @default([SOURCE_TO_TARGET, TARGET_TO_SOURCE]) @map("fsrs_directions") // Directions that get a card; at least one, fixed at creation; RANDOM only on its own
   fsrsEndsAt           DateTime?       @map("fsrs_ends_at") @db.Timestamptz // End of the cycle (for example an exam date); null = no end
 
   vocabAssignments VocabTrainerWord[]

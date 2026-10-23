@@ -46,11 +46,14 @@ export type FsrsPreview = Record<FsrsRating, FsrsReviewOutcome>;
 /** What one rating button would do, for the label of the button. */
 export type FsrsPreviewButton = { due: Date; scheduledDays: number };
 
+/** The direction a card is asked in: a Random card is shown as one of these two. */
+export type ShownDirection = Exclude<FsrsDirection, 'RANDOM'>;
+
 /** One card of a review session. `direction` decides which side is the question. */
 export type FsrsReviewQueueItem = {
     cardId: string;
     vocabId: string;
-    direction: FsrsDirection;
+    direction: ShownDirection;
     state: FsrsState;
     isNew: boolean;
     frontText: string[];

@@ -2,7 +2,7 @@ import { ConfigRepository } from '@/domains/platform/config/repositories';
 import { ConfigService } from '@/domains/platform/config/services/config.service';
 import { PrismaService } from '@/shared/services/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { QuestionType, TrainerStatus, User } from '@prisma/client';
+import { FsrsDirection, QuestionType, TrainerStatus, User } from '@prisma/client';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabTrainerInput } from '../dto';
 import { VocabTrainerNotFoundException, VocabTrainerWordNotFoundException } from '../exceptions';
@@ -211,6 +211,45 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
         const row = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainer.id } });
         expect(row.lastExamSubmittedAt).toBeNull();
+    });
+
+    test('a Random trainer creates one card per word, all with the direction RANDOM (3 words = 3 cards)', async () => {
+        // Act
+        const trainer = await service.create(input({ fsrsDirections: [FsrsDirection.RANDOM] }), user.id);
+
+        // Assert
+        const cards = await cardsOf(trainer.id);
+        expect(cards).toHaveLength(3);
+        expect(cards.every((c) => c.direction === FsrsDirection.RANDOM)).toBe(true);
+    });
+
+    test('Random cannot be combined with Recognise or Recall', async () => {
+        // Act + Assert
+        await expect(service.create(input({ fsrsDirections: [FsrsDirection.RANDOM, FsrsDirection.SOURCE_TO_TARGET] }), user.id)).rejects.toThrow();
+    });
+
+    test('the four direction choices give 10 / 10 / 20 / 10 cards for 10 words', async () => {
+        // Arrange
+        const tenWords = [...words];
+        for (let i = 4; i <= 10; i++) {
+            tenWords.push(await createVocab(`word${i}`, true));
+        }
+        const choices: Array<[string, FsrsDirection[]]> = [
+            ['random', [FsrsDirection.RANDOM]],
+            ['recognise', [FsrsDirection.SOURCE_TO_TARGET]],
+            ['recall', [FsrsDirection.TARGET_TO_SOURCE]],
+            ['both', [FsrsDirection.SOURCE_TO_TARGET, FsrsDirection.TARGET_TO_SOURCE]],
+        ];
+
+        // Act
+        const counts: Record<string, number> = {};
+        for (const [name, fsrsDirections] of choices) {
+            const trainer = await service.create(input({ vocabAssignmentIds: tenWords, fsrsDirections }), user.id);
+            counts[name] = (await cardsOf(trainer.id)).length;
+        }
+
+        // Assert
+        expect(counts).toEqual({ random: 10, recognise: 10, recall: 10, both: 20 });
     });
 
     describe('defaults of the user', () => {
