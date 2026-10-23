@@ -118,7 +118,6 @@ describe('POST /auth/sync (HTTP)', () => {
         sendPasswordSetEmail: jest.fn<Promise<void>, [string]>(),
         deleteIdentities: jest.fn<Promise<void>, [string, { issuer: string; subject: string }[]]>(),
         getLastPasswordReset: jest.fn<Promise<string | null>, [string]>(),
-        findDatabaseUsersByEmail: jest.fn<Promise<{ subject: string; emailVerified: boolean }[]>, [string]>(),
         sendVerificationEmail: jest.fn<Promise<void>, [string]>(),
     };
 
@@ -274,31 +273,41 @@ describe('POST /auth/sync (HTTP)', () => {
         expect(response.status).toBe(401);
     });
 
-    describe('resend confirmation (HTTP)', () => {
-        const resend = async (email: string) => request(app.getHttpServer()).post('/auth/resend-confirmation').send({ email });
+    describe('resend verification (HTTP)', () => {
+        const resend = async (token?: string) => {
+            const call = request(app.getHttpServer()).post('/auth/resend-verification');
+            return token ? call.set('Authorization', `Bearer ${token}`) : call;
+        };
+        const unverified = (subject: string): AuthUser => ({ id: subject, email: 'ada@example.com', roles: [], provider: 'auth0', issuer: ISSUER, subject, emailVerified: false });
 
         beforeEach(() => {
-            auth0Management.findDatabaseUsersByEmail.mockReset().mockResolvedValue([]);
             auth0Management.sendVerificationEmail.mockReset().mockResolvedValue();
         });
 
-        it('sends a verification email to an unverified login, and answers the same as for an unknown address', async () => {
-            auth0Management.findDatabaseUsersByEmail.mockResolvedValue([{ subject: 'auth0|pending', emailVerified: false }]);
+        it('requires a token', async () => {
+            const response = await resend();
 
-            const known = await resend('ada@example.com');
-            const unknown = await resend('nobody@example.com');
+            expect(response.status).toBe(401);
+            expect(auth0Management.sendVerificationEmail).not.toHaveBeenCalled();
+        });
 
-            expect(known.status).toBe(200);
-            expect(known.body).toEqual({ accepted: true });
-            expect(unknown.body).toEqual(known.body);
+        it('emails the login in the token, with no email accepted from the request', async () => {
+            const token = as('unverified-token', unverified('auth0|pending'));
+
+            const response = await request(app.getHttpServer()).post('/auth/resend-verification').set('Authorization', `Bearer ${token}`).send({ email: 'victim@example.com' });
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({ emailSent: true });
+            expect(auth0Management.sendVerificationEmail).toHaveBeenCalledTimes(1);
             expect(auth0Management.sendVerificationEmail).toHaveBeenCalledWith('auth0|pending');
         });
 
-        it('answers the same and sends nothing for an address with no unverified login', async () => {
-            const response = await resend('nobody@example.com');
+        it('sends nothing for a login that is already verified', async () => {
+            const token = as('verified-token', { ...unverified('auth0|done'), emailVerified: true });
+
+            const response = await resend(token);
 
             expect(response.status).toBe(200);
-            expect(response.body).toEqual({ accepted: true });
             expect(auth0Management.sendVerificationEmail).not.toHaveBeenCalled();
         });
     });

@@ -267,36 +267,6 @@ describe('Auth0ManagementService', () => {
         });
     });
 
-    describe('findDatabaseUsersByEmail', () => {
-        it('returns the database logins for the address, with whether each has verified it, and leaves out social logins', async () => {
-            usersByEmailBody = [
-                { user_id: 'auth0|unverified', email_verified: false },
-                { user_id: 'auth0|verified', email_verified: true },
-                { user_id: 'google-oauth2|123', email_verified: true },
-            ];
-
-            const users = await createService().findDatabaseUsersByEmail('ada+x@example.com');
-
-            expect(users).toEqual([
-                { subject: 'auth0|unverified', emailVerified: false },
-                { subject: 'auth0|verified', emailVerified: true },
-            ]);
-            const lookup = calls.find((call) => call.url.includes('/api/v2/users-by-email'));
-            expect(lookup?.url).toBe(`${ISSUER}api/v2/users-by-email?email=ada%2Bx%40example.com`);
-            expect((lookup?.init.headers as Record<string, string>).Authorization).toBe('Bearer mgmt-token');
-        });
-
-        it('returns an empty list when the address has no login', async () => {
-            await expect(createService().findDatabaseUsersByEmail('nobody@example.com')).resolves.toEqual([]);
-        });
-
-        it('throws on failure, so the caller does not treat an outage as "no login"', async () => {
-            usersByEmailStatus = 500;
-
-            await expect(createService().findDatabaseUsersByEmail('ada@example.com')).rejects.toThrow('Auth0 Management API responded 500');
-        });
-    });
-
     describe('sendVerificationEmail', () => {
         const verifications = () => calls.filter((call) => call.url.endsWith('/api/v2/jobs/verification-email'));
 

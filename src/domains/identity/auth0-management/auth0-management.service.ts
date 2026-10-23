@@ -39,9 +39,6 @@ interface CachedToken {
     expiresAt: number;
 }
 
-/** A database-connection login at Auth0. `subject` is the Auth0 `user_id` (the Identity `subject`), never a Vocab User id. */
-export type TDatabaseLogin = { subject: string; emailVerified: boolean };
-
 @Injectable()
 export class Auth0ManagementService {
     private readonly logger = new Logger(Auth0ManagementService.name);
@@ -117,25 +114,6 @@ export class Auth0ManagementService {
             const body = (await response.json()) as { last_password_reset?: string };
             return body.last_password_reset ?? null;
         }) as Promise<string | null>;
-    }
-
-    /**
-     * The database-connection logins (`auth0|…`) that use this email, and whether each has verified it. Social logins are left out:
-     * Auth0 verifies those itself.
-     */
-    public async findDatabaseUsersByEmail(email: string): Promise<TDatabaseLogin[]> {
-        const { issuer } = this.readSettings();
-        return this.breaker.fire(async () => {
-            const response = await fetch(`${issuer}api/v2/users-by-email?email=${encodeURIComponent(email)}`, {
-                headers: { Authorization: `Bearer ${await this.getToken()}` },
-                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-            });
-            if (!response.ok) {
-                throw new Auth0ManagementError(`Auth0 Management API responded ${response.status}`, response.status);
-            }
-            const users = (await response.json()) as { user_id: string; email_verified?: boolean }[];
-            return users.filter(({ user_id }) => user_id.startsWith('auth0|')).map(({ user_id, email_verified }) => ({ subject: user_id, emailVerified: email_verified === true }));
-        }) as Promise<TDatabaseLogin[]>;
     }
 
     /** Asks Auth0 to email a database user the verification link. Auth0 sends it, so the link never passes through this server. */

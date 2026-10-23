@@ -27,6 +27,7 @@ import {
     SignInMethodsDto,
     SignUpInput,
     SignUpResponseDto,
+    VerificationEmailDto,
     VerifyOtpInput,
 } from '../dto';
 import { AuthUnauthorizedException } from '../exceptions';
@@ -156,6 +157,22 @@ export class AuthController {
     public async syncAuth0User(@CurrentAuthUser() authUser: AuthUser): Promise<UserDto> {
         const user = await this.authService.syncAuth0User(authUser);
         return new UserDto(user);
+    }
+
+    // Like sync, no RolesGuard: the login being verified has no database role yet. The global guard still requires a valid Auth0 token.
+    @Post('resend-verification')
+    @HttpCode(HttpStatus.OK)
+    @AllowUnprovisioned()
+    // Tight on purpose: each send makes Auth0 email an inbox. The per-login cooldown sits in the service.
+    @Throttle({ default: { limit: 3, ttl: 60000 } })
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "Ask Auth0 to send a new verification email to the signed-in login's own address (the address is never taken from the request)" })
+    @ApiResponse({ status: HttpStatus.OK, type: VerificationEmailDto, description: 'Auth0 was asked to send the email, or there was nothing to send' })
+    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Invalid or missing access token' })
+    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many attempts' })
+    public async resendVerification(@CurrentAuthUser() authUser: AuthUser): Promise<VerificationEmailDto> {
+        await this.resendVerificationEmailService.resend(authUser);
+        return new VerificationEmailDto(true);
     }
 
     @Get('identities')
@@ -343,16 +360,21 @@ export class AuthController {
     }
 
     @Post('resend-confirmation')
-    @HttpCode(HttpStatus.OK)
     @Public()
-    // Tight on purpose: each send makes Auth0 email someone's inbox. The per-address cooldown sits in the service.
-    @Throttle({ default: { limit: 3, ttl: 60000 } })
-    @ApiOperation({ summary: 'Send a new verification email to an unverified sign-in with this address (always answers the same)' })
-    @ApiResponse({ status: HttpStatus.OK, description: 'Always the same answer, whether or not an unverified login exists' })
-    @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, description: 'Too many attempts' })
-    public async resendConfirmation(@Body(ResendConfirmationPipe) input: ResendConfirmationInput): Promise<{ accepted: true }> {
-        // Never logs the address: the service logs counts only.
-        await this.resendVerificationEmailService.resend(input.email);
-        return { accepted: true };
+    @ApiOperation({ summary: 'Resend email confirmation' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Confirmation email sent successfully',
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Failed to send confirmation email',
+    })
+    public async resendConfirmation(@Body(ResendConfirmationPipe) input: ResendConfirmationInput) {
+        const { email } = input;
+
+        await this.authService.resendConfirmation(email);
+
+        this.logger.info(`Confirmation email resent to: ${email}`);
     }
 }
