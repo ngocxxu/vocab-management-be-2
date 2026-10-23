@@ -2,7 +2,7 @@ import type { VocabGenerateTextTargetJobData } from '../interfaces/job-payloads'
 import { EReminderType } from '@/domains/reminder/utils';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Queue } from 'bullmq';
+import type { Queue } from 'bull';
 import { QUEUE_CONFIG } from '../config/queue.config';
 import { JOB_NAMES } from '../constants/queue.constants';
 import { BaseProducer } from './base.producer';

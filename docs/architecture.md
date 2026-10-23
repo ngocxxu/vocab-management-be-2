@@ -60,7 +60,7 @@ graph TB
     subgraph "Infrastructure"
         POSTGRES[(PostgreSQL<br/>Primary Database)]
         REDIS[(Redis<br/>Cache + Queues)]
-        BULL[BullMQ<br/>Job Processor]
+        BULL[Bull<br/>Job Processor]
     end
 
     subgraph "Monitoring"
@@ -152,7 +152,7 @@ graph TB
 
 - **Modular Monolith**: Single deployable application with clear layer separation
 - **Three-tier architecture**: Presentation (Controllers) → Business Logic (Services) → Data Access (Repositories)
-- **Async processing**: BullMQ handles 7 workload queues for AI, notifications, and reminders
+- **Async processing**: Bull handles 11 workload queues for AI, notifications, and reminders
 - **Real-time capabilities**: WebSocket for bidirectional communication, SSE for server-push events
 - **External dependencies**: Supabase for auth/storage, Firebase for push, multiple AI providers for flexibility
 - **Caching strategy**: Redis for rate limiting, quota tracking, and session management
@@ -166,7 +166,7 @@ graph TB
     subgraph "Core Infrastructure Modules"
         AUTH[Auth Module<br/>JWT + Guards]
         DB[Database Module<br/>Prisma Client]
-        QUEUE[Queues Module<br/>BullMQ]
+        QUEUE[Queues Module<br/>Bull]
         COMMON[Common Module<br/>Filters + Logger]
         SHARED[Shared Module<br/>Utilities]
     end
@@ -638,7 +638,7 @@ sequenceDiagram
     participant VocabSvc as Vocab Service
     participant Redis as Redis Cache
     participant DB as PostgreSQL
-    participant Queue as BullMQ
+    participant Queue as Bull
     participant AIWorker as AI Worker
     participant AISvc as AI Service
     participant NotifQueue as Notification Queue
@@ -700,7 +700,7 @@ sequenceDiagram
     participant MasterySvc as Mastery Service
     participant ReminderSvc as Reminder Service
     participant DB as PostgreSQL
-    participant Queue as BullMQ
+    participant Queue as Bull
     participant AIWorker as AI Worker
 
     User->>API: POST /vocab-trainers/{id}/submit<br/>{answers[]}
@@ -895,7 +895,7 @@ sequenceDiagram
 
 I've reconstructed 4 comprehensive architecture diagrams for your vocabulary learning platform:
 
-1. **System Architecture**: Shows the modular monolith structure with NestJS layers, external integrations (Supabase, Firebase, AI providers), infrastructure (PostgreSQL, Redis, BullMQ), and real-time capabilities (WebSocket, SSE)
+1. **System Architecture**: Shows the modular monolith structure with NestJS layers, external integrations (Supabase, Firebase, AI providers), infrastructure (PostgreSQL, Redis, Bull), and real-time capabilities (WebSocket, SSE)
 
 2. **Module Interactions**: Depicts 9 domain modules with clear dependencies - Identity, Catalog, Vocab, Trainer, AI, Notification, Reminder, Media, and Platform domains
 

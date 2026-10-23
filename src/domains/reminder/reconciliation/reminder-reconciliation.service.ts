@@ -4,7 +4,7 @@ import { LoggerService } from '@/shared';
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { ReminderScheduleStatus } from '@prisma/client';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';

@@ -8,7 +8,7 @@ import { LoggerService, RedisPrefix, RedisService, RedisPubSubService } from '@/
 import { captureSentryException } from '@/shared/utils/sentry.util';
 import { OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { ChatRole, UserRole } from '@prisma/client';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { EReminderType } from '../../reminder/utils';

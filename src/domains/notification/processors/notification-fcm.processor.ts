@@ -3,7 +3,7 @@ import type { SendFcmNotificationJobData } from '@/queues/interfaces/job-payload
 import { LoggerService } from '@/shared';
 import { OnQueueActive, OnQueueCompleted, OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { ENotificationFcmType, EReminderType } from '../../reminder/utils';
 import { FcmService } from '../push/fcm/services';
 import { FirebaseProvider } from '../push/firebase';

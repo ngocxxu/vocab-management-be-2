@@ -2,8 +2,7 @@ import type { VocabTranslationJobData } from '../interfaces/job-payloads';
 import { EReminderType } from '@/domains/reminder/utils';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import type { JobsOptions } from 'bullmq';
+import type { JobOptions, Queue } from 'bull';
 import { QUEUE_CONFIG } from '../config/queue.config';
 import { JOB_NAMES } from '../constants/queue.constants';
 import { BaseProducer } from './base.producer';
@@ -14,7 +13,7 @@ export class VocabTranslationProducer extends BaseProducer {
         super(queue, QUEUE_CONFIG[EReminderType.VOCAB_TRANSLATION].defaultJobOptions);
     }
 
-    public async translateVocab(data: VocabTranslationJobData, opts?: JobsOptions): Promise<{ jobId: string }> {
+    public async translateVocab(data: VocabTranslationJobData, opts?: JobOptions): Promise<{ jobId: string }> {
         return this.addJob(JOB_NAMES.translateVocab, data, opts);
     }
 }

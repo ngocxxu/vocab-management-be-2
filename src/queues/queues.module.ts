@@ -22,8 +22,7 @@ import { VocabTranslationProducer } from './producers/vocab-translation.producer
 const workloadBullModules = WORKLOAD_QUEUE_NAMES.map((name) =>
     BullModule.registerQueue({
         name,
-        // Nest @nestjs/bull types target `bull` JobOptions; runtime uses BullMQ-compatible options.
-        defaultJobOptions: QUEUE_CONFIG[name as EReminderType].defaultJobOptions as never,
+        defaultJobOptions: QUEUE_CONFIG[name as EReminderType].defaultJobOptions,
     }),
 );
 
@@ -36,7 +35,7 @@ const workloadBoardModules = WORKLOAD_QUEUE_NAMES.map((name) =>
 
 const deadLetterBull = BullModule.registerQueue({
     name: DEAD_LETTER_QUEUE,
-    defaultJobOptions: DEAD_LETTER_QUEUE_DEFAULT_OPTIONS as never,
+    defaultJobOptions: DEAD_LETTER_QUEUE_DEFAULT_OPTIONS,
 });
 
 const deadLetterBoard = BullBoardModule.forFeature({

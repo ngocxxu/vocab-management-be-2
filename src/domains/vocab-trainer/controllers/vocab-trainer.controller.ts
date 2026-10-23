@@ -18,6 +18,7 @@ import {
     FsrsReviewQueueQueryInput,
     UpdateFsrsSettingsInput,
     VocabTrainerDeleteBulkInput,
+    ExamJobStatusDto,
     VocabTrainerDto,
     VocabTrainerInput,
     SubmitTranslationAudioResponseDto,
@@ -73,6 +74,16 @@ export class VocabTrainerController {
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
     public async findOneAndExam(@Param('id') id: string, @CurrentUser() user: User): Promise<VocabTrainerDto> {
         return this.vocabTrainerService.findOneAndExam(id, user.id);
+    }
+
+    @Get(':id/exam/jobs/:jobId')
+    @Throttle({ default: { limit: 30, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Get the status of an exam generation or grading job (fallback when a socket event is missed)' })
+    @ApiResponse({ status: HttpStatus.OK, type: ExamJobStatusDto })
+    public async getExamJobStatus(@Param('id') id: string, @Param('jobId') jobId: string, @CurrentUser() user: User): Promise<ExamJobStatusDto> {
+        return this.vocabTrainerService.getExamJobStatus(user.id, id, jobId);
     }
 
     @Patch(':id/exam')

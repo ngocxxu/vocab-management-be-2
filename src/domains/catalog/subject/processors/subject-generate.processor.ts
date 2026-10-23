@@ -8,7 +8,7 @@ import type { SubjectGenerateJobData } from '@/queues/interfaces/job-payloads';
 import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 
 @Injectable()
 @Processor(EReminderType.SUBJECT_GENERATE)
@@ -26,7 +26,7 @@ export class SubjectGenerateProcessor {
     })
     public async processSubjectGenerate(job: Job<SubjectGenerateJobData>): Promise<void> {
         const { textTarget, targetLanguageCode, userId } = job.data;
-        const jobId = job.id ?? '';
+        const jobId = String(job.id ?? '');
 
         const aiNames = await this.aiSubjectService.suggestSubjects(textTarget, targetLanguageCode, userId);
 

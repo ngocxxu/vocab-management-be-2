@@ -2,8 +2,7 @@ import type { SendFcmNotificationJobData } from '../interfaces/job-payloads';
 import { ENotificationFcmType, EReminderType } from '@/domains/reminder/utils';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import type { JobsOptions } from 'bullmq';
+import type { JobOptions, Queue } from 'bull';
 import { QUEUE_CONFIG } from '../config/queue.config';
 import { BaseProducer } from './base.producer';
 
@@ -13,7 +12,7 @@ export class NotificationFcmProducer extends BaseProducer {
         super(queue, QUEUE_CONFIG[EReminderType.NOTIFICATION_FCM].defaultJobOptions);
     }
 
-    public async sendNotification(data: SendFcmNotificationJobData, opts?: JobsOptions): Promise<{ jobId: string }> {
+    public async sendNotification(data: SendFcmNotificationJobData, opts?: JobOptions): Promise<{ jobId: string }> {
         return this.addJob(ENotificationFcmType.SEND_NOTIFICATION, data, opts);
     }
 
@@ -33,6 +32,6 @@ export class NotificationFcmProducer extends BaseProducer {
     }
 
     public async drain(): Promise<void> {
-        return this.queue.drain();
+        return this.queue.empty();
     }
 }

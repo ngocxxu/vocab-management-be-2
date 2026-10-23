@@ -2,7 +2,7 @@ import { EMAIL_REMINDER_JOB_CONCURRENCY } from '@/queues/config/queue.config';
 import { captureSentryException, LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { ReminderSchedule, ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { ReminderScheduleRepository } from '../../../reminder/repositories/reminder-schedule.repository';
 import { FsrsReminderService } from '../../../reminder/services/fsrs-reminder.service';

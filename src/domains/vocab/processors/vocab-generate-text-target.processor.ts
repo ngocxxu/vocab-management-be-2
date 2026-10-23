@@ -7,7 +7,7 @@ import type { VocabGenerateTextTargetJobData } from '@/queues/interfaces/job-pay
 import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 
 @Injectable()
 @Processor(EReminderType.VOCAB_GENERATE_TEXT_TARGET)
@@ -24,7 +24,7 @@ export class VocabGenerateTextTargetProcessor {
     })
     public async processVocabGenerateTextTarget(job: Job<VocabGenerateTextTargetJobData>): Promise<void> {
         const { textSource, sourceLanguageCode, targetLanguageCode, userId } = job.data;
-        const jobId = job.id ?? '';
+        const jobId = String(job.id ?? '');
 
         const result = await this.aiService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, undefined, userId);
         this.notificationGateway.emitVocabGenerateTextTargetResult(userId, jobId, textSource, result);
