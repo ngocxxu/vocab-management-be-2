@@ -12,6 +12,11 @@ The schema comments point here. Classic trainers never read or write the FSRS ta
 - **Card = (trainer, word, direction).** Each word gets one card per direction the trainer uses. Recognising a meaning
   and recalling a word are different memories, so they are scheduled separately. The same word in two trainers has two
   independent cards.
+- **Direction choices.** The user picks Recognise (`SOURCE_TO_TARGET`), Recall (`TARGET_TO_SOURCE`), both, or Random.
+  With 10 words that is 10, 10, 20 and 10 cards. **Random** (`RANDOM`) gives one card per word with one schedule. The direction
+  is random, but it stays the same until the card is answered. After an answer it may change. So the question and the
+  check of a typed answer always agree. A review log keeps `RANDOM` as the direction of the card. Random cannot be combined
+  with Recognise or Recall.
 - **Review log.** Every rating writes one row to `VocabFsrsReviewLog`. The card is updated in the same transaction.
 - **Separate from `VocabMastery`.** FSRS state lives in its own tables. Rating an FSRS card never changes
   `VocabMastery.masteryScore`, and Classic exam results never change a card. The two statistics stay apart.
@@ -22,14 +27,14 @@ The schema comments point here. Classic trainers never read or write the FSRS ta
 
 Used only when `mode = FSRS`. Read through `FsrsMapper.toSettings`.
 
-| Column                   | Type                  | Default   | Meaning                                                         |
-| ------------------------ | --------------------- | --------- | --------------------------------------------------------------- |
-| `mode`                   | `TrainerMode`         | `CLASSIC` | `CLASSIC` or `FSRS`. Fixed after creation.                      |
-| `fsrs_desired_retention` | float                 | `0.9`     | Target probability of recall at review time, 0.70–0.97.         |
-| `fsrs_maximum_interval`  | int                   | `36500`   | Longest gap between two reviews, in days (1–36500).             |
-| `fsrs_new_per_day`       | int, nullable         | null      | Maximum NEW cards introduced per local day. Null = unlimited.   |
-| `fsrs_directions`        | `FsrsDirection[]`     | both      | Directions that get a card. At least one. Fixed after creation. |
-| `fsrs_ends_at`           | timestamptz, nullable | null      | End of the cycle (for example an exam date). Null = no end.     |
+| Column                   | Type                  | Default   | Meaning                                                                                   |
+| ------------------------ | --------------------- | --------- | ----------------------------------------------------------------------------------------- |
+| `mode`                   | `TrainerMode`         | `CLASSIC` | `CLASSIC` or `FSRS`. Fixed after creation.                                                |
+| `fsrs_desired_retention` | float                 | `0.9`     | Target probability of recall at review time, 0.70–0.97.                                   |
+| `fsrs_maximum_interval`  | int                   | `36500`   | Longest gap between two reviews, in days (1–36500).                                       |
+| `fsrs_new_per_day`       | int, nullable         | null      | Maximum NEW cards introduced per local day. Null = unlimited.                             |
+| `fsrs_directions`        | `FsrsDirection[]`     | both      | Directions that get a card. At least one; `RANDOM` only on its own. Fixed after creation. |
+| `fsrs_ends_at`           | timestamptz, nullable | null      | End of the cycle (for example an exam date). Null = no end.                               |
 
 When the trainer is created, `fsrs_desired_retention`, `fsrs_directions` and `reminder_disabled` are copied from the
 user's defaults (see "Settings and defaults"). The other columns come from the create request or the column default.

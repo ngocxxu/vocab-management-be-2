@@ -75,3 +75,19 @@ _Avoid_: Done, Finished, Error state
 **Job status**:
 What a client can ask for an Exam job after missing its live progress events: `evaluating` or `generating` while in flight, a Terminal status, or `unknown` when the job has expired or belongs to someone else.
 _Avoid_: Job state (Bull's own state names are not part of this language)
+
+**FSRS trainer**:
+A vocab trainer that schedules each word by how well it is remembered, instead of asking its words in one fixed pass. Not a Classic trainer.
+_Avoid_: Space repetition trainer, SRS trainer (in code and docs: say FSRS)
+
+**Card**:
+One word asked in one Direction inside an FSRS trainer. It is the unit that is scheduled, reviewed and counted. A "question" in a ticket about an FSRS trainer means a Card.
+_Avoid_: Question (that is the Classic trainer and the exam word)
+
+**Direction**:
+How a Card is asked. Recognise: the source text is shown and the target is the answer. Recall: the target is shown and the source is the answer. Both: a Card per Direction, so a word has two. Random: one Card per word, asked in Recognise or Recall at random.
+_Avoid_: Mode (that means Classic or FSRS), Type
+
+**Shown direction**:
+The Direction a Card is actually asked in right now. For a Recognise or Recall Card it is the Card's own Direction. For a Random Card it is picked at random and stays the same until the Card is answered.
+_Avoid_: Current direction, Resolved direction

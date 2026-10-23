@@ -1,9 +1,10 @@
 import { ConfigService } from '@/domains/platform/config/services/config.service';
+import { shownDirection } from '@/domains/vocab/utils/fsrs-shown-direction.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { FsrsRating } from '@prisma/client';
 import { FsrsMapper } from '../mappers/fsrs.mapper';
 import { FsrsCardWithWord, FsrsRepository } from '../repositories/fsrs.repository';
-import { FsrsPreviewButton, FsrsReviewInput, FsrsReviewQueue, FsrsReviewQueueItem, FsrsReviewResult, FsrsReviewSummary, FsrsSettings } from '../types';
+import { FsrsPreviewButton, FsrsReviewInput, FsrsReviewQueue, FsrsReviewQueueItem, FsrsReviewResult, FsrsReviewSummary, FsrsSettings, ShownDirection } from '../types';
 import { AnswerCheck, checkAnswer } from '../utils/fsrs-answer-check.util';
 import { endOfLocalDay, resolveTimezone, SRS_TIMEZONE_CONFIG_KEY, startOfLocalDay } from '../utils/fsrs-local-day.util';
 import { FsrsReviewService } from './fsrs-review.service';
@@ -101,7 +102,7 @@ export class FsrsSessionService {
     public async checkAnswer(userId: string, trainerId: string, input: { cardId: string; answer: string }): Promise<AnswerCheck> {
         const card = await this.loadCardOf(userId, trainerId, input.cardId);
 
-        return checkAnswer(input.answer, this.sidesOf(card).acceptedAnswers);
+        return checkAnswer(input.answer, this.sidesOf(card, shownDirection(card)).acceptedAnswers);
     }
 
     /** Records the rating the user chose; the card must belong to this trainer. */
@@ -147,12 +148,12 @@ export class FsrsSessionService {
             .map(({ card }) => card);
     }
 
-    /** The direction decides which side is the question and which side is accepted as the answer. */
-    private sidesOf(card: FsrsCardWithWord): Pick<FsrsReviewQueueItem, 'frontText' | 'acceptedAnswers' | 'frontLanguageCode' | 'backLanguageCode'> {
+    /** The shown direction decides which side is the question and which side is accepted as the answer. */
+    private sidesOf(card: FsrsCardWithWord, side: ShownDirection): Pick<FsrsReviewQueueItem, 'frontText' | 'acceptedAnswers' | 'frontLanguageCode' | 'backLanguageCode'> {
         const vocab = card.trainerWord.vocab;
         const translations = vocab.textTargets.map((target) => target.textTarget);
 
-        if (card.direction === 'SOURCE_TO_TARGET') {
+        if (side === 'SOURCE_TO_TARGET') {
             return { frontText: [vocab.textSource], acceptedAnswers: translations, frontLanguageCode: vocab.sourceLanguageCode, backLanguageCode: vocab.targetLanguageCode };
         }
 
@@ -166,6 +167,8 @@ export class FsrsSessionService {
             FsrsPreviewButton
         >;
 
-        return { cardId: card.id, vocabId: card.vocabId, direction: card.direction, state: card.state, isNew: card.state === 'NEW', ...this.sidesOf(card), preview };
+        const side = shownDirection(card);
+
+        return { cardId: card.id, vocabId: card.vocabId, direction: side, state: card.state, isNew: card.state === 'NEW', ...this.sidesOf(card, side), preview };
     }
 }

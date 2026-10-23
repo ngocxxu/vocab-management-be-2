@@ -139,6 +139,21 @@ describeWithDb('FSRS statistics (real Postgres)', () => {
             ]);
         });
 
+        test('a Random trainer shows its cards in one RANDOM row', async () => {
+            // Arrange
+            await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { fsrsDirections: [FsrsDirection.RANDOM] } });
+            const w1 = await addWord('w1');
+            const w2 = await addWord('w2');
+            await reviewCard(w1, FsrsDirection.RANDOM, 4, daysFromNow(2));
+            await addCard(w2, FsrsDirection.RANDOM);
+
+            // Act
+            const result = await stats.getTrainerStats(userId, trainerId, NOW);
+
+            // Assert
+            expect(result.byDirection).toEqual([{ direction: FsrsDirection.RANDOM, cards: 2, new: 1, review: 1, mastered: 0, leeches: 0 }]);
+        });
+
         test('forecasts the cards due in the next 30 days, overdue cards count on day one', async () => {
             // Arrange
             await buildFixture();

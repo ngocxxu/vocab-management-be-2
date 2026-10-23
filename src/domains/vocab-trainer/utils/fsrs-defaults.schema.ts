@@ -1,7 +1,7 @@
 import { FsrsDirection } from '@prisma/client';
 import { z } from 'zod';
 import { isValidTimezone } from '../../vocab/utils/fsrs-local-day.util';
-import { FSRS_MAX_DESIRED_RETENTION, FSRS_MIN_DESIRED_RETENTION } from './fsrs-trainer-rules';
+import { FSRS_MAX_DESIRED_RETENTION, FSRS_MIN_DESIRED_RETENTION, isRandomWithOthers } from './fsrs-trainer-rules';
 
 /** Config (scope USER) key of the defaults. The timezone key lives next to the code that reads it (fsrs-local-day.util). */
 export const SRS_DEFAULTS_CONFIG_KEY = 'srs.defaults';
@@ -12,7 +12,8 @@ export const srsDefaultsSchema = z.strictObject({
     directions: z
         .array(z.enum(FsrsDirection))
         .min(1)
-        .refine((directions) => new Set(directions).size === directions.length, 'directions must be unique'),
+        .refine((directions) => new Set(directions).size === directions.length, 'directions must be unique')
+        .refine((directions) => !isRandomWithOthers(directions), 'RANDOM cannot be combined with another direction'),
     questionType: z.enum(['FLIP_CARD', 'FILL_IN_THE_BLANK']),
     reminderEnabled: z.boolean(),
 });
