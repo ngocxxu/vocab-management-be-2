@@ -4,13 +4,13 @@ import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { TrainerStatus } from '@prisma/client';
-import { Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bull';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { EReminderType } from '../../reminder/utils';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
 import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
-import { isAiRateLimitError } from '../utils/ai-rate-limit.util';
+import { classifyAiJobFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
 
 @Injectable()
 @Processor(EReminderType.AUDIO_EVALUATION)
@@ -27,16 +27,16 @@ export class AudioEvaluationProcessor {
         name: 'evaluate-audio',
         concurrency: QUEUE_CONFIG[EReminderType.AUDIO_EVALUATION].concurrency,
     })
-    public async processAudioEvaluation(job: Job<AudioEvaluationJobData>): Promise<void> {
+    public async processAudioEvaluation(job: Job<AudioEvaluationJobData>): Promise<object> {
         const { fileId, targetDialogue, sourceLanguageCode, targetLanguageCode, sourceWords, targetStyle, targetAudience, userId, vocabTrainerId, lockToken } = job.data;
 
-        const jobId = job.id || '';
+        const jobId = String(job.id ?? '');
 
         try {
             const ownsLock = await this.vocabTrainerJobLockService.isOwner(userId, String(jobId), lockToken);
             if (!ownsLock) {
                 this.logger.warn(`Skipping stale audio evaluation job ${jobId} for user ${userId}`);
-                return;
+                throw new StaleAiJobError(jobId, userId);
             }
 
             await this.vocabTrainerJobLockService.refreshLock(userId, lockToken, job.attemptsMade);
@@ -44,21 +44,24 @@ export class AudioEvaluationProcessor {
 
             this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'evaluating');
 
-            const audioBuffer = await this.aiService.downloadAudioFromCloudinary(fileId);
+            const audioBuffer = await withAiCallTimeout(this.aiService.downloadAudioFromCloudinary(fileId), 'Audio download');
             const mimeType = 'audio/webm';
 
-            const transcript = await this.aiService.transcribeAudio(audioBuffer, mimeType, sourceLanguageCode, userId);
+            const transcript = await withAiCallTimeout(this.aiService.transcribeAudio(audioBuffer, mimeType, sourceLanguageCode, userId), 'Audio transcription');
 
-            const evaluationResult = await this.aiService.evaluateTranslation({
-                targetDialogue,
-                transcript,
-                sourceLanguageCode,
-                targetLanguageCode,
-                sourceWords,
-                targetStyle,
-                targetAudience,
-                userId,
-            });
+            const evaluationResult = await withAiCallTimeout(
+                this.aiService.evaluateTranslation({
+                    targetDialogue,
+                    transcript,
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    sourceWords,
+                    targetStyle,
+                    targetAudience,
+                    userId,
+                }),
+                'Translation evaluation',
+            );
 
             const markdownReport = this.aiService.formatMarkdownReport(evaluationResult, transcript);
 
@@ -75,29 +78,26 @@ export class AudioEvaluationProcessor {
                 },
             });
 
-            this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'completed', {
-                transcript,
-                markdownReport,
-            });
+            // Also stored by Bull as the job's return value, which the job-status endpoint serves.
+            const completed = { transcript, markdownReport };
+            this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'completed', completed);
             await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
 
             this.logger.info(`Audio evaluation job ${job.id} completed successfully`);
+            return completed;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Audio evaluation job ${job.id} failed: ${errorMessage}`);
 
-            this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'failed', {
-                error: errorMessage,
-            });
-
-            if (isAiRateLimitError(error)) {
+            const { permanent, finalAttempt } = classifyAiJobFailure(job, error);
+            if (finalAttempt) {
+                this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'failed', { error: errorMessage });
                 await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
-                throw new UnrecoverableError(errorMessage);
+            } else {
+                this.notificationGateway.emitAudioEvaluationProgress(userId, jobId, 'evaluating');
             }
-
-            const maxAttempts = job.opts.attempts ?? 1;
-            if (job.attemptsMade + 1 >= maxAttempts) {
-                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+            if (permanent) {
+                await job.discard();
             }
 
             throw error;

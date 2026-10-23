@@ -2,7 +2,7 @@ import { QUEUE_CONFIG } from '@/queues/config/queue.config';
 import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { NotificationAction, NotificationType, PriorityLevel } from '@prisma/client';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { EEmailReminderType, EReminderType, EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { NotificationService } from '../services';
 import { NotificationJobData } from '../utils';

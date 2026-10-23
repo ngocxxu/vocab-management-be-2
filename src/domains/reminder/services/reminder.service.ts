@@ -2,7 +2,7 @@ import type { EmailJobData } from '@/queues/interfaces/job-payloads';
 import { EmailReminderProducer } from '@/queues/producers/email-reminder.producer';
 import { NotificationProducer } from '@/queues/producers/notification.producer';
 import { Injectable } from '@nestjs/common';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { TemplateData } from '../../notification/email/utils/type';
 
 @Injectable()
@@ -44,7 +44,7 @@ export class ReminderService {
                 data,
             },
             {
-                repeat: { pattern: cronPattern },
+                repeat: { cron: cronPattern },
             },
         );
     }

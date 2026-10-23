@@ -55,7 +55,7 @@
         "@supabase/supabase-js": "^2.49.10",
         "@types/multer": "^2.0.0",
         "axios": "^1.12.2",
-        "bullmq": "^5.56.4",
+        "bull": "4.16.5",
         "class-transformer": "^0.5.1",
         "class-validator": "^0.14.0",
         "csv-parser": "^3.2.0",

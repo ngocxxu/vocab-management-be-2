@@ -11,6 +11,7 @@ import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import {
     CloneVocabTrainerInput,
+    ExamJobStatusDto,
     SubmitExamBodyInput,
     SubmitFillInBlankChoiceInput,
     SubmitFillInBlankInput,
@@ -292,6 +293,10 @@ export class VocabTrainerService {
 
     public async submitFillInBlankChoice(id: string, input: SubmitFillInBlankChoiceInput, user: User): Promise<VocabTrainerDto> {
         return this.submitChoiceBasedExam(id, input, user, EQuestionType.FILL_IN_BLANK_CHOICE);
+    }
+
+    public async getExamJobStatus(userId: string, vocabTrainerId: string, jobId: string): Promise<ExamJobStatusDto> {
+        return this.aiService.getExamJobStatus(userId, vocabTrainerId, jobId);
     }
 
     public async submitFillInBlank(id: string, input: SubmitFillInBlankInput, user: User): Promise<VocabTrainerDto> {

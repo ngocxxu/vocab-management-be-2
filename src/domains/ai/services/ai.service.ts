@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ExamJobStatusDto } from '../../vocab-trainer/dto/exam-job-status.dto';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiGenerationException } from '../exceptions';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
@@ -78,6 +79,10 @@ export class AiService {
         userId?: string,
     ): Promise<Array<{ isCorrect: boolean; explanation?: string }>> {
         return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId);
+    }
+
+    public async getExamJobStatus(userId: string, vocabTrainerId: string, jobId: string): Promise<ExamJobStatusDto> {
+        return this.queueService.getJobStatus(userId, vocabTrainerId, jobId);
     }
 
     public async queueAudioEvaluation(params: QueueAudioEvaluationParams): Promise<QueueJobResult> {

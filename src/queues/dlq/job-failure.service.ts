@@ -1,6 +1,6 @@
 import { PrismaService } from '@/shared';
 import { Injectable } from '@nestjs/common';
-import type { Job } from 'bullmq';
+import type { Job } from 'bull';
 
 @Injectable()
 export class JobFailureService {
@@ -8,10 +8,6 @@ export class JobFailureService {
 
     public async recordFinalFailure(job: Job, queueName: string): Promise<void> {
         const maxAttempts = job.opts.attempts ?? 1;
-        if (job.attemptsMade < maxAttempts) {
-            return;
-        }
-
         const jobId = String(job.id ?? '');
         const stack = job.stacktrace;
         const stackTrace = Array.isArray(stack) && stack.length > 0 ? stack.join('\n') : null;

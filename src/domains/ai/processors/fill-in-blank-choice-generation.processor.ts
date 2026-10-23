@@ -3,13 +3,13 @@ import type { FillInBlankChoiceGenerationJobData } from '@/queues/interfaces/job
 import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bull';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
 import { EReminderType } from '../../reminder/utils';
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AiService } from '../services/ai.service';
 import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
-import { isAiRateLimitError } from '../utils/ai-rate-limit.util';
+import { classifyAiJobFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
 
 @Injectable()
 @Processor(EReminderType.FILL_IN_BLANK_CHOICE_GENERATION)
@@ -26,15 +26,15 @@ export class FillInBlankChoiceGenerationProcessor {
         name: 'generate-fill-in-blank-choice',
         concurrency: QUEUE_CONFIG[EReminderType.FILL_IN_BLANK_CHOICE_GENERATION].concurrency,
     })
-    public async processFillInBlankChoiceGeneration(job: Job<FillInBlankChoiceGenerationJobData>): Promise<void> {
+    public async processFillInBlankChoiceGeneration(job: Job<FillInBlankChoiceGenerationJobData>): Promise<object> {
         const { vocabTrainerId, vocabList, userId, lockToken } = job.data;
-        const jobId = job.id || '';
+        const jobId = String(job.id ?? '');
 
         try {
             const ownsLock = await this.vocabTrainerJobLockService.isOwner(userId, String(jobId), lockToken);
             if (!ownsLock) {
                 this.logger.warn(`Skipping stale fill-in-blank choice generation job ${jobId} for user ${userId}`);
-                return;
+                throw new StaleAiJobError(jobId, userId);
             }
 
             await this.vocabTrainerJobLockService.refreshLock(userId, lockToken, job.attemptsMade);
@@ -42,7 +42,7 @@ export class FillInBlankChoiceGenerationProcessor {
 
             this.notificationGateway.emitFillInBlankChoiceGenerationProgress(userId, jobId, 'generating');
 
-            const questions = await this.aiService.generateFillInBlankChoiceQuestions(vocabList, userId);
+            const questions = await withAiCallTimeout(this.aiService.generateFillInBlankChoiceQuestions(vocabList, userId), 'Fill-in-blank choice generation');
 
             await this.vocabTrainerRepository.updateVocabTrainerFields(vocabTrainerId, {
                 questionAnswers: questions.map((question) => ({
@@ -56,28 +56,26 @@ export class FillInBlankChoiceGenerationProcessor {
                 })),
             });
 
-            this.notificationGateway.emitFillInBlankChoiceGenerationProgress(userId, jobId, 'completed', {
-                questions,
-            });
+            // Also stored by Bull as the job's return value, which the job-status endpoint serves.
+            const completed = { questions };
+            this.notificationGateway.emitFillInBlankChoiceGenerationProgress(userId, jobId, 'completed', completed);
             await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
 
             this.logger.info(`Fill-in-blank choice generation job ${job.id} completed successfully`);
+            return completed;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Fill-in-blank choice generation job ${job.id} failed: ${errorMessage}`);
 
-            this.notificationGateway.emitFillInBlankChoiceGenerationProgress(userId, jobId, 'failed', {
-                error: errorMessage,
-            });
-
-            if (isAiRateLimitError(error)) {
+            const { permanent, finalAttempt } = classifyAiJobFailure(job, error);
+            if (finalAttempt) {
+                this.notificationGateway.emitFillInBlankChoiceGenerationProgress(userId, jobId, 'failed', { error: errorMessage });
                 await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
-                throw new UnrecoverableError(errorMessage);
+            } else {
+                this.notificationGateway.emitFillInBlankChoiceGenerationProgress(userId, jobId, 'generating');
             }
-
-            const maxAttempts = job.opts.attempts ?? 1;
-            if (job.attemptsMade + 1 >= maxAttempts) {
-                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+            if (permanent) {
+                await job.discard();
             }
 
             throw error;

@@ -1,12 +1,16 @@
+import { VOCAB_TRAINER_AI_CONFIG } from '@/domains/ai/constants/vocab-trainer-job.constants';
 import { EReminderType } from '@/domains/reminder/utils';
-import type { JobsOptions } from 'bullmq';
+import type { JobOptions } from 'bull';
 
 export interface QueueWorkerConfig {
     concurrency: number;
-    defaultJobOptions: JobsOptions;
+    defaultJobOptions: JobOptions;
 }
 
-const exponentialBackoff: JobsOptions['backoff'] = {
+// ponytail: Bull rejects the job after this; the underlying promise keeps running (no cancel).
+const AI_JOB_TIMEOUT_MS = VOCAB_TRAINER_AI_CONFIG.JOB_TIMEOUT_SECONDS * 1000;
+
+const exponentialBackoff: JobOptions['backoff'] = {
     type: 'exponential',
     delay: 2000,
 };
@@ -15,6 +19,7 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
     [EReminderType.AUDIO_EVALUATION]: {
         concurrency: 2,
         defaultJobOptions: {
+            timeout: AI_JOB_TIMEOUT_MS,
             attempts: 3,
             backoff: exponentialBackoff,
             removeOnComplete: 100,
@@ -24,6 +29,7 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
     [EReminderType.MULTIPLE_CHOICE_GENERATION]: {
         concurrency: 2,
         defaultJobOptions: {
+            timeout: AI_JOB_TIMEOUT_MS,
             attempts: 3,
             backoff: exponentialBackoff,
             removeOnComplete: 100,
@@ -33,6 +39,7 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
     [EReminderType.FILL_IN_BLANK_CHOICE_GENERATION]: {
         concurrency: 2,
         defaultJobOptions: {
+            timeout: AI_JOB_TIMEOUT_MS,
             attempts: 3,
             backoff: exponentialBackoff,
             removeOnComplete: 100,
@@ -42,6 +49,7 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
     [EReminderType.FILL_IN_BLANK_EVALUATION]: {
         concurrency: 1,
         defaultJobOptions: {
+            timeout: AI_JOB_TIMEOUT_MS,
             attempts: 3,
             backoff: exponentialBackoff,
             removeOnComplete: 100,
@@ -111,7 +119,7 @@ export const QUEUE_CONFIG: Record<EReminderType, QueueWorkerConfig> = {
     },
 };
 
-export const DEAD_LETTER_QUEUE_DEFAULT_OPTIONS: JobsOptions = {
+export const DEAD_LETTER_QUEUE_DEFAULT_OPTIONS: JobOptions = {
     attempts: 1,
     removeOnComplete: 100,
     removeOnFail: 500,

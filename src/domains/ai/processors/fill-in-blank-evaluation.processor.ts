@@ -4,7 +4,7 @@ import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { PriorityLevel, NotificationAction, NotificationType, TrainerStatus } from '@prisma/client';
-import { Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bull';
 import { UserRepository } from '../../identity/user/repositories';
 import { NotificationService } from '../../notification/services';
 import { NotificationGateway } from '../../platform/events/gateway/notification.gateway';
@@ -15,7 +15,7 @@ import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { EQuestionType, EReminderRepeat } from '../../vocab-trainer/utils';
 import { AiService } from '../services/ai.service';
 import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
-import { isAiRateLimitError } from '../utils/ai-rate-limit.util';
+import { classifyAiJobFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
 
 @Injectable()
 @Processor(EReminderType.FILL_IN_BLANK_EVALUATION)
@@ -36,15 +36,15 @@ export class FillInBlankEvaluationProcessor {
         name: 'evaluate-answers',
         concurrency: QUEUE_CONFIG[EReminderType.FILL_IN_BLANK_EVALUATION].concurrency,
     })
-    public async processFillInBlankEvaluation(job: Job<FillInBlankEvaluationJobData>): Promise<void> {
+    public async processFillInBlankEvaluation(job: Job<FillInBlankEvaluationJobData>): Promise<object> {
         const { vocabTrainerId, evaluations, answerSubmissions, userId, lockToken } = job.data;
-        const jobId = job.id || '';
+        const jobId = String(job.id ?? '');
 
         try {
             const ownsLock = await this.vocabTrainerJobLockService.isOwner(userId, String(jobId), lockToken);
             if (!ownsLock) {
                 this.logger.warn(`Skipping stale fill-in-blank evaluation job ${jobId} for user ${userId}`);
-                return;
+                throw new StaleAiJobError(jobId, userId);
             }
 
             await this.vocabTrainerJobLockService.refreshLock(userId, lockToken, job.attemptsMade);
@@ -52,14 +52,17 @@ export class FillInBlankEvaluationProcessor {
 
             this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'evaluating');
 
-            const evaluationResults = await this.aiService.evaluateAllFillInBlankAnswers(
-                evaluations.map((evaluation) => ({
-                    vocab: evaluation.vocab,
-                    userAnswer: evaluation.userAnswer,
-                    systemAnswer: evaluation.systemAnswer,
-                    questionType: evaluation.questionType,
-                })),
-                userId,
+            const evaluationResults = await withAiCallTimeout(
+                this.aiService.evaluateAllFillInBlankAnswers(
+                    evaluations.map((evaluation) => ({
+                        vocab: evaluation.vocab,
+                        userAnswer: evaluation.userAnswer,
+                        systemAnswer: evaluation.systemAnswer,
+                        questionType: evaluation.questionType,
+                    })),
+                    userId,
+                ),
+                'Fill-in-blank evaluation',
             );
 
             const createResults = evaluations.map((evaluation, index) => {
@@ -165,33 +168,33 @@ export class FillInBlankEvaluationProcessor {
                 );
             }
 
-            this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'completed', {
+            // Also stored by Bull as the job's return value, which the job-status endpoint serves.
+            const completed = {
                 results: createResults.map((result) => ({
                     status: result.status,
                     userSelected: result.userSelected,
                     systemSelected: result.systemSelected,
                     data: result.data,
                 })),
-            });
+            };
+            this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'completed', completed);
             await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
 
             this.logger.info(`Fill-in-blank evaluation job ${job.id} completed successfully`);
+            return completed;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Fill-in-blank evaluation job ${job.id} failed: ${errorMessage}`);
 
-            this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'failed', {
-                error: errorMessage,
-            });
-
-            if (isAiRateLimitError(error)) {
+            const { permanent, finalAttempt } = classifyAiJobFailure(job, error);
+            if (finalAttempt) {
+                this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'failed', { error: errorMessage });
                 await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
-                throw new UnrecoverableError(errorMessage);
+            } else {
+                this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'evaluating');
             }
-
-            const maxAttempts = job.opts.attempts ?? 1;
-            if (job.attemptsMade + 1 >= maxAttempts) {
-                await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
+            if (permanent) {
+                await job.discard();
             }
 
             throw error;

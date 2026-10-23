@@ -63,3 +63,15 @@ _Avoid_: Login, Account (in user-facing text)
 **Session verification**:
 The `GET /auth/verify` round-trip a client makes to learn which User the presented token belongs to. Distinct from the token validation the global guard runs on every authenticated request: that one decides whether a request may proceed, this one returns the User.
 _Avoid_: Token verification, Auth check, Verify (too generic: say which one)
+
+**Exam job**:
+A background run for one vocab trainer's exam: either generating its questions or grading a submission. A User has at most one Exam job in flight at a time. Starting a second for the same trainer and kind re-attaches to the running one; starting any other is refused.
+_Avoid_: Task, AI job, Lock (that means a real Postgres row lock)
+
+**Terminal status**:
+`completed` or `failed`: the final outcome of an Exam job. Once an Exam job has reached it, nothing about that job changes. A failed attempt that will be retried is not terminal, so the client keeps waiting.
+_Avoid_: Done, Finished, Error state
+
+**Job status**:
+What a client can ask for an Exam job after missing its live progress events: `evaluating` or `generating` while in flight, a Terminal status, or `unknown` when the job has expired or belongs to someone else.
+_Avoid_: Job state (Bull's own state names are not part of this language)

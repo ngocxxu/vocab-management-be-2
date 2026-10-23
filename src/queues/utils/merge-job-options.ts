@@ -1,6 +1,6 @@
-import type { JobsOptions } from 'bullmq';
+import type { JobOptions } from 'bull';
 
-function mergeBackoff(defaults: JobsOptions['backoff'], caller: JobsOptions['backoff']): JobsOptions['backoff'] {
+function mergeBackoff(defaults: JobOptions['backoff'], caller: JobOptions['backoff']): JobOptions['backoff'] {
     if (defaults && caller && typeof defaults === 'object' && typeof caller === 'object' && !Array.isArray(defaults) && !Array.isArray(caller)) {
         return { ...defaults, ...caller };
     }
@@ -10,11 +10,11 @@ function mergeBackoff(defaults: JobsOptions['backoff'], caller: JobsOptions['bac
     return defaults;
 }
 
-export function mergeJobOptions(defaults: JobsOptions, caller?: JobsOptions): JobsOptions {
+export function mergeJobOptions(defaults: JobOptions, caller?: JobOptions): JobOptions {
     if (!caller || Object.keys(caller).length === 0) {
         return { ...defaults };
     }
-    const merged: JobsOptions = { ...defaults, ...caller };
+    const merged: JobOptions = { ...defaults, ...caller };
     merged.backoff = mergeBackoff(defaults.backoff, caller.backoff);
     return merged;
 }

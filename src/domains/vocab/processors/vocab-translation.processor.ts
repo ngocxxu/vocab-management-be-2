@@ -4,7 +4,7 @@ import { LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Prisma, TextTarget } from '@prisma/client';
-import { Job } from 'bullmq';
+import type { Job } from 'bull';
 import { TranslatedTextTargetResult } from '../../ai/services/ai-translation.service';
 import { AiService } from '../../ai/services/ai.service';
 import { EReminderType } from '../../reminder/utils';

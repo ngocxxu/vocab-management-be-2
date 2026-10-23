@@ -2,8 +2,7 @@ import type { NotificationJobData } from '../interfaces/job-payloads';
 import { EEmailReminderType, EReminderType } from '@/domains/reminder/utils';
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import type { JobsOptions } from 'bullmq';
+import type { JobOptions, Queue } from 'bull';
 import { QUEUE_CONFIG } from '../config/queue.config';
 import { BaseProducer } from './base.producer';
 
@@ -13,7 +12,7 @@ export class NotificationProducer extends BaseProducer {
         super(queue, QUEUE_CONFIG[EReminderType.NOTIFICATION].defaultJobOptions);
     }
 
-    public async sendCreateNotification(data: NotificationJobData, opts?: JobsOptions): Promise<{ jobId: string }> {
+    public async sendCreateNotification(data: NotificationJobData, opts?: JobOptions): Promise<{ jobId: string }> {
         return this.addJob(EEmailReminderType.SEND_CREATE_NOTIFICATION, data, opts);
     }
 }
