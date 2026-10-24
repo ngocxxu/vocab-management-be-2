@@ -142,7 +142,7 @@ export class EmailProcessor {
 
         // The bell row follows the real send, and only the worker that won the SENT update creates it.
         if (markedSent) {
-            await this.reminderInAppNotificationService.notifySent(fresh, data);
+            await this.reminderInAppNotificationService.notifyReminderSent(fresh, data);
         }
 
         if (isFsrsDue) {

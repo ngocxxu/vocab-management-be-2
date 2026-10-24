@@ -3,6 +3,7 @@ export { SharedModule } from './shared.module';
 export { LoggerModule } from './logger';
 export { PrismaModule } from './prisma';
 
+export * from './adapters';
 export * from './services';
 export * from './guards';
 export * from './decorators';

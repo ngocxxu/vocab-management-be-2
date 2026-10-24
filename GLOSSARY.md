@@ -101,5 +101,5 @@ One planned Reminder for one trainer, due at a set time. It decides whether the 
 _Avoid_: Reminder job, Email job (queue jobs are not part of this language)
 
 **Bell notification**:
-The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent. If the bell message fails, the email is not sent again.
+The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent.
 _Avoid_: In-app reminder, Push (that means a phone push message)

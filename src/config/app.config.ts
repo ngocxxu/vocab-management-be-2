@@ -24,6 +24,8 @@ export default registerAs('app', () => ({
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     groqApiKey: process.env.GROQ_API_KEY || '',
     instanceId: process.env.INSTANCE_ID || '',
+    // Reverse proxies in front of the API (Traefik is 1). 0 is valid and means none, so no truthiness check on the parsed number.
+    trustProxyHops: parseInt(process.env.TRUST_PROXY_HOPS || '1', 10),
     reminderPollerEnabled: process.env.REMINDER_POLLER_ENABLED,
     reminderReconciliationEnabled: process.env.REMINDER_RECONCILIATION_ENABLED,
     passengersAllowed: process.env.PASSENGERS_ALLOWED as string,

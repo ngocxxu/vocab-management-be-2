@@ -1,14 +1,19 @@
-import { NotificationGateway } from '@/domains/platform/events/gateway/notification.gateway';
+import { NotificationService } from '@/domains/notification/services';
+import { NotificationGateway } from '@/domains/platform/events/gateway';
 import { captureSentryException, LoggerService } from '@/shared';
+import type { TemplateData } from '@/shared/utils/type.util';
 import { Injectable } from '@nestjs/common';
 import { NotificationAction, NotificationType, PriorityLevel, ReminderSchedule, ReminderScheduleKind } from '@prisma/client';
-import { NotificationService } from '../../notification/services/notification.service';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
-import { EEmailTemplate, EXPIRES_AT_30_DAYS } from '../utils';
+import { EEmailTemplate, EReminderNotificationKind, EXPIRES_AT_30_DAYS } from '../utils';
 
-export type ReminderNotificationKind = 'INITIAL' | 'ESCALATION' | 'FSRS_DUE';
+const REMINDER_NOTIFICATION = { type: NotificationType.VOCAB_TRAINER, action: NotificationAction.REMIND } as const;
 
-/** What a sent reminder email is told to the bell: the in-app twin of the email, created only after the email went out. */
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+/** The Bell notification of a Reminder: the in-app twin of the email, created only after the email went out. */
 @Injectable()
 export class ReminderInAppNotificationService {
     public constructor(
@@ -19,20 +24,19 @@ export class ReminderInAppNotificationService {
     ) {}
 
     /** Never throws: the email is already sent and marked SENT, so a bell failure must not fail or retry the job. */
-    public async notifySent(row: ReminderSchedule, emailData: Record<string, unknown>): Promise<void> {
+    public async notifyReminderSent(row: ReminderSchedule, emailData: TemplateData): Promise<void> {
         if (!row.userId || !row.entityId) {
             return;
         }
 
         try {
-            const kind = this.kindOf(row);
+            const kind = this.resolveKind(row);
             const trainer = await this.reminderScheduleRepository.findTrainerBrief(row.userId, row.entityId);
-            const trainerName = trainer?.name ?? this.readString(emailData.trainerName) ?? this.readString(emailData.testName) ?? '';
+            const trainerName = trainer?.name ?? this.readText(emailData.trainerName) ?? this.readText(emailData.testName) ?? '';
 
             const notification = await this.notificationService.create({
-                type: NotificationType.VOCAB_TRAINER,
-                action: NotificationAction.REMIND,
-                priority: kind === 'ESCALATION' ? PriorityLevel.MEDIUM : PriorityLevel.LOW,
+                ...REMINDER_NOTIFICATION,
+                priority: kind === EReminderNotificationKind.ESCALATION ? PriorityLevel.MEDIUM : PriorityLevel.LOW,
                 expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
                 isActive: true,
                 recipientUserIds: [row.userId],
@@ -40,52 +44,46 @@ export class ReminderInAppNotificationService {
                     trainerId: row.entityId,
                     trainerName,
                     ...(trainer?.questionType ? { questionType: trainer.questionType } : {}),
-                    message: this.messageOf(kind, trainerName),
+                    message: this.buildMessage(kind, trainerName),
                     kind,
                     scheduleId: row.id,
                 },
             });
 
-            this.emitToUser(row.userId, notification.id, kind);
+            this.pushToUser(row.userId, row.id, notification.id, kind);
         } catch (error: unknown) {
-            this.logger.error(`In-app reminder notification failed for schedule ${row.id}: ${error instanceof Error ? error.message : String(error)}`);
-            captureSentryException(error, {
-                tags: { 'reminder.schedule_id': row.id },
-            });
+            this.logger.error(`In-app reminder notification failed for schedule ${row.id}: ${errorMessage(error)}`);
+            captureSentryException(error, { tags: { 'reminder.schedule_id': row.id } });
         }
     }
 
-    private emitToUser(userId: string, notificationId: string, kind: ReminderNotificationKind): void {
+    /** Best effort: the row is saved already, so a missed push only means the bell shows it on its next refresh. */
+    private pushToUser(userId: string, scheduleId: string, notificationId: string, kind: EReminderNotificationKind): void {
         try {
-            this.notificationGateway.sendToUser(userId, 'reminder', {
-                id: notificationId,
-                type: NotificationType.VOCAB_TRAINER,
-                action: NotificationAction.REMIND,
-                kind,
-            });
+            this.notificationGateway.sendToUser(userId, 'reminder', { id: notificationId, ...REMINDER_NOTIFICATION, kind });
         } catch (error: unknown) {
-            // The row is saved already; the bell shows it on the next refresh.
-            this.logger.warn(`Reminder push failed for user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+            this.logger.warn(`Reminder push failed for schedule ${scheduleId}: ${errorMessage(error)}`);
+            captureSentryException(error, { tags: { 'reminder.schedule_id': scheduleId } });
         }
     }
 
-    private kindOf(row: ReminderSchedule): ReminderNotificationKind {
+    private resolveKind(row: ReminderSchedule): EReminderNotificationKind {
         if (row.template === (EEmailTemplate.FSRS_DUE_REMINDER as string)) {
-            return 'FSRS_DUE';
+            return EReminderNotificationKind.FSRS_DUE;
         }
 
-        return row.reminderType === ReminderScheduleKind.ESCALATION ? 'ESCALATION' : 'INITIAL';
+        return row.reminderType === ReminderScheduleKind.ESCALATION ? EReminderNotificationKind.ESCALATION : EReminderNotificationKind.INITIAL;
     }
 
-    private messageOf(kind: ReminderNotificationKind, trainerName: string): string {
-        if (kind === 'FSRS_DUE') {
+    private buildMessage(kind: EReminderNotificationKind, trainerName: string): string {
+        if (kind === EReminderNotificationKind.FSRS_DUE) {
             return `You have cards to review in "${trainerName}"`;
         }
 
         return `Time to retake your test "${trainerName}"`;
     }
 
-    private readString(value: unknown): string | undefined {
+    private readText(value: string | number | undefined): string | undefined {
         return typeof value === 'string' && value.length > 0 ? value : undefined;
     }
 }

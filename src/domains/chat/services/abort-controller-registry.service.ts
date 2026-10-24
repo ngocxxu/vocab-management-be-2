@@ -1,5 +1,5 @@
-import { RedisPubSubService } from '@/shared';
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { captureSentryException, LoggerService, RedisPubSubService } from '@/shared';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { CHAT_CANCEL_CHANNEL } from '../constants';
 
 /**
@@ -8,10 +8,12 @@ import { CHAT_CANCEL_CHANNEL } from '../constants';
  */
 @Injectable()
 export class AbortControllerRegistry implements OnApplicationBootstrap {
-    private readonly logger = new Logger(AbortControllerRegistry.name);
     private readonly controllers = new Map<string, AbortController>();
 
-    public constructor(private readonly redisPubSub: RedisPubSubService) {}
+    public constructor(
+        private readonly redisPubSub: RedisPubSubService,
+        private readonly logger: LoggerService,
+    ) {}
 
     public onApplicationBootstrap(): void {
         this.redisPubSub.subscribe(CHAT_CANCEL_CHANNEL, (message: string) => this.handleCancelMessage(message));
@@ -37,6 +39,7 @@ export class AbortControllerRegistry implements OnApplicationBootstrap {
         } catch (error: unknown) {
             // The Redis cancel flag still stops the run at its next check.
             this.logger.warn(`Failed to publish chat cancel for userId=${userId}: ${error instanceof Error ? error.message : String(error)}`);
+            captureSentryException(error, { tags: { 'chat.cancel': 'publish_failed' } });
         }
     }
 
@@ -46,12 +49,14 @@ export class AbortControllerRegistry implements OnApplicationBootstrap {
 
     private handleCancelMessage(message: string): void {
         try {
-            const payload = JSON.parse(message) as { userId?: unknown };
-            if (typeof payload.userId === 'string') {
-                this.abort(payload.userId);
+            const payload: unknown = JSON.parse(message);
+            const userId = typeof payload === 'object' && payload !== null ? (payload as { userId?: unknown }).userId : undefined;
+            if (typeof userId === 'string') {
+                this.abort(userId);
             }
-        } catch {
+        } catch (error: unknown) {
             this.logger.warn('Ignored an unreadable chat cancel message');
+            captureSentryException(error, { tags: { 'chat.cancel': 'unreadable_message' } });
         }
     }
 }
