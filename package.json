@@ -52,6 +52,7 @@
         "@prisma/instrumentation": "6.11.1",
         "@qdrant/js-client-rest": "^1.19.0",
         "@sentry/nestjs": "^10.53.1",
+        "@socket.io/redis-adapter": "^8.3.0",
         "@supabase/supabase-js": "^2.49.10",
         "@types/multer": "^2.0.0",
         "axios": "^1.12.2",

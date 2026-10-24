@@ -7,6 +7,8 @@ export const validationSchema = Joi.object({
     THROTTLE_LIMIT: Joi.number().integer().min(1).default(50),
     API_PREFIX: Joi.string().required(),
     API_CORS_ORIGINS: Joi.string().allow(''),
+    // Proxies in front of the app (Traefik is 1); lets the throttler see the real client IP.
+    TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(1),
 
     SWAGGER_ENABLE: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
     SWAGGER_PREFIX: Joi.string().required(),

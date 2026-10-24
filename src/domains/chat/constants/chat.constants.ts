@@ -5,6 +5,7 @@ export const CHAT_CHANNELS = {
     confirm: (userId: string, requestId: string) => `chat:${userId}:confirm:${requestId}`,
 };
 
+export const CHAT_CANCEL_CHANNEL = 'chat:cancel';
 export const CHAT_CANCEL_KEY = (userId: string): string => `${userId}:cancelled`;
 export const CHAT_CANCEL_TTL_SECONDS = 300;
 export const CHAT_MAX_MESSAGE_LENGTH = 300;

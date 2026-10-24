@@ -74,8 +74,8 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
     public async handleCancelGeneration(@ConnectedSocket() client: Socket): Promise<void> {
         const user = this.connectedUsers.get(client.id);
         if (!user) return;
-        this.abortRegistry.abort(user.userId);
         await this.redisService.set(RedisPrefix.CHAT, CHAT_CANCEL_KEY(user.userId), '1', CHAT_CANCEL_TTL_SECONDS);
+        await this.abortRegistry.requestAbort(user.userId);
         this.loggerService.info(`Chat cancel requested: userId=${user.userId}`);
     }
 

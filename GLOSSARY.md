@@ -91,3 +91,15 @@ _Avoid_: Mode (that means Classic or FSRS), Type
 **Shown direction**:
 The Direction a Card is actually asked in right now. For a Recognise or Recall Card it is the Card's own Direction. For a Random Card it is picked at random and stays the same until the Card is answered.
 _Avoid_: Current direction, Resolved direction
+
+**Reminder**:
+A message that tells a User a vocab trainer is due for practice. Tickets call it a "test reminder". Every Reminder is sent by email and also shows in the notification bell. A Classic trainer sends an initial Reminder and then a few escalations if the User does not act; an FSRS trainer sends one a day while cards are due.
+_Avoid_: Alert, Test reminder (in code and docs: say Reminder)
+
+**Reminder schedule**:
+One planned Reminder for one trainer, due at a set time. It decides whether the Reminder is sent at all: cancelling it (trainer deleted, reminders turned off, the User already practised) means nothing is sent, by email or in the bell.
+_Avoid_: Reminder job, Email job (queue jobs are not part of this language)
+
+**Bell notification**:
+The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent. If the bell message fails, the email is not sent again.
+_Avoid_: In-app reminder, Push (that means a phone push message)
