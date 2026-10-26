@@ -85,6 +85,8 @@ async function startApp(enabled: boolean) {
             return user;
         }),
     };
+    // Read on every request, so a test can flip it between two calls, as an admin does in the database.
+    const access = { enabled: true };
     const identityService = {
         // `role` is needed because RolesGuard reads the database role from the bound user.
         resolveLocalUser: jest.fn(async (user: { subject?: string }) => {
@@ -92,7 +94,7 @@ async function startApp(enabled: boolean) {
             if (user.subject === 'auth0|stranger') {
                 throw new IdentityUnauthorizedException();
             }
-            return { id: 'user-1', isActive: true, role: 'MEMBER' };
+            return { id: 'user-1', isActive: true, role: 'MEMBER', mcpAccess: access.enabled };
         }),
     };
     const moduleRef = await Test.createTestingModule({
@@ -129,7 +131,7 @@ async function startApp(enabled: boolean) {
     await app.listen(0);
     const server = app.getHttpServer() as Server;
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    return { app, base, vocabRepository };
+    return { app, base, vocabRepository, access };
 }
 
 const connect = async (base: string, token: string) => {
@@ -248,6 +250,35 @@ describe('Public MCP endpoint', () => {
             expect(JSON.parse(extractText(result)).error.code).toBe('internal_error');
             expect(extractText(result)).not.toMatch(/Prisma|secret|table/);
             await client.close();
+        });
+
+        it('returns 403 for a valid token when the user has MCP access off', async () => {
+            ctx.access.enabled = false;
+            try {
+                const res = await fetch(`${ctx.base}${MCP_PATH}`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer read' },
+                    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+                });
+
+                expect(res.status).toBe(403);
+            } finally {
+                ctx.access.enabled = true;
+            }
+        });
+
+        it('blocks the next request after MCP access is turned off mid-session', async () => {
+            const client = await connect(ctx.base, 'read');
+            try {
+                const before = await client.listTools();
+                expect(before.tools.map((tool) => tool.name)).toEqual(['list_vocab']);
+
+                ctx.access.enabled = false;
+                await expect(client.listTools()).rejects.toThrow();
+            } finally {
+                ctx.access.enabled = true;
+                await client.close();
+            }
         });
     });
 

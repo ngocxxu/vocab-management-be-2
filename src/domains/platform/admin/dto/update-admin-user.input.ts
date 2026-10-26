@@ -13,4 +13,9 @@ export class UpdateAdminUserInput {
     @IsOptional()
     @IsBoolean()
     public readonly isActive?: boolean;
+
+    @ApiPropertyOptional({ description: 'true lets the user use the public MCP endpoint; false blocks it on the next request' })
+    @IsOptional()
+    @IsBoolean()
+    public readonly mcpAccess?: boolean;
 }

@@ -64,6 +64,11 @@ export class UserDto {
     @IsBoolean()
     public readonly hasPassword: boolean;
 
+    @ApiProperty({ description: 'Whether the user may use the public MCP endpoint (set by an admin)', example: false })
+    @Type(() => Boolean)
+    @IsBoolean()
+    public readonly mcpAccess: boolean;
+
     public constructor(entity: User, providers?: string[]) {
         this.id = entity.id;
         this.email = entity.email;
@@ -75,6 +80,7 @@ export class UserDto {
         this.avatar = entity.avatar ?? '';
         this.role = entity.role;
         this.isActive = entity.isActive;
+        this.mcpAccess = entity.mcpAccess;
         this.supabaseUserId = entity.supabaseUserId ?? '';
         this.hasPassword = (providers ?? []).includes('email');
     }

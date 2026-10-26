@@ -13,7 +13,7 @@ import { UpdateAdminUserInput } from '../dto/update-admin-user.input';
 import { AdminLastActiveAdminException, AdminUserInvalidChangeException, AdminUserSelfActionException } from '../exceptions';
 import { toAdminUserDto, toAdminUserPage } from '../mappers';
 
-type UserChange = { role?: UserRole; isActive?: boolean };
+type UserChange = { role?: UserRole; isActive?: boolean; mcpAccess?: boolean };
 
 const isActiveAdmin = (user: User): boolean => user.role === UserRole.ADMIN && user.isActive;
 
@@ -44,19 +44,20 @@ export class AdminUsersService {
     }
 
     /**
-     * Changes a user's role and/or active status. Nobody can change their own account here,
+     * Changes a user's role, active status and/or MCP access. Nobody can change their own account here,
      * and the last active admin cannot be demoted or deactivated.
      */
     public async update(actor: User, id: string, input: UpdateAdminUserInput): Promise<UserDto> {
         const target = await this.findTarget(id);
         this.assertNotSelf(actor, target, 'change');
-        if (input.role === undefined && input.isActive === undefined) {
+        if (input.role === undefined && input.isActive === undefined && input.mcpAccess === undefined) {
             throw new AdminUserInvalidChangeException();
         }
 
         const change: UserChange = {
             ...(input.role !== undefined && { role: input.role }),
             ...(input.isActive !== undefined && { isActive: input.isActive }),
+            ...(input.mcpAccess !== undefined && { mcpAccess: input.mcpAccess }),
         };
         const removesActiveAdmin = isActiveAdmin(target) && ((input.role !== undefined && input.role !== UserRole.ADMIN) || input.isActive === false);
 

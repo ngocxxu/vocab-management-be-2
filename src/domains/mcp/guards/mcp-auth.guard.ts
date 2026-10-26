@@ -1,6 +1,6 @@
 import { AuthIdentityService, AuthTokenService, AuthUser } from '@/auth';
 import { bindAuthUserToRequest } from '@/auth/utils/bind-request-user.util';
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { User } from '@prisma/client';
 import { Request, Response } from 'express';
@@ -41,6 +41,11 @@ export class McpAuthGuard implements CanActivate {
                 throw this.challenge(response, resourceUrl, 'invalid_token');
             }
             throw error;
+        }
+
+        // Read from the database on every request, so an admin turning it off stops the next call, even for a token already issued (#21).
+        if (!request.currentUser?.mcpAccess) {
+            throw new ForbiddenException('mcp_access_disabled');
         }
 
         return true;
