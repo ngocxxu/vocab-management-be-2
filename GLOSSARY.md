@@ -103,3 +103,11 @@ _Avoid_: Reminder job, Email job (queue jobs are not part of this language)
 **Bell notification**:
 The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent.
 _Avoid_: In-app reminder, Push (that means a phone push message)
+
+**MCP access**:
+Whether a User may use the public MCP endpoint from an outside AI app. A User has it only when their plan includes it and an admin has not switched it off for them. The plan is the entitlement; the admin switch can only take it away, never grant it.
+_Avoid_: MCP permission, MCP enabled (that means the server-wide switch)
+
+**Plan benefit**:
+A line in a plan's feature list that tells Users what the plan gives them. It describes the plan; it does not turn anything on by itself.
+_Avoid_: Feature flag, Entitlement (the entitlement is what the system enforces; the benefit is the text)

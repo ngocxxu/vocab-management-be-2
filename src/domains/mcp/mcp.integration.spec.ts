@@ -86,15 +86,15 @@ async function startApp(enabled: boolean) {
         }),
     };
     // Read on every request, so a test can flip it between two calls, as an admin does in the database.
-    const access = { enabled: true };
+    const access = { enabled: true, role: 'MEMBER' };
     const identityService = {
-        // `role` is needed because RolesGuard reads the database role from the bound user.
+        // `role` is needed because RolesGuard reads the database role from the bound user, and the MCP guard blocks GUEST.
         resolveLocalUser: jest.fn(async (user: { subject?: string }) => {
             await Promise.resolve();
             if (user.subject === 'auth0|stranger') {
                 throw new IdentityUnauthorizedException();
             }
-            return { id: 'user-1', isActive: true, role: 'MEMBER', mcpAccess: access.enabled };
+            return { id: 'user-1', isActive: true, role: access.role, mcpAccess: access.enabled };
         }),
     };
     const moduleRef = await Test.createTestingModule({
@@ -143,6 +143,13 @@ const connect = async (base: string, token: string) => {
     );
     return client;
 };
+
+const postToolsList = async (base: string, token = 'read'): Promise<Response> =>
+    fetch(`${base}${MCP_PATH}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
 
 describe('Public MCP endpoint', () => {
     describe('when enabled', () => {
@@ -278,6 +285,41 @@ describe('Public MCP endpoint', () => {
             } finally {
                 ctx.access.enabled = true;
                 await client.close();
+            }
+        });
+
+        it('returns 403 mcp_requires_plan for a GUEST, even when the user has MCP access on', async () => {
+            ctx.access.role = 'GUEST';
+            try {
+                const res = await postToolsList(ctx.base);
+
+                expect(res.status).toBe(403);
+                expect(JSON.stringify(await res.json())).toContain('mcp_requires_plan');
+            } finally {
+                ctx.access.role = 'MEMBER';
+            }
+        });
+
+        it('keeps mcp_access_disabled for a MEMBER whose access is switched off', async () => {
+            ctx.access.enabled = false;
+            try {
+                const res = await postToolsList(ctx.base);
+
+                expect(res.status).toBe(403);
+                expect(JSON.stringify(await res.json())).toContain('mcp_access_disabled');
+            } finally {
+                ctx.access.enabled = true;
+            }
+        });
+
+        it('lets an ADMIN use MCP', async () => {
+            ctx.access.role = 'ADMIN';
+            try {
+                const res = await postToolsList(ctx.base);
+
+                expect(res.status).toBe(200);
+            } finally {
+                ctx.access.role = 'MEMBER';
             }
         });
     });

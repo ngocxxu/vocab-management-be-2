@@ -19,6 +19,7 @@ Lets external AI clients (Claude, ChatGPT) call a small set of Vocab tools, sign
 - An Auth0 access token with audience `MCP_RESOURCE_URL` is required. Missing or bad tokens get 401 with `WWW-Authenticate: Bearer resource_metadata="..."`.
 - The token's issuer and subject resolve to a User through the Identity table. Unknown identities get 401.
 - Web-app tokens are rejected on MCP. MCP tokens are rejected on the REST routes.
+- MCP needs a plan that includes it and the per-user flag. A GUEST (the Free plan) gets 403 `mcp_requires_plan`. A user whose `mcpAccess` an admin switched off gets 403 `mcp_access_disabled`. The flag is on by default. Role and flag are read from the database on every request, so a downgrade or a switch-off stops the next call, even for a token already issued.
 - Rate limit: 120 per minute per IP, before sign-in. Per-user limits are a separate ticket (#24).
 - Flow diagrams (connect, per-request guards) are in [feature-workflows](../agents/feature-workflows.md#public-mcp-external-ai-clients).
 
@@ -55,4 +56,4 @@ Tool errors are MCP results with a stable `error.code`: `invalid_params`, `unkno
 
 ## Not yet
 
-- Per-user MCP access flag (#21), per-user rate limits (#24), request logging (#25), write tools (#26).
+- Per-user rate limits (#24), request logging (#25), write tools (#26).

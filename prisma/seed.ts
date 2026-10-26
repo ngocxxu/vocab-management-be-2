@@ -19,14 +19,7 @@ const DEFAULT_PLANS = [
         price: 9.99,
         priceLabel: '9.99 USD/month',
         limits: { vocabPerDay: -1, languageFolders: -1, subjects: -1, requestsPerMinute: 100 },
-        features: [
-            'Unlimited vocabs',
-            'Unlimited folders & subjects',
-            'Bulk import',
-            'AI generate',
-            'Audio exam',
-            'Export CSV',
-        ],
+        features: ['Unlimited vocabs', 'Unlimited folders & subjects', 'Bulk import', 'AI generate', 'Audio exam', 'Connect ChatGPT and Claude (MCP)', 'Export CSV'],
         sortOrder: 1,
     },
 ];
@@ -41,13 +34,9 @@ type TLanguage = {
     name: string;
 };
 
-const wordTypeData = JSON.parse(
-    fs.readFileSync(path.join(__dirname, 'data/wordTypes.json'), 'utf-8'),
-) as TWordType[];
+const wordTypeData = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/wordTypes.json'), 'utf-8')) as TWordType[];
 
-const languageData = JSON.parse(
-    fs.readFileSync(path.join(__dirname, 'data/languages.json'), 'utf-8'),
-) as TLanguage[];
+const languageData = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/languages.json'), 'utf-8')) as TLanguage[];
 
 export class DatabaseSeeder {
     private readonly prisma: PrismaClient;

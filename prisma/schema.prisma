@@ -537,8 +537,8 @@ model User {
   avatar                 String?                 @map("avatar")
   role                   UserRole                @default(GUEST) @map("role")
   isActive               Boolean                 @default(true) @map("is_active")
-  /// Per-user switch for the public MCP endpoint. Off by default; an admin turns it on. Checked on every MCP request (#21).
-  mcpAccess              Boolean                 @default(false) @map("mcp_access")
+  /// Per-user off-switch for the public MCP endpoint, on by default. The plan decides who may use MCP (GUEST is blocked in the MCP guard); an admin turns this off to cut one user. Checked on every MCP request (#21).
+  mcpAccess              Boolean                 @default(true) @map("mcp_access")
   emailConfirmed         Boolean                 @default(false) @map("email_confirmed")
   supabaseUserId         String?                 @unique @map("supabase_user_id")
   identities             UserIdentity[]
