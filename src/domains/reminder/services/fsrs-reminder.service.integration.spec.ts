@@ -561,7 +561,8 @@ describeWithDb('FsrsReminderService (real Postgres)', () => {
         beforeEach(() => {
             emailService = { sendReminderEmail: jest.fn().mockResolvedValue(undefined) };
             const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), log: jest.fn() } as never;
-            processor = new EmailProcessor(emailService as never, logger, reminders, registry, service);
+            const inApp = { notifyReminderSent: jest.fn().mockResolvedValue(undefined) };
+            processor = new EmailProcessor(emailService as never, logger, reminders, registry, service, inApp as never);
         });
 
         test('sends the numbers counted now and plans the next reminder', async () => {
