@@ -270,4 +270,40 @@ describe('AuthTokenService', () => {
             await expect(service.verifyIdToken(await signIdToken())).rejects.toMatchObject({ message: 'id_token_invalid' });
         });
     });
+
+    describe('access tokens for a given audience (MCP)', () => {
+        const MCP_AUDIENCE = 'https://api.vocab.test/api/v1/mcp';
+
+        it('accepts a token for the requested audience and reads its scopes', async () => {
+            const { service } = createService();
+            const token = await sign({ scope: 'vocab:read vocab:write' }, { aud: MCP_AUDIENCE });
+
+            const authUser = await service.verifyAccessToken(token, MCP_AUDIENCE);
+
+            expect(authUser).toMatchObject({ provider: 'auth0', subject: 'google-oauth2|123', scopes: ['vocab:read', 'vocab:write'] });
+        });
+
+        it('refuses a web-app token when the MCP audience is required', async () => {
+            const { service } = createService();
+            const token = await sign({}, { aud: AUDIENCE });
+
+            await expect(service.verifyAccessToken(token, MCP_AUDIENCE)).rejects.toThrow(UnauthorizedException);
+        });
+
+        it('refuses an MCP token on the web audience', async () => {
+            const { service } = createService();
+            const token = await sign({}, { aud: MCP_AUDIENCE });
+
+            await expect(service.resolveAuthUser(token, 'auth0')).rejects.toThrow(UnauthorizedException);
+        });
+
+        it('leaves scopes undefined when the token has no scope claim', async () => {
+            const { service } = createService();
+            const token = await sign({}, { aud: MCP_AUDIENCE });
+
+            const authUser = await service.verifyAccessToken(token, MCP_AUDIENCE);
+
+            expect(authUser.scopes).toBeUndefined();
+        });
+    });
 });

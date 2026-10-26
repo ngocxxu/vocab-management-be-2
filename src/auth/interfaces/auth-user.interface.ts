@@ -14,6 +14,8 @@ export interface AuthUser {
     profile?: { firstName?: string; lastName?: string; avatar?: string };
     /** OAuth client the token was issued to (`azp`), or null for tokens without one. */
     clientId?: string | null;
+    /** OAuth scopes granted to the token (the space-separated `scope` claim). Undefined when the token has no `scope` claim. */
+    scopes?: string[];
 }
 
 /** The claims the account link reads from a verified Auth0 ID token. Standard OIDC claims, not the namespaced access-token ones. */

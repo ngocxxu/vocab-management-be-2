@@ -4,6 +4,8 @@
 
 `ApplicationModule` now registers **`GlobalAuthGuard`** instead of the legacy Supabase **`AuthGuard`**. Protected routes expect **`Authorization: Bearer <token>`** where the token is either an **Auth0 access token** (RS256, verified against the tenant JWKS with `AUTH0_ISSUER` / `AUTH0_AUDIENCE`) or a **Supabase access token**. Default strategy **`combined`** picks the verifier from the token's `iss`: the configured Auth0 issuer goes to Auth0 and is never retried against Supabase; anything else goes to Supabase `auth.getUser`. With `AUTH0_ISSUER` unset only Supabase tokens are accepted.
 
+The public MCP endpoint uses a separate Auth0 API. Its tokens must have the audience `MCP_RESOURCE_URL` and carry the `scope` claim (`vocab:read`, `vocab:write`). `AuthTokenService.verifyAccessToken` checks the audience per call. The REST routes never accept MCP tokens, and the MCP route never accepts web tokens. See `docs/features/public-mcp.md`.
+
 The API **does not** set auth **`Set-Cookie`** headers. Use tokens from **`SessionDto`** (`access_token`, `refresh_token`) and send **`Authorization: Bearer <access_token>`** on protected routes.
 
 ## `request.authUser` and `request.currentUser`

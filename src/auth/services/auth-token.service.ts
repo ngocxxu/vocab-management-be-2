@@ -91,6 +91,14 @@ export class AuthTokenService {
         }
     }
 
+    /**
+     * Verifies an Auth0 access token for a given audience. The MCP endpoint passes its own audience, so a web-app token
+     * (a different `aud`) is rejected there, and an MCP token is rejected on the REST routes that use the web audience.
+     */
+    public async verifyAccessToken(token: string, audience: string): Promise<AuthUser> {
+        return this.verifyAuth0(token, audience);
+    }
+
     private isIssuedByAuth0(token: string): boolean {
         const issuer = this.configService.get<string>('auth0.issuer');
         if (!issuer) {
@@ -103,9 +111,8 @@ export class AuthTokenService {
         }
     }
 
-    private async verifyAuth0(token: string): Promise<AuthUser> {
+    private async verifyAuth0(token: string, audience = this.configService.get<string>('auth0.audience')): Promise<AuthUser> {
         const issuer = this.configService.get<string>('auth0.issuer');
-        const audience = this.configService.get<string>('auth0.audience');
         if (!issuer || !audience) {
             throw new UnauthorizedException('Invalid or expired token');
         }
@@ -131,6 +138,7 @@ export class AuthTokenService {
                 issuer,
                 subject: payload.sub,
                 clientId: typeof payload.azp === 'string' ? payload.azp : null,
+                scopes: typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : undefined,
             };
         } catch (error) {
             if (error instanceof UnauthorizedException) {

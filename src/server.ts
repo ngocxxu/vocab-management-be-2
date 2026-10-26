@@ -4,6 +4,7 @@ import './instrument';
 // eslint-disable-next-line import/no-unassigned-import
 import './sentry-shutdown';
 
+import { MCP_METADATA_PATH } from '@/domains/mcp/constants';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -213,7 +214,8 @@ async function bootstrap(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     expressApp.use(createTimeoutMiddleware(requestTimeout, winstonLogger));
 
-    app.setGlobalPrefix(process.env.API_PREFIX || API_DEFAULT_PREFIX);
+    // The protected-resource metadata lives at the origin root (RFC 9728), outside the API prefix.
+    app.setGlobalPrefix(process.env.API_PREFIX || API_DEFAULT_PREFIX, { exclude: [MCP_METADATA_PATH] });
 
     if (process.env.SWAGGER_ENABLE === '1') {
         createSwagger(app, winstonLogger);

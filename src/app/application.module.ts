@@ -11,6 +11,7 @@ import { ChatModule } from '@/domains/chat';
 import { ApiKeyModule } from '@/domains/identity/api-key';
 import { AuthModule as IdentityAuthModule } from '@/domains/identity/auth';
 import { UserModule } from '@/domains/identity/user';
+import { McpModule } from '@/domains/mcp';
 import { CloudinaryModule } from '@/domains/media/cloudinary';
 import { SupabaseModule } from '@/domains/media/supabase';
 import { EmailModule, NotificationModule } from '@/domains/notification';
@@ -73,6 +74,7 @@ import { envConfigLoaders, validationSchema } from '../config';
         ConfigModule,
         CloudinaryModule,
         ChatModule,
+        McpModule,
         AiModule,
         UserModule,
         LanguageModule,

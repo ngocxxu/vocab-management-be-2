@@ -67,7 +67,11 @@ export const validationSchema = Joi.object({
 
     // Not .required(): until the Auth0 cutover only Supabase tokens are accepted.
     // When an issuer is set the audience must be too, otherwise any Auth0 tenant token would pass.
-    AUTH0_ISSUER: Joi.string().uri({ scheme: 'https' }).allow(''),
+    // The MCP endpoint verifies Auth0 tokens only, so turning it on requires the issuer.
+    AUTH0_ISSUER: Joi.string()
+        .uri({ scheme: 'https' })
+        .allow('')
+        .when('MCP_ENABLED', { is: 'true', then: Joi.string().uri({ scheme: 'https' }).required() }),
     AUTH0_CLIENT_ID: Joi.string().allow(''),
     AUTH0_PASSWORD_CONNECTION: Joi.string().allow(''),
     AUTH0_CLAIM_NAMESPACE: Joi.string().allow(''),
@@ -78,6 +82,20 @@ export const validationSchema = Joi.object({
     AUTH0_AUDIENCE: Joi.string()
         .allow('')
         .when('AUTH0_ISSUER', { is: Joi.string().min(1).required(), then: Joi.string().min(1).required() }),
+
+    // Public MCP endpoint (off by default). The resource URL is the Auth0 API audience, so it is required once the endpoint is on.
+    MCP_ENABLED: Joi.string().valid('true', 'false', ''),
+    // http is allowed for local development. Production HTTPS is enforced per request by McpRequestGuard.
+    MCP_RESOURCE_URL: Joi.string()
+        .uri({ scheme: ['http', 'https'] })
+        .allow('')
+        .when('MCP_ENABLED', {
+            is: 'true',
+            then: Joi.string()
+                .uri({ scheme: ['http', 'https'] })
+                .required(),
+        }),
+    MCP_ALLOWED_ORIGINS: Joi.string().allow(''),
 
     SUPABASE_URL: Joi.string().uri().required(),
     SUPABASE_KEY: Joi.string().required(),
