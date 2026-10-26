@@ -20,6 +20,28 @@ Lets external AI clients (Claude, ChatGPT) call a small set of Vocab tools, sign
 - The token's issuer and subject resolve to a User through the Identity table. Unknown identities get 401.
 - Web-app tokens are rejected on MCP. MCP tokens are rejected on the REST routes.
 - Rate limit: 120 per minute per IP, before sign-in. Per-user limits are a separate ticket (#24).
+- Flow diagrams (connect, per-request guards) are in [feature-workflows](../agents/feature-workflows.md#public-mcp-external-ai-clients).
+
+## Set up in Auth0 (once per environment)
+
+1. Create an API. Identifier = `MCP_RESOURCE_URL`, exactly. Signing algorithm `RS256` (the backend accepts only RS256; Auth0 defaults to HS256). Add scopes `vocab:read` and `vocab:write`.
+2. Set **Maximum Access Token Lifetime** and **Implicit / Hybrid Flow Access Token Lifetime** to `900`. Set the implicit value first: Auth0 rejects implicit > maximum (`token_lifetime_for_web cannot be larger than token_lifetime`).
+3. Import each client's CIMD URL (Claude, Claude Code, ChatGPT) as a third-party app, and authorise the client for the API.
+4. Promote each connection the clients use to domain level (connection > Advanced Settings). Without it, a third-party client fails with `no connections enabled for the client`.
+
+## Local test
+
+Cloud clients (ChatGPT, Claude) cannot reach `localhost`, so use a public HTTPS tunnel:
+
+1. Set `MCP_ENABLED=true` and `MCP_RESOURCE_URL=https://<tunnel-host>/api/v1/mcp`. A plain `http://localhost` URL works only with curl and tests, not with cloud clients.
+2. Create the Auth0 API with that exact identifier. A free tunnel changes its URL on each start, so each new URL needs a new API (identifiers cannot be changed).
+3. Check with curl: metadata returns 200; `POST` without a token returns 401 with `WWW-Authenticate`.
+4. Connect the client, then call `list_vocab`.
+
+## Token lifetime and revoke
+
+- Access token: 900 seconds. The backend checks the JWT locally, so a revoked token works until it expires.
+- Revoking the grant in Auth0 invalidates the refresh token. The client must connect again, with a new consent.
 
 ## Tools
 
