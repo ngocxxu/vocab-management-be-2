@@ -2,7 +2,7 @@ import { AuthIdentityService, AuthTokenService, AuthUser } from '@/auth';
 import { bindAuthUserToRequest } from '@/auth/utils/bind-request-user.util';
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { User } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 
 import { MCP_SCOPES } from '../constants';
@@ -43,7 +43,11 @@ export class McpAuthGuard implements CanActivate {
             throw error;
         }
 
-        // Read from the database on every request, so an admin turning it off stops the next call, even for a token already issued (#21).
+        // Role and flag are read from the database on every request, so a downgrade or an admin switch-off stops the next call, even for a token already issued (#21).
+        // The plan is the entitlement: GUEST (the Free plan) has no MCP. The flag is the admin's per-user off-switch.
+        if (request.currentUser?.role === UserRole.GUEST) {
+            throw new ForbiddenException('mcp_requires_plan');
+        }
         if (!request.currentUser?.mcpAccess) {
             throw new ForbiddenException('mcp_access_disabled');
         }
