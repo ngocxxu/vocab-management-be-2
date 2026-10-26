@@ -35,4 +35,11 @@ export enum EEmailTemplate {
     FSRS_DUE_REMINDER = 'fsrs_due_reminder',
 }
 
+/** Which Reminder a Bell notification came from. The FE branches on these exact strings. */
+export enum EReminderNotificationKind {
+    INITIAL = 'INITIAL',
+    ESCALATION = 'ESCALATION',
+    FSRS_DUE = 'FSRS_DUE',
+}
+
 export const EXPIRES_AT_30_DAYS = 1000 * 60 * 60 * 24 * 30; // 30 days

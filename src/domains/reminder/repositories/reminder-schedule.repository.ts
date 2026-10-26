@@ -130,6 +130,11 @@ export class ReminderScheduleRepository extends BaseRepository {
         return this.prisma.user.findUnique({ where: { id: userId }, select: { email: true, firstName: true, lastName: true } });
     }
 
+    /** The trainer fields the bell needs. Scoped to the owner, like every other query. */
+    public async findTrainerBrief(userId: string, trainerId: string): Promise<{ name: string; questionType: string } | null> {
+        return this.prisma.vocabTrainer.findFirst({ where: { id: trainerId, userId }, select: { name: true, questionType: true } });
+    }
+
     public async cancelSiblingEscalations(initialReminderId: string, excludeId: string): Promise<number> {
         const now = new Date();
         const result = await this.prisma.reminderSchedule.updateMany({

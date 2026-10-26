@@ -131,7 +131,7 @@ export class FillInBlankEvaluationProcessor {
                     throw new Error(`User ${userId} not found`);
                 }
 
-                const updated = await this.vocabTrainerRepository.inTransaction(async (tx) => {
+                await this.vocabTrainerRepository.inTransaction(async (tx) => {
                     await this.vocabTrainerReminderAfterExam.syncRemindersAfterExamSubmission(tx, {
                         trainerId: trainer.id,
                         userId: user.id,
@@ -156,16 +156,6 @@ export class FillInBlankEvaluationProcessor {
                         tx,
                     );
                 });
-
-                await this.vocabTrainerReminderAfterExam.scheduleNotification(
-                    user,
-                    {
-                        ...updated,
-                        reminderLastRemind: new Date(),
-                    },
-                    scorePercentage,
-                    examUrl,
-                );
             }
 
             // Also stored by Bull as the job's return value, which the job-status endpoint serves.

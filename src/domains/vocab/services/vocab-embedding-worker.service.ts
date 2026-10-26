@@ -28,7 +28,8 @@ const WORKER_CONFIG = {
 
 @Injectable()
 export class VocabEmbeddingWorkerService implements OnModuleDestroy {
-    private readonly instanceId = process.env.INSTANCE_ID ?? `pid-${process.pid}`;
+    // HOSTNAME is the pod name, so two replicas never share a lease owner id.
+    private readonly instanceId = process.env.INSTANCE_ID || process.env.HOSTNAME || `pid-${process.pid}`;
     private wakeTimer?: NodeJS.Timeout;
     private stopped = false;
     private processing = false;

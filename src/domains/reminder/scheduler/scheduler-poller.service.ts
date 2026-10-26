@@ -9,7 +9,8 @@ import { ReminderScheduleRepository } from '../repositories/reminder-schedule.re
 export class SchedulerPollerService implements OnModuleDestroy {
     private stopped = false;
     private processing = false;
-    private readonly instanceId = process.env.INSTANCE_ID ?? `pid-${process.pid}`;
+    // HOSTNAME is the pod name, so two replicas never share a claim owner id.
+    private readonly instanceId = process.env.INSTANCE_ID || process.env.HOSTNAME || `pid-${process.pid}`;
 
     public constructor(
         private readonly emailReminderProducer: EmailReminderProducer,

@@ -5,6 +5,7 @@ import './instrument';
 import './sentry-shutdown';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as Sentry from '@sentry/nestjs';
@@ -16,7 +17,7 @@ import { ApplicationModule } from './app/application.module';
 import { HttpExceptionFilter, PrismaExceptionFilter } from './common/filters';
 import { buildHttpErrorBody } from './common/http/error-response.util';
 import { WinstonLogger } from './common/logger/winston.logger';
-import { SharedModule, LogInterceptor, createBasicAuthMiddleware } from './shared';
+import { SharedModule, LogInterceptor, RedisIoAdapter, createBasicAuthMiddleware } from './shared';
 
 const API_DEFAULT_PORT = 3002;
 const API_DEFAULT_PREFIX = '/api/v1/';
@@ -174,6 +175,11 @@ async function bootstrap(): Promise<void> {
     const winstonLogger = app.get(WinstonLogger);
     app.useLogger(winstonLogger);
 
+    // Rooms and emits go through Redis so every pod can reach every socket (two replicas).
+    const redisIoAdapter = new RedisIoAdapter(app);
+    redisIoAdapter.connectToRedis();
+    app.useWebSocketAdapter(redisIoAdapter);
+
     // Docker sends SIGTERM on every rolling deploy. Without this, onModuleDestroy
     // never runs (dead clearInterval / drain-loop code), and sentry-shutdown.ts's
     // own SIGTERM listener becomes the only one — leaving Nest to rely on the
@@ -201,6 +207,9 @@ async function bootstrap(): Promise<void> {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     const expressApp = app.getHttpAdapter().getInstance();
+    // Without trusting the proxy (Traefik), every anonymous caller shares the proxy IP in the throttler.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+    expressApp.set('trust proxy', app.get(ConfigService).getOrThrow<number>('app.trustProxyHops'));
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     expressApp.use(createTimeoutMiddleware(requestTimeout, winstonLogger));
 

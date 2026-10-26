@@ -1,11 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { HealthCheckService } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
 
 import { Public } from '../decorators/public.decorator';
 import { PrismaService } from '../services/prisma.service';
 
 @Controller('health')
 @Public()
+// Probes from the cluster come from one IP; they must never eat the rate limit.
+@SkipThrottle()
 export class HealthController {
     public constructor(
         private readonly health: HealthCheckService,

@@ -6,6 +6,7 @@ import type { Job } from 'bull';
 import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { ReminderScheduleRepository } from '../../../reminder/repositories/reminder-schedule.repository';
 import { FsrsReminderService } from '../../../reminder/services/fsrs-reminder.service';
+import { ReminderInAppNotificationService } from '../../../reminder/services/reminder-in-app-notification.service';
 import { ActedCheckRegistry } from '../../../reminder/strategies/acted-check.registry';
 import { EEmailReminderType, EEmailTemplate, EReminderType } from '../../../reminder/utils';
 import { computeBackoffMs } from '../../../reminder/utils/reminder-date.util';
@@ -20,6 +21,7 @@ export class EmailProcessor {
         private readonly reminderScheduleRepository: ReminderScheduleRepository,
         private readonly actedCheckRegistry: ActedCheckRegistry,
         private readonly fsrsReminderService: FsrsReminderService,
+        private readonly reminderInAppNotificationService: ReminderInAppNotificationService,
     ) {}
 
     @Process({
@@ -124,10 +126,10 @@ export class EmailProcessor {
         }
 
         const sentAt = new Date();
-        await this.reminderScheduleRepository.inTransaction(async (tx) => {
+        const markedSent = await this.reminderScheduleRepository.inTransaction(async (tx) => {
             const updatedCount = await this.reminderScheduleRepository.markSentIfStillSending(tx, fresh.id, sentAt);
             if (updatedCount !== 1) {
-                return;
+                return false;
             }
             if (fresh.reminderType === ReminderScheduleKind.INITIAL) {
                 const initial = await this.reminderScheduleRepository.findByIdWithClient(tx, fresh.id);
@@ -135,7 +137,13 @@ export class EmailProcessor {
                     await this.reminderScheduleRepository.createEscalationsForInitial(tx, initial, sentAt);
                 }
             }
+            return true;
         });
+
+        // The bell row follows the real send, and only the worker that won the SENT update creates it.
+        if (markedSent) {
+            await this.reminderInAppNotificationService.notifyReminderSent(fresh, data);
+        }
 
         if (isFsrsDue) {
             await this.planNextFsrsReminder(fresh);

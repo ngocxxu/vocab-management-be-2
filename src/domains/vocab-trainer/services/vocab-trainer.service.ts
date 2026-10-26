@@ -773,16 +773,6 @@ export class VocabTrainerService {
             );
         });
 
-        await this.vocabTrainerReminderAfterExam.scheduleNotification(
-            user,
-            {
-                ...trainer,
-                reminderLastRemind: new Date(),
-            },
-            scorePercentage,
-            examUrl,
-        );
-
         return this.vocabTrainerMapper.toResponse(result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
     }
 
