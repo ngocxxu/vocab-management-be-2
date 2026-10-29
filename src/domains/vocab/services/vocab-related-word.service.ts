@@ -5,7 +5,7 @@ import { VocabNotFoundException, VocabRelatedWordBadRequestException, VocabRelat
 import { VocabRelatedWordMapper } from '../mappers/vocab-related-word.mapper';
 import { VocabRelatedWordRepository } from '../repositories';
 import { VocabRepository } from '../repositories/vocab.repository';
-import { type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
+import { assertLinkedVocabsSharePair, type LanguagePair, type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
 
 @Injectable()
 export class VocabRelatedWordService {
@@ -26,7 +26,7 @@ export class VocabRelatedWordService {
     public async upsertRelatedWords(vocabId: string, userId: string, input: UpsertRelatedWordsInput): Promise<VocabRelatedWordsDto> {
         const sourceVocab = await this.assertSourceVocab(vocabId, userId);
         const normalizedWords = normalizeAndValidateRelatedWords(vocabId, input.words);
-        await this.assertLinkedVocabsInFolder(normalizedWords, userId, sourceVocab.languageFolderId);
+        await this.assertLinkedVocabsSamePair(normalizedWords, userId, sourceVocab);
 
         await this.vocabRelatedWordRepository.upsertSymmetricSet(vocabId, normalizedWords);
 
@@ -44,7 +44,7 @@ export class VocabRelatedWordService {
         await this.vocabRelatedWordRepository.deleteSymmetricPair(relatedWordId, vocabId);
     }
 
-    public async autocomplete(vocabId: string, userId: string, query: string): Promise<VocabAutocompleteDto[]> {
+    public async autocomplete(vocabId: string, userId: string, query: string, crossFolder = false): Promise<VocabAutocompleteDto[]> {
         const trimmedQuery = query.trim();
         if (trimmedQuery.length < 1) {
             throw new VocabRelatedWordBadRequestException('Query must contain at least 1 character');
@@ -56,14 +56,17 @@ export class VocabRelatedWordService {
         const results = await this.vocabRelatedWordRepository.autocomplete({
             userId,
             languageFolderId: sourceVocab.languageFolderId,
+            sourceLanguageCode: sourceVocab.sourceLanguageCode,
+            targetLanguageCode: sourceVocab.targetLanguageCode,
             query: trimmedQuery,
             excludeIds,
+            crossFolder,
         });
 
         return this.vocabRelatedWordMapper.toAutocompleteDtos(results);
     }
 
-    private async assertSourceVocab(vocabId: string, userId: string): Promise<{ id: string; languageFolderId: string }> {
+    private async assertSourceVocab(vocabId: string, userId: string): Promise<{ id: string; languageFolderId: string } & LanguagePair> {
         const vocab = await this.vocabRepository.findById(vocabId, userId);
 
         if (!vocab) {
@@ -73,6 +76,8 @@ export class VocabRelatedWordService {
         return {
             id: vocab.id,
             languageFolderId: vocab.languageFolderId,
+            sourceLanguageCode: vocab.sourceLanguageCode,
+            targetLanguageCode: vocab.targetLanguageCode,
         };
     }
 
@@ -80,17 +85,10 @@ export class VocabRelatedWordService {
         return words.map((word) => word.linkedVocabId).filter((linkedVocabId): linkedVocabId is string => Boolean(linkedVocabId));
     }
 
-    private async assertLinkedVocabsInFolder(words: NormalizedRelatedWordInput[], userId: string, languageFolderId: string): Promise<void> {
+    private async assertLinkedVocabsSamePair(words: NormalizedRelatedWordInput[], userId: string, sourcePair: LanguagePair): Promise<void> {
         const linkedVocabIds = this.getLinkedVocabIds(words);
         const linkedVocabs = await this.vocabRepository.findByIds(linkedVocabIds, userId);
 
-        if (linkedVocabs.length !== linkedVocabIds.length) {
-            throw new VocabNotFoundException('one or more linked vocabs');
-        }
-
-        const invalidFolderVocab = linkedVocabs.find((vocab) => vocab.languageFolderId !== languageFolderId);
-        if (invalidFolderVocab) {
-            throw new VocabNotFoundException(invalidFolderVocab.id);
-        }
+        assertLinkedVocabsSharePair(linkedVocabIds, linkedVocabs, sourcePair);
     }
 }
