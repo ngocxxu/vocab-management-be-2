@@ -35,7 +35,7 @@ import { VocabUpdateInput } from '../dto/vocab-update.input';
 import { type TVocabInUse, VocabBadRequestException, VocabInUseException, VocabNotFoundException } from '../exceptions';
 import { ResolvedTextTargetInput, ResolvedVocabInput, VocabMapper, VocabRelatedWordMapper } from '../mappers';
 import { CsvImportExistingVocab, VocabRelatedWordRepository, VocabRepository } from '../repositories';
-import { type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
+import { assertLinkedVocabsSharePair, type LanguagePair, type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
 import { assertCsvRowData, CsvParserUtil, CsvRowData } from '../utils/csv-parser.util';
 import { QdrantService } from './qdrant.service';
 
@@ -453,7 +453,7 @@ export class VocabService {
         const relatedWords = resolvedUpdateData.relatedWords;
         const vocab =
             relatedWords !== undefined
-                ? await this.updateWithRelatedWords(resolvedUpdateData.languageFolderId ?? existingVocab.languageFolderId, id, resolvedUpdateData, userId)
+                ? await this.updateWithRelatedWords(id, resolvedUpdateData, userId)
                 : await this.vocabRepository.update(id, this.vocabMapper.buildUpdateInput(resolvedUpdateData));
 
         await this.vocabRepository.clearListCaches();
@@ -951,7 +951,7 @@ export class VocabService {
         const { vocab, affectedVocabIds } = await this.vocabRepository.inTransaction(async (tx) => {
             const createdVocab = await this.vocabRepository.createInTransaction(prismaCreate, tx);
             const normalizedWords = normalizeAndValidateRelatedWords(createdVocab.id, relatedWords ?? []);
-            await this.assertLinkedVocabsInFolderInTransaction(normalizedWords, userId, languageFolderId, tx);
+            await this.assertLinkedVocabsSamePairInTransaction(normalizedWords, userId, { sourceLanguageCode, targetLanguageCode }, tx);
             const affectedIds = await this.vocabRelatedWordRepository.upsertSymmetricSetInTransaction(tx, createdVocab.id, normalizedWords);
             const backfillIds = await this.vocabRelatedWordRepository.upgradeFreeTextToLinkedInTransaction(tx, {
                 id: createdVocab.id,
@@ -974,16 +974,12 @@ export class VocabService {
         return vocab;
     }
 
-    private async updateWithRelatedWords(
-        languageFolderId: string,
-        vocabId: string,
-        updateVocabData: Partial<VocabUpdateInput>,
-        userId: string,
-    ): Promise<Awaited<ReturnType<VocabRepository['update']>>> {
+    private async updateWithRelatedWords(vocabId: string, updateVocabData: Partial<VocabUpdateInput>, userId: string): Promise<Awaited<ReturnType<VocabRepository['update']>>> {
         const { vocab, affectedVocabIds } = await this.vocabRepository.inTransaction(async (tx) => {
             const updatedVocab = await this.vocabRepository.updateInTransaction(vocabId, this.vocabMapper.buildUpdateInput(updateVocabData), tx);
             const normalizedWords = normalizeAndValidateRelatedWords(vocabId, updateVocabData.relatedWords ?? []);
-            await this.assertLinkedVocabsInFolderInTransaction(normalizedWords, userId, languageFolderId, tx);
+            // Check against the pair the vocab has after this update, since the update may change the codes.
+            await this.assertLinkedVocabsSamePairInTransaction(normalizedWords, userId, updatedVocab, tx);
             const relatedWordCacheIds = await this.vocabRelatedWordRepository.upsertSymmetricSetInTransaction(tx, vocabId, normalizedWords);
 
             return {
@@ -1012,23 +1008,16 @@ export class VocabService {
         return words.map((word) => word.linkedVocabId).filter((linkedVocabId): linkedVocabId is string => Boolean(linkedVocabId));
     }
 
-    private async assertLinkedVocabsInFolderInTransaction(
+    private async assertLinkedVocabsSamePairInTransaction(
         words: NormalizedRelatedWordInput[],
         userId: string,
-        languageFolderId: string,
+        sourcePair: LanguagePair,
         tx: Prisma.TransactionClient,
     ): Promise<void> {
         const linkedVocabIds = this.getLinkedVocabIds(words);
         const linkedVocabs = await this.vocabRepository.findByIdsInTransaction(linkedVocabIds, userId, tx);
 
-        if (linkedVocabs.length !== linkedVocabIds.length) {
-            throw new VocabNotFoundException('one or more linked vocabs');
-        }
-
-        const invalidFolderVocab = linkedVocabs.find((linkedVocab) => linkedVocab.languageFolderId !== languageFolderId);
-        if (invalidFolderVocab) {
-            throw new VocabNotFoundException(invalidFolderVocab.id);
-        }
+        assertLinkedVocabsSharePair(linkedVocabIds, linkedVocabs, sourcePair);
     }
 
     /**

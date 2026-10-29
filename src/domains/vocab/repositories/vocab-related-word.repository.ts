@@ -20,6 +20,13 @@ export type VocabRelatedWordWithLinkedVocab = Prisma.VocabRelatedWordGetPayload<
     include: typeof vocabRelatedWordInclude;
 }>;
 
+export type VocabAutocompleteRow = {
+    id: string;
+    textSource: string;
+    languageFolderId: string;
+    languageFolder: { name: string };
+};
+
 @Injectable()
 export class VocabRelatedWordRepository extends BaseRepository {
     private static readonly CACHE_TTL_SECONDS = 300;
@@ -78,19 +85,34 @@ export class VocabRelatedWordRepository extends BaseRepository {
         });
     }
 
-    public async autocomplete(params: { userId: string; languageFolderId: string; query: string; excludeIds: string[] }): Promise<Array<{ id: string; textSource: string }>> {
-        const { userId, languageFolderId, query, excludeIds } = params;
+    /**
+     * Searches the user's vocabs by source text. Only the source vocab's folder is searched,
+     * unless `crossFolder` is set: then every folder with the same source and target language is searched.
+     */
+    public async autocomplete(params: {
+        userId: string;
+        languageFolderId: string;
+        sourceLanguageCode: string;
+        targetLanguageCode: string;
+        query: string;
+        excludeIds: string[];
+        crossFolder?: boolean;
+    }): Promise<VocabAutocompleteRow[]> {
+        const { userId, languageFolderId, sourceLanguageCode, targetLanguageCode, query, excludeIds, crossFolder = false } = params;
+        const scope = crossFolder ? { sourceLanguageCode, targetLanguageCode } : { languageFolderId };
 
         return this.prisma.vocab.findMany({
             where: {
                 userId,
-                languageFolderId,
+                ...scope,
                 textSource: { contains: query, mode: 'insensitive' },
                 id: { notIn: excludeIds },
             },
             select: {
                 id: true,
                 textSource: true,
+                languageFolderId: true,
+                languageFolder: { select: { name: true } },
             },
             orderBy: {
                 textSource: 'asc',
