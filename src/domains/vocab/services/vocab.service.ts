@@ -32,7 +32,7 @@ import { SubjectRefInput } from '../dto/subject-ref.input';
 import { VocabQueryParamsInput } from '../dto/vocab-query-params.input';
 import { VocabTrainerConflictDto } from '../dto/vocab-trainer-conflict.dto';
 import { VocabUpdateInput } from '../dto/vocab-update.input';
-import { type TVocabInUse, VocabBadRequestException, VocabInUseException, VocabNotFoundException } from '../exceptions';
+import { type TVocabInUse, VocabBadRequestException, VocabFolderLanguageMismatchException, VocabInUseException, VocabNotFoundException } from '../exceptions';
 import { ResolvedTextTargetInput, ResolvedVocabInput, VocabMapper, VocabRelatedWordMapper } from '../mappers';
 import { CsvImportExistingVocab, VocabRelatedWordRepository, VocabRepository } from '../repositories';
 import { assertLinkedVocabsSharePair, type LanguagePair, type NormalizedRelatedWordInput, normalizeAndValidateRelatedWords } from '../utils';
@@ -52,6 +52,9 @@ function isCircuitOpen(error: unknown): boolean {
 
 /** A word of the user and the trainers that still hold it. `trainers` is empty when the word is free. */
 export type VocabTrainerConflict = VocabTrainerConflictDto;
+
+/** A vocab row that is saved, plus what is still needed after the save (the translation job, if any). */
+type PersistedVocab = { vocab: Awaited<ReturnType<VocabRepository['create']>> } & Pick<ReturnType<VocabMapper['prepareCreate']>, 'shouldQueueTranslation' | 'queuePayload'>;
 
 @Injectable()
 export class VocabService {
@@ -256,72 +259,20 @@ export class VocabService {
             await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
 
-        const { sourceLanguageCode, targetLanguageCode, languageFolderId }: VocabInput = createVocabData;
-
-        if (sourceLanguageCode === targetLanguageCode) {
-            throw new VocabBadRequestException('Source and target languages must be different');
-        }
-
-        const languageFolder = await this.vocabRepository.findLanguageFolderById(languageFolderId, userId);
-        if (!languageFolder) {
-            throw new LanguageFolderNotFoundException(languageFolderId);
-        }
-
-        const resolvedTextTargets = await Promise.all(
-            (createVocabData.textTargets ?? []).map(async (target): Promise<ResolvedTextTargetInput> => {
-                const subjectIds = await this.resolveSubjectRefs(target.subjects ?? [], userId, role);
-                return {
-                    textTarget: target.textTarget,
-                    grammar: target.grammar,
-                    explanationSource: target.explanationSource,
-                    explanationTarget: target.explanationTarget,
-                    wordTypeId: target.wordTypeId,
-                    vocabExamples: target.vocabExamples,
-                    subjectIds,
-                };
-            }),
-        );
-
-        const resolvedTopLevelSubjectIds = await this.resolveSubjectRefs(createVocabData.subjects ?? [], userId, role);
-
-        const resolvedInput: ResolvedVocabInput = {
-            ...createVocabData,
-            textTargets: resolvedTextTargets,
-            subjectIds: resolvedTopLevelSubjectIds,
-        };
-
-        const { prismaCreate, shouldQueueTranslation, queuePayload } = this.vocabMapper.prepareCreate(resolvedInput, userId);
-        const relatedWords = createVocabData.relatedWords ?? [];
-
-        let vocab: Awaited<ReturnType<VocabRepository['create']>>;
-
-        if (relatedWords.length > 0) {
-            vocab = await this.createWithInitialRelatedWords(
-                prismaCreate,
-                relatedWords,
-                createVocabData.languageFolderId,
-                userId,
-                createVocabData.textSource,
-                createVocabData.sourceLanguageCode,
-                createVocabData.targetLanguageCode,
-            );
-        } else {
-            const { createdVocab, backfillIds } = await this.vocabRepository.inTransaction(async (tx) => {
-                const created = await this.vocabRepository.createInTransaction(prismaCreate, tx);
-                const ids = await this.vocabRelatedWordRepository.upgradeFreeTextToLinkedInTransaction(tx, {
-                    id: created.id,
-                    textSource: createVocabData.textSource,
-                    languageFolderId: createVocabData.languageFolderId,
-                    userId,
-                    sourceLanguageCode: createVocabData.sourceLanguageCode,
-                    targetLanguageCode: createVocabData.targetLanguageCode,
+        let persisted: PersistedVocab;
+        try {
+            persisted = await this.persistNewVocab(createVocabData, userId, role);
+        } catch (error: unknown) {
+            // The daily slot was taken above. A refused write gives it back, so a failed word does not use up the day.
+            if (role !== undefined) {
+                await this.planQuotaService.releaseVocabDailySlot(userId, role).catch((releaseError: unknown) => {
+                    this.logger.warn(`Could not give back the daily vocab slot: ${this.getErrorMessage(releaseError)}`);
                 });
-
-                return { createdVocab: created, backfillIds: ids };
-            });
-            vocab = createdVocab;
-            await this.vocabRelatedWordRepository.clearCacheByVocabIds(backfillIds);
+            }
+            throw error;
         }
+
+        const { vocab, shouldQueueTranslation, queuePayload } = persisted;
 
         if (shouldQueueTranslation && queuePayload) {
             await this.vocabTranslationProducer.translateVocab({
@@ -446,6 +397,10 @@ export class VocabService {
 
         if (updateVocabData.sourceLanguageCode && updateVocabData.targetLanguageCode && updateVocabData.sourceLanguageCode === updateVocabData.targetLanguageCode) {
             throw new VocabBadRequestException('Source and target languages must be different');
+        }
+
+        if (updateVocabData.languageFolderId && updateVocabData.languageFolderId !== existingVocab.languageFolderId) {
+            await this.assertSameLanguagePairFolder(updateVocabData.languageFolderId, existingVocab, userId);
         }
 
         const resolvedUpdateData = await this.resolveUpdateSubjects(updateVocabData, userId, role);
@@ -861,6 +816,78 @@ export class VocabService {
         });
     }
 
+    /** Validates and saves the vocab row and its initial related words. Throws before anything is saved when the write fails. */
+    private async persistNewVocab(createVocabData: VocabInput, userId: string, role?: UserRole): Promise<PersistedVocab> {
+        const { sourceLanguageCode, targetLanguageCode, languageFolderId }: VocabInput = createVocabData;
+
+        if (sourceLanguageCode === targetLanguageCode) {
+            throw new VocabBadRequestException('Source and target languages must be different');
+        }
+
+        const languageFolder = await this.vocabRepository.findLanguageFolderById(languageFolderId, userId);
+        if (!languageFolder) {
+            throw new LanguageFolderNotFoundException(languageFolderId);
+        }
+
+        const resolvedTextTargets = await Promise.all(
+            (createVocabData.textTargets ?? []).map(async (target): Promise<ResolvedTextTargetInput> => {
+                const subjectIds = await this.resolveSubjectRefs(target.subjects ?? [], userId, role);
+                return {
+                    textTarget: target.textTarget,
+                    grammar: target.grammar,
+                    explanationSource: target.explanationSource,
+                    explanationTarget: target.explanationTarget,
+                    wordTypeId: target.wordTypeId,
+                    vocabExamples: target.vocabExamples,
+                    subjectIds,
+                };
+            }),
+        );
+
+        const resolvedTopLevelSubjectIds = await this.resolveSubjectRefs(createVocabData.subjects ?? [], userId, role);
+
+        const resolvedInput: ResolvedVocabInput = {
+            ...createVocabData,
+            textTargets: resolvedTextTargets,
+            subjectIds: resolvedTopLevelSubjectIds,
+        };
+
+        const { prismaCreate, shouldQueueTranslation, queuePayload } = this.vocabMapper.prepareCreate(resolvedInput, userId);
+        const relatedWords = createVocabData.relatedWords ?? [];
+
+        let vocab: Awaited<ReturnType<VocabRepository['create']>>;
+
+        if (relatedWords.length > 0) {
+            vocab = await this.createWithInitialRelatedWords(
+                prismaCreate,
+                relatedWords,
+                createVocabData.languageFolderId,
+                userId,
+                createVocabData.textSource,
+                createVocabData.sourceLanguageCode,
+                createVocabData.targetLanguageCode,
+            );
+        } else {
+            const { createdVocab, backfillIds } = await this.vocabRepository.inTransaction(async (tx) => {
+                const created = await this.vocabRepository.createInTransaction(prismaCreate, tx);
+                const ids = await this.vocabRelatedWordRepository.upgradeFreeTextToLinkedInTransaction(tx, {
+                    id: created.id,
+                    textSource: createVocabData.textSource,
+                    languageFolderId: createVocabData.languageFolderId,
+                    userId,
+                    sourceLanguageCode: createVocabData.sourceLanguageCode,
+                    targetLanguageCode: createVocabData.targetLanguageCode,
+                });
+
+                return { createdVocab: created, backfillIds: ids };
+            });
+            vocab = createdVocab;
+            await this.vocabRelatedWordRepository.clearCacheByVocabIds(backfillIds);
+        }
+
+        return { vocab, shouldQueueTranslation, queuePayload };
+    }
+
     /**
      * A query vector is a pure function of (query text, model, dimensions) — it
      * does not depend on vocab data, so adding or deleting vocabs can never make
@@ -1018,6 +1045,20 @@ export class VocabService {
         const linkedVocabs = await this.vocabRepository.findByIdsInTransaction(linkedVocabIds, userId, tx);
 
         assertLinkedVocabsSharePair(linkedVocabIds, linkedVocabs, sourcePair);
+    }
+
+    /**
+     * A word can only move to a folder that belongs to the user and has the same language pair as the word.
+     * Checked here, not only in the MCP tools, so the REST update path follows the same rule.
+     */
+    private async assertSameLanguagePairFolder(languageFolderId: string, vocab: { sourceLanguageCode: string; targetLanguageCode: string }, userId: string): Promise<void> {
+        const folder = await this.languageFolderRepository.findById(languageFolderId, userId);
+        if (!folder) {
+            throw new LanguageFolderNotFoundException(languageFolderId);
+        }
+        if (folder.sourceLanguageCode !== vocab.sourceLanguageCode || folder.targetLanguageCode !== vocab.targetLanguageCode) {
+            throw new VocabFolderLanguageMismatchException();
+        }
     }
 
     /**

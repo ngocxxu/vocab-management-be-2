@@ -12,6 +12,7 @@ describe('PlanQuotaService plan limits', () => {
             incr: jest.fn().mockResolvedValue(options.redisCount ?? 1),
             expire: jest.fn().mockResolvedValue(1),
             decr: jest.fn().mockResolvedValue(0),
+            del: jest.fn().mockResolvedValue(1),
         };
         const planRepository = {
             findByRole: jest.fn().mockImplementation(async () => {
@@ -191,6 +192,35 @@ describe('PlanQuotaService plan limits', () => {
             const { service } = createService({ plan: { limits: { subjects: 1 }, isActive: true }, subjectCount: 1 });
 
             await expect(service.assertCreationQuota('member-1', UserRole.MEMBER, 'subject')).rejects.not.toThrow('Upgrade to Member');
+        });
+    });
+
+    describe('releaseVocabDailySlot', () => {
+        it('gives back the daily slot of a capped MEMBER', async () => {
+            const { service, redis } = createService({ plan: { limits: { vocabPerDay: 20 }, isActive: true } });
+
+            await service.releaseVocabDailySlot('member-1', UserRole.MEMBER);
+
+            expect(redis.decr).toHaveBeenCalledTimes(1);
+            expect(redis.decr.mock.calls[0][0] as string).toContain('member-1');
+        });
+
+        it('does nothing for ADMIN or an unlimited plan, because nothing was counted', async () => {
+            const { service, redis } = createService({ plan: { limits: { vocabPerDay: -1 }, isActive: true } });
+
+            await service.releaseVocabDailySlot('admin-1', UserRole.ADMIN);
+            await service.releaseVocabDailySlot('member-1', UserRole.MEMBER);
+
+            expect(redis.decr).not.toHaveBeenCalled();
+        });
+
+        it('removes a counter that went negative because it expired at midnight', async () => {
+            const { service, redis } = createService({ plan: { limits: { vocabPerDay: 20 }, isActive: true } });
+            redis.decr.mockResolvedValue(-1);
+
+            await service.releaseVocabDailySlot('member-1', UserRole.MEMBER);
+
+            expect(redis.del).toHaveBeenCalledWith(redis.decr.mock.calls[0][0]);
         });
     });
 

@@ -2,12 +2,13 @@
 export const MCP_METADATA_PATH = '.well-known/oauth-protected-resource';
 
 export const MCP_SERVER_NAME = 'vocab';
-export const MCP_SERVER_VERSION = '1.0.0';
+export const MCP_SERVER_VERSION = '1.1.0';
 
-/** The scopes a public tool can require. They are the scopes of the MCP API in Auth0. */
+/** The scopes a public tool can require. They are the scopes of the MCP API in Auth0. Delete has its own scope so a user can allow writes and still block deletes. */
 export const MCP_SCOPES = {
     READ: 'vocab:read',
     WRITE: 'vocab:write',
+    DELETE: 'vocab:delete',
 } as const;
 
 export type McpScope = (typeof MCP_SCOPES)[keyof typeof MCP_SCOPES];
@@ -28,6 +29,30 @@ export const MCP_ERROR_CODES = {
     INSUFFICIENT_SCOPE: 'insufficient_scope',
     RESPONSE_TOO_LARGE: 'response_too_large',
     INTERNAL_ERROR: 'internal_error',
+    VOCAB_NOT_FOUND: 'vocab_not_found',
+    FOLDER_NOT_FOUND: 'folder_not_found',
+    SUBJECT_NOT_FOUND: 'subject_not_found',
+    WORD_TYPE_NOT_FOUND: 'word_type_not_found',
+    DUPLICATE_VOCAB: 'duplicate_vocab',
+    DUPLICATE_FOLDER: 'duplicate_folder',
+    QUOTA_EXCEEDED: 'quota_exceeded',
+    VOCAB_IN_USE: 'vocab_in_use',
+    FOLDER_LANGUAGE_MISMATCH: 'folder_language_mismatch',
 } as const;
 
 export type McpErrorCode = (typeof MCP_ERROR_CODES)[keyof typeof MCP_ERROR_CODES];
+
+/** Limits for write payloads. Keep them tight: a long payload is harder for the model to get right. */
+export const MCP_WRITE_LIMITS = {
+    TEXT: 200,
+    EXPLANATION: 1000,
+    EXAMPLE: 500,
+    MEANINGS: 10,
+    SUBJECTS: 5,
+    EXAMPLES: 5,
+    SUBJECT_NAME: 100,
+    FOLDER_NAME: 100,
+} as const;
+
+/** Color given to a folder created over MCP. The client does not send one. */
+export const MCP_DEFAULT_FOLDER_COLOR = '#6366F1';

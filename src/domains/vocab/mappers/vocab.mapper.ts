@@ -83,6 +83,7 @@ export class VocabMapper {
             ...(updateVocabData.targetLanguageCode && {
                 targetLanguageCode: updateVocabData.targetLanguageCode,
             }),
+            ...(updateVocabData.languageFolderId && { languageFolder: { connect: { id: updateVocabData.languageFolderId } } }),
             ...(updateVocabData.textTargets && {
                 textTargets: {
                     deleteMany: {},

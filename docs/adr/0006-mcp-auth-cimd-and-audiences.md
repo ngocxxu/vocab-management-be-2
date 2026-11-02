@@ -8,7 +8,7 @@ The public MCP endpoint (#17) lets external AI clients (Claude, Claude Code, Cha
 - **Client allow-list**: a tenant admin imports each client's CIMD URL in Auth0. Only imported clients get tokens. Dynamic CIMD Registration stays off. It is Early Access under the Free Trial terms, so it is not used for production.
 - **Tenant settings**: CIMD Registration on. Resource Parameter Compatibility Profile on, so the RFC 8707 `resource` parameter selects the MCP API.
 - **Separate audience**: the MCP endpoint is its own Auth0 API. Its identifier equals `MCP_RESOURCE_URL`. The MCP guard accepts only that audience. The web guards accept only the web audience. A token for one is rejected by the other.
-- **Scopes**: `vocab:read` and `vocab:write`, checked per tool. A missing scope returns `insufficient_scope`.
+- **Scopes**: `vocab:read`, `vocab:write` and `vocab:delete`, checked per tool. A missing scope returns `insufficient_scope`.
 - **Identity**: the token's issuer and subject resolve to the internal User through the Identity table (ADR 0003). Unknown identities are rejected.
 - **Connections for third-party clients**: each connection that these clients use is promoted to domain level in Auth0. A promoted connection is available to every third-party app in the tenant.
 

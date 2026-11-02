@@ -57,6 +57,29 @@ export class PlanQuotaService {
     }
 
     /**
+     * Gives back the daily vocab slot that assertCreationQuota took, when the write then failed.
+     * Skips the same cases as assertCreationQuota (ADMIN, unlimited), because nothing was counted for them.
+     */
+    public async releaseVocabDailySlot(userId: string, role: UserRole): Promise<void> {
+        if (role === UserRole.ADMIN) {
+            return;
+        }
+
+        const limit = await this.resolveLimit(role, LIMIT_KEY_BY_RESOURCE.vocab);
+        if (limit === UNLIMITED_LIMIT) {
+            return;
+        }
+
+        const key = RedisKeyManager.quota.vocabDaily(userId, this.getTodayDateString());
+        const redis = this.redisService.client;
+        const remaining = await redis.decr(key);
+        // The key expired between the take and the give-back, so the decrement made a negative counter with no TTL. Remove it.
+        if (remaining < 0) {
+            await redis.del(key);
+        }
+    }
+
+    /**
      * Reads the live plan on every call, so a changed limit applies on the next create without a restart.
      * A missing or inactive plan, or a missing or invalid key, falls back to the documented default.
      */
