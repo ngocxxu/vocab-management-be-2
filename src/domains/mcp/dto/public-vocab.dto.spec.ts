@@ -30,6 +30,7 @@ describe('PublicVocabDto', () => {
         const dto = new PublicVocabDto(entity);
 
         expect(dto).toEqual({
+            id: 'vocab-1',
             textSource: 'hello',
             sourceLanguageCode: 'en',
             targetLanguageCode: 'vi',
@@ -49,10 +50,12 @@ describe('PublicVocabDto', () => {
         });
     });
 
-    it('never exposes internal ids, user or folder ids, or embedding state', () => {
-        const serialised = JSON.stringify(new PublicVocabDto(entity));
+    it('exposes the vocab id only, never user, folder or meaning ids, or embedding state', () => {
+        const dto = new PublicVocabDto(entity);
 
-        expect(serialised).not.toMatch(/"id"|userId|languageFolderId|vocabId|owner-1|folder-1|tt-1|ex-1|wt-1|s-1/);
+        expect(dto.id).toBe('vocab-1');
+        expect(JSON.stringify(dto.meanings)).not.toMatch(/"id"/);
+        expect(JSON.stringify(dto)).not.toMatch(/userId|languageFolderId|vocabId|owner-1|folder-1|tt-1|ex-1|wt-1|s-1/);
     });
 
     it('returns null mastery and an empty meaning list when the row has no details', () => {

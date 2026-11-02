@@ -22,6 +22,7 @@ export function createListVocabTool(vocabRepository: VocabRepository, mapper: Pu
         name: 'list_vocab',
         description: "List the signed-in user's vocabulary, newest first. Optionally filter by text in the source word or phrase.",
         requiredScope: MCP_SCOPES.READ,
+        annotations: { readOnlyHint: true },
         inputSchema: listVocabInput,
         execute: async ({ query, limit }, { userId }) => {
             // The repository scopes the query by userId, so one caller never sees another caller's vocabulary.

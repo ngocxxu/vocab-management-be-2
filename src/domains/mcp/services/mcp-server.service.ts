@@ -3,15 +3,19 @@ import { captureSentryException } from '@/shared/utils/sentry.util';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, CallToolResult, ListToolsRequestSchema, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { Injectable } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { z } from 'zod';
 
 import { MCP_ERROR_CODES, MCP_MAX_RESPONSE_BYTES, MCP_SERVER_NAME, MCP_SERVER_VERSION, McpErrorCode } from '../constants';
 import { PublicMcpTool } from '../tools';
+import { toToolFailure } from '../utils/domain-error.util';
 import { PublicMcpToolRegistry } from './public-mcp-tool-registry.service';
 
 export interface McpCallContext {
     /** Internal `users.id` of the caller. */
     userId: string;
+    /** Role of the caller, read from the database. */
+    role: UserRole;
     /** Scopes of the caller's access token. */
     scopes: readonly string[];
 }
@@ -33,7 +37,7 @@ export class McpServerService {
 
     private describe(tool: PublicMcpTool): Tool {
         const schema = Object.fromEntries(Object.entries(z.toJSONSchema(tool.inputSchema)).filter(([key]) => key !== '$schema'));
-        return { name: tool.name, description: tool.description, inputSchema: { ...schema, type: 'object' } };
+        return { name: tool.name, description: tool.description, inputSchema: { ...schema, type: 'object' }, ...(tool.annotations && { annotations: tool.annotations }) };
     }
 
     private async callTool(name: string, args: unknown, context: McpCallContext): Promise<CallToolResult> {
@@ -53,12 +57,16 @@ export class McpServerService {
         }
 
         try {
-            const text = JSON.stringify(await tool.execute(parsed.data, { userId: context.userId }));
+            const text = JSON.stringify(await tool.execute(parsed.data, { userId: context.userId, role: context.role }));
             if (Buffer.byteLength(text) > MCP_MAX_RESPONSE_BYTES) {
                 return this.failure(MCP_ERROR_CODES.RESPONSE_TOO_LARGE, 'The result is too large. Ask for fewer items.');
             }
             return { content: [{ type: 'text', text }] };
         } catch (error) {
+            const domainFailure = toToolFailure(error);
+            if (domainFailure) {
+                return this.failure(domainFailure.code, domainFailure.message);
+            }
             // The caller gets a stable code only; the cause (database messages, stack traces) stays in the log and Sentry.
             this.logger.error(`MCP tool ${tool.name} failed: ${error instanceof Error ? error.name : 'unknown error'}`);
             captureSentryException(error, { tags: { mcp_tool: tool.name } });

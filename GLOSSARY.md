@@ -111,3 +111,23 @@ _Avoid_: MCP permission, MCP enabled (that means the server-wide switch)
 **Plan benefit**:
 A line in a plan's feature list that tells Users what the plan gives them. It describes the plan; it does not turn anything on by itself.
 _Avoid_: Feature flag, Entitlement (the entitlement is what the system enforces; the benefit is the text)
+
+**Language folder**:
+A User's named group of vocab that shares one Language pair. Each Vocab belongs to exactly one Language folder. Moving a Vocab to another folder keeps its Language pair, so the folder must have the same pair.
+_Avoid_: Deck, Collection
+
+**Language pair**:
+The source and target language codes of a Language folder, for example English to Vietnamese. A Vocab takes its pair from its folder. Only Vocabs with the same pair can share a Cross-folder link.
+_Avoid_: Language combination, Direction (that means a Card's Direction)
+
+**Subject**:
+A User's label for a topic, such as "Travel", that groups Meanings. A Meaning can have several Subjects.
+_Avoid_: Tag, Category
+
+**Meaning**:
+One translation or definition of a Vocab in its target language, with its word type, grammar, explanations, examples and Subjects. A Vocab has one or more Meanings. In code this is a text target.
+_Avoid_: Translation, Text target (in user-facing text)
+
+**Cross-folder link**:
+A related-word link between two Vocabs in different Language folders of the same User, when both folders have the same Language pair. The words keep their own folders; only the link crosses them.
+_Avoid_: Linked word (a link inside one folder is a link too, so name the kind)
