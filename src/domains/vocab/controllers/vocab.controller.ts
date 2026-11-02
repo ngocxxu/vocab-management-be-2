@@ -12,6 +12,7 @@ import {
     HttpCode,
     HttpStatus,
     Param,
+    ParseBoolPipe,
     ParseIntPipe,
     Post,
     Put,
@@ -226,16 +227,28 @@ export class VocabController {
     @Throttle({ default: { limit: 60, ttl: 60000 } })
     @UseGuards(RolesGuard)
     @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
-    @ApiOperation({ summary: 'Autocomplete related words in the current folder' })
+    @ApiOperation({ summary: 'Autocomplete related words in the current folder, or across folders with the same language pair' })
     @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
-    @ApiQuery({ name: 'q', required: true, type: String, description: 'Partial source text to search within the current folder', example: 'joy' })
+    @ApiQuery({ name: 'q', required: true, type: String, description: 'Partial source text to search', example: 'joy' })
+    @ApiQuery({
+        name: 'crossFolder',
+        required: false,
+        type: Boolean,
+        description: 'Search every folder with the same source and target language, not only the current folder',
+        example: true,
+    })
     @ApiResponse({ status: HttpStatus.OK, isArray: true, type: VocabAutocompleteDto })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Search query must contain at least 1 character' })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab not found' })
     @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to access this resource' })
-    public async autocompleteRelatedWords(@Param('id') id: string, @Query('q') query: string, @CurrentUser() user: User): Promise<VocabAutocompleteDto[]> {
-        return this.vocabRelatedWordService.autocomplete(id, user.id, query);
+    public async autocompleteRelatedWords(
+        @Param('id') id: string,
+        @Query('q') query: string,
+        @Query('crossFolder', new ParseBoolPipe({ optional: true })) crossFolder: boolean | undefined,
+        @CurrentUser() user: User,
+    ): Promise<VocabAutocompleteDto[]> {
+        return this.vocabRelatedWordService.autocomplete(id, user.id, query, crossFolder);
     }
 
     @Delete(':id/related-words/:relatedWordId')
@@ -395,7 +408,7 @@ export class VocabController {
     @ApiParam({ name: 'id', type: String, description: 'Source vocab identifier' })
     @ApiBody({
         type: UpsertRelatedWordsInput,
-        description: 'Complete replacement payload for the source vocab related-word graph inside the current folder',
+        description: 'Complete replacement payload for the source vocab related-word graph. Linked vocabs must have the same source and target language',
         examples: {
             sample: {
                 value: {
@@ -419,7 +432,7 @@ export class VocabController {
     })
     @ApiResponse({ status: HttpStatus.OK, type: VocabRelatedWordsDto })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid relation flags, self-reference, duplicate linked vocab, or malformed payload' })
-    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Source vocab or linked vocab not found in the current folder scope' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Source vocab or linked vocab not found, or linked vocab has another language pair' })
     @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Database relation conflict or foreign-key constraint violation' })
     @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid bearer token' })
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User role is not allowed to modify this resource' })

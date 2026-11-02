@@ -32,8 +32,9 @@ export class PublicMeaningDto {
     }
 }
 
-/** A vocab item as a public MCP client sees it. No internal ids (user, folder, text target) and no embedding state. */
+/** A vocab item as a public MCP client sees it. Only the vocab id, so the model can update or delete it. No user, folder or meaning ids, and no embedding state. */
 export class PublicVocabDto {
+    public readonly id: string;
     public readonly textSource: string;
     public readonly sourceLanguageCode: string;
     public readonly targetLanguageCode: string;
@@ -42,6 +43,7 @@ export class PublicVocabDto {
     public readonly meanings: PublicMeaningDto[];
 
     public constructor(entity: VocabEntityWithDetails) {
+        this.id = entity.id;
         this.textSource = entity.textSource;
         this.sourceLanguageCode = entity.sourceLanguageCode;
         this.targetLanguageCode = entity.targetLanguageCode;

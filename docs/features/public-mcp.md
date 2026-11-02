@@ -11,7 +11,7 @@ Lets external AI clients (Claude, ChatGPT) call a small set of Vocab tools, sign
 
 ## Routes
 
-- `GET /.well-known/oauth-protected-resource` (origin root, no auth): names the Auth0 issuer, the resource URL and the scopes `vocab:read`, `vocab:write`.
+- `GET /.well-known/oauth-protected-resource` (origin root, no auth): names the Auth0 issuer, the resource URL and the scopes `vocab:read`, `vocab:write`, `vocab:delete`.
 - `POST <API_PREFIX>mcp`: stateless Streamable HTTP with JSON responses. GET and DELETE return 405.
 
 ## Auth
@@ -25,7 +25,7 @@ Lets external AI clients (Claude, ChatGPT) call a small set of Vocab tools, sign
 
 ## Set up in Auth0 (once per environment)
 
-1. Create an API. Identifier = `MCP_RESOURCE_URL`, exactly. Signing algorithm `RS256` (the backend accepts only RS256; Auth0 defaults to HS256). Add scopes `vocab:read` and `vocab:write`.
+1. Create an API. Identifier = `MCP_RESOURCE_URL`, exactly. Signing algorithm `RS256` (the backend accepts only RS256; Auth0 defaults to HS256). Add scopes `vocab:read`, `vocab:write` and `vocab:delete`. Add them before the new code is deployed: the metadata advertises all three, and Auth0 rejects a scope it does not know.
 2. Set **Maximum Access Token Lifetime** and **Implicit / Hybrid Flow Access Token Lifetime** to `900`. Set the implicit value first: Auth0 rejects implicit > maximum (`token_lifetime_for_web cannot be larger than token_lifetime`).
 3. Import each client's CIMD URL (Claude, Claude Code, ChatGPT) as a third-party app, and authorise the client for the API.
 4. Promote each connection the clients use to domain level (connection > Advanced Settings). Without it, a third-party client fails with `no connections enabled for the client`.
@@ -43,17 +43,28 @@ Cloud clients (ChatGPT, Claude) cannot reach `localhost`, so use a public HTTPS 
 
 - Access token: 900 seconds. The backend checks the JWT locally, so a revoked token works until it expires.
 - Revoking the grant in Auth0 invalidates the refresh token. The client must connect again, with a new consent.
+- Adding `vocab:write` or `vocab:delete` to the API needs a reconnect too. An existing connection holds only the scopes it was granted, so the client asks for consent again.
 
 ## Tools
 
-- `list_vocab` (`vocab:read`): the caller's vocab, newest first. Output has text, languages, mastery score, created date and meanings. No internal ids.
-- Each tool declares a required scope. A token without it gets an `insufficient_scope` tool error.
-- Inputs use strict schemas: unknown keys are rejected.
+Each tool declares one required scope. A token without it gets an `insufficient_scope` tool error that names the scope. Inputs use strict schemas: unknown keys are rejected.
+
+Reads need `vocab:read`. Writes need `vocab:write`. Delete has its own scope, `vocab:delete`, so a user can allow writes and still block deletes.
+
+- `list_vocab` (`vocab:read`): the caller's vocab, newest first. Output has the vocab `id`, text, languages, mastery score, created date and meanings. No other internal ids.
+- `add_vocab` (`vocab:write`): a word with all its meanings, in one language folder. The folder sets the language pair; the client never sends codes. Each meaning needs at least one subject id.
+- `update_vocab` (`vocab:write`): replaces a word and all its meanings. Its folder can change only to a folder with the same language pair.
+- `delete_vocab` (`vocab:delete`): deletes one word. Refused while a trainer still uses it.
+- `list_folders`, `list_subjects`, `list_word_types` (`vocab:read`): the ids the write tools need.
+- `create_folder`, `create_subject` (`vocab:write`): a folder for one language pair (a second folder with the same name and pair is refused), or a subject by name (an existing name returns the existing subject).
+
+Clients list ids first and never guess them. Subjects and folders cannot be deleted over MCP.
 
 ## Errors
 
-Tool errors are MCP results with a stable `error.code`: `invalid_params`, `unknown_tool`, `insufficient_scope`, `response_too_large`, `internal_error`. Causes stay in the log and Sentry.
+Tool errors are MCP results with a stable `error.code`: `invalid_params`, `unknown_tool`, `insufficient_scope`, `response_too_large`, `internal_error`. Write and delete tools add `vocab_not_found`, `folder_not_found`, `subject_not_found`, `word_type_not_found`, `duplicate_vocab`, `duplicate_folder`, `quota_exceeded`, `vocab_in_use` and `folder_language_mismatch`. Each message names the tool to call next. Causes stay in the log and Sentry.
 
 ## Not yet
 
-- Per-user rate limits (#24), request logging (#25), write tools (#26).
+- Per-user rate limits (#24), request logging (#25).
+- Related words in the MCP payload, and a UI for cross-folder links.

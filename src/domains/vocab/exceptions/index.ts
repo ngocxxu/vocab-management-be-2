@@ -4,3 +4,4 @@ export { VocabNotFoundException } from './vocab-not-found.exception';
 export { VocabRelatedWordBadRequestException } from './vocab-related-word-bad-request.exception';
 export { VocabRelatedWordNotFoundException } from './vocab-related-word-not-found.exception';
 export { VocabInUseException, type TVocabInUse } from './vocab-in-use.exception';
+export { VocabFolderLanguageMismatchException } from './vocab-folder-language-mismatch.exception';

@@ -6,7 +6,7 @@ import { All, Controller, Get, Post, Req, Res, UnauthorizedException, UseGuards 
 import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { UserRole } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 
 import { MCP_IP_LIMIT_PER_MINUTE, MCP_METADATA_PATH, MCP_SCOPES } from '../constants';
@@ -62,13 +62,13 @@ export class McpController {
     @ApiResponse({ status: 200, description: 'A JSON-RPC response' })
     @ApiResponse({ status: 401, description: 'No valid MCP access token; `WWW-Authenticate` points at the metadata' })
     @ApiResponse({ status: 404, description: 'MCP is disabled' })
-    public async handle(@Req() request: Request & { authUser?: AuthUser }, @Res() response: Response): Promise<void> {
-        const { authUser } = request;
-        if (!authUser) {
+    public async handle(@Req() request: Request & { authUser?: AuthUser; currentUser?: User }, @Res() response: Response): Promise<void> {
+        const { authUser, currentUser } = request;
+        if (!authUser || !currentUser) {
             throw new UnauthorizedException();
         }
 
-        const server = this.mcpServerService.createServer({ userId: authUser.id, scopes: authUser.scopes ?? [] });
+        const server = this.mcpServerService.createServer({ userId: authUser.id, role: currentUser.role, scopes: authUser.scopes ?? [] });
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
         response.on('close', () => {
             void transport.close();

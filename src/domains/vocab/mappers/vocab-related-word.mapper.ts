@@ -1,5 +1,5 @@
 import { RelatedWordDto, VocabAutocompleteDto, VocabRelatedWordsDto } from '../dto';
-import { VocabRelatedWordWithLinkedVocab } from '../repositories/vocab-related-word.repository';
+import { VocabAutocompleteRow, VocabRelatedWordWithLinkedVocab } from '../repositories/vocab-related-word.repository';
 
 export class VocabRelatedWordMapper {
     public toRelatedWordDto(entity: VocabRelatedWordWithLinkedVocab): RelatedWordDto {
@@ -24,7 +24,15 @@ export class VocabRelatedWordMapper {
         });
     }
 
-    public toAutocompleteDtos(entities: Array<{ id: string; textSource: string }>): VocabAutocompleteDto[] {
-        return entities.map((entity) => new VocabAutocompleteDto({ id: entity.id, sourceText: entity.textSource }));
+    public toAutocompleteDtos(entities: VocabAutocompleteRow[]): VocabAutocompleteDto[] {
+        return entities.map(
+            (entity) =>
+                new VocabAutocompleteDto({
+                    id: entity.id,
+                    sourceText: entity.textSource,
+                    languageFolderId: entity.languageFolderId,
+                    languageFolderName: entity.languageFolder.name,
+                }),
+        );
     }
 }
