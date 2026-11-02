@@ -56,8 +56,10 @@ export class McpAuthGuard implements CanActivate {
     }
 
     private challenge(response: Response, resourceUrl: string, error?: 'invalid_token'): UnauthorizedException {
-        const params = [`resource_metadata="${getMetadataUrl(resourceUrl)}"`, `scope="${MCP_SCOPES.READ}"`, ...(error ? [`error="${error}"`] : [])];
+        const params = [`resource_metadata="${getMetadataUrl(resourceUrl)}"`, `scope="${Object.values(MCP_SCOPES).join(' ')}"`, ...(error ? [`error="${error}"`] : [])];
+
         response.setHeader('WWW-Authenticate', `Bearer ${params.join(', ')}`);
+
         return new UnauthorizedException(error ?? 'No authentication token provided');
     }
 }
