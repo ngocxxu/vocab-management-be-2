@@ -8,6 +8,7 @@ import { EventsModule } from '../platform/events';
 import { ReminderModule } from '../reminder';
 import { VocabModule } from '../vocab';
 import { VocabTrainerModule } from '../vocab-trainer';
+import { AiModelCatalogController } from './controllers';
 import { AudioEvaluationProcessor } from './processors/audio-evaluation.processor';
 import { FillInBlankChoiceGenerationProcessor } from './processors/fill-in-blank-choice-generation.processor';
 import { FillInBlankEvaluationProcessor } from './processors/fill-in-blank-evaluation.processor';
@@ -19,10 +20,12 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { GroqProvider } from './providers/groq.provider';
 import { OmniRouteProvider } from './providers/omniroute.provider';
 import { OpenRouterProvider } from './providers/openrouter.provider';
+import { AiModelCatalogRepository } from './repositories';
 import { AiAudioService } from './services/ai-audio.service';
 import { AiFillInBlankChoiceService } from './services/ai-fill-in-blank-choice.service';
 import { AiFillInBlankGradingService } from './services/ai-fill-in-blank-grading.service';
 import { AiLanguageNameService } from './services/ai-language-name.service';
+import { AiModelCatalogService } from './services/ai-model-catalog.service';
 import { AiMultipleChoiceService } from './services/ai-multiple-choice.service';
 import { AiQueueService } from './services/ai-queue.service';
 import { AiTranslationEvaluationService } from './services/ai-translation-evaluation.service';
@@ -42,7 +45,10 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         forwardRef(() => VocabModule),
         forwardRef(() => VocabTrainerModule),
     ],
+    controllers: [AiModelCatalogController],
     providers: [
+        AiModelCatalogRepository,
+        AiModelCatalogService,
         GeminiProvider,
         OpenRouterProvider,
         GroqProvider,

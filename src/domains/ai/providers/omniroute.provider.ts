@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import FormData from 'form-data';
+import { readChatModel } from '../utils/chat-model.util';
 import { ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
@@ -132,6 +133,10 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
     public async getModelName(userId?: string): Promise<string> {
         const configValue = await this.configService.getConfig(userId || null, 'ai.model');
         return typeof configValue === 'string' && configValue.trim().length > 0 ? configValue : OmniRouteProvider.DEFAULT_TEXT_MODEL;
+    }
+
+    public async getChatModelName(userId?: string): Promise<string> {
+        return readChatModel(this.configService, userId, async () => this.getModelName(userId));
     }
 
     public async getAudioModelName(userId?: string): Promise<string> {

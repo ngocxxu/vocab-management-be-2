@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import * as Joi from 'joi';
 import { ConfigInput } from '../dto';
 
-const AI_PROVIDER_VALUES = ['gemini', 'openrouter', 'groq', 'omniroute'] as const;
+const AI_PROVIDER_VALUES = ['gemini', 'openrouter', 'groq', 'omniroute', 'cloudflare'] as const;
 
 // One validator for every AI provider key, so the allowed list has a single source. The label names the key in each message.
 const aiProviderValue = (label: string): Joi.StringSchema =>
@@ -15,7 +15,7 @@ const aiProviderValue = (label: string): Joi.StringSchema =>
         .messages({
             'string.base': `${label} must be a string`,
             'any.required': `${label} is required`,
-            'any.only': `${label} must be one of: "gemini", "openrouter", "groq", or "omniroute"`,
+            'any.only': `${label} must be one of: ${AI_PROVIDER_VALUES.map((provider) => `"${provider}"`).join(', ')}`,
         });
 
 @Injectable()
@@ -48,6 +48,15 @@ export class ConfigPipe extends JoiValidationPipe implements PipeTransform<unkno
 
         if (key === 'ai.chat.provider') {
             return baseSchema.keys({ value: aiProviderValue('AI chat provider') });
+        }
+
+        if (key === 'ai.chat.model') {
+            return baseSchema.keys({
+                value: Joi.string().required().messages({
+                    'string.base': 'AI chat model must be a string',
+                    'any.required': 'AI chat model is required',
+                }),
+            });
         }
 
         if (key === 'ai.audio.provider') {

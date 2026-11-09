@@ -1,6 +1,7 @@
 import { ConfigService } from '@/domains/platform/config/services';
 import { Content, GenerativeModel, GoogleGenerativeAI, Part } from '@google/generative-ai';
 import { Injectable, Logger } from '@nestjs/common';
+import { readChatModel } from '../utils/chat-model.util';
 import { AI_CONFIG } from '../utils/const.util';
 import { ChatHistoryMessage, ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 
@@ -83,8 +84,12 @@ export class GeminiProvider implements IAiProvider {
         return this.getModelName(userId);
     }
 
+    public async getChatModelName(userId?: string): Promise<string> {
+        return readChatModel(this.configService, userId, async () => this.getModelName(userId));
+    }
+
     public async chat(params: ChatParams): Promise<ChatResponse> {
-        const modelName = (await this.getModelName()) || 'gemini-1.5-flash';
+        const modelName = (await this.getChatModelName()) || 'gemini-1.5-flash';
         const functionDeclarations = params.tools.map((t) => ({
             name: t.name,
             description: t.description,

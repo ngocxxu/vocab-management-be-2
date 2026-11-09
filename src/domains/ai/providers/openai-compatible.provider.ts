@@ -8,7 +8,7 @@ export abstract class OpenAiCompatibleProvider {
     protected abstract readonly logger: Logger;
 
     public async chat(params: ChatParams): Promise<ChatResponse> {
-        const modelName = await this.getModelName();
+        const modelName = await this.getChatModelName();
         const resolvedModel = this.resolveModelName(modelName);
         const messages = this.buildOpenAiMessages(params.systemPrompt, params.history);
         const body = this.buildChatBody(resolvedModel, messages, params);
@@ -70,5 +70,6 @@ export abstract class OpenAiCompatibleProvider {
     }
 
     protected abstract getModelName(userId?: string): Promise<string>;
+    protected abstract getChatModelName(userId?: string): Promise<string>;
     protected abstract handleApiError(error: unknown, operation: string, modelName: string): void;
 }
