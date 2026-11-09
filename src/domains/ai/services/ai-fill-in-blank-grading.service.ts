@@ -173,6 +173,8 @@ STEP 1 - CLASSIFY the difference between the student's answer and the closest co
 - none: same words and same spelling.
 - synonym: a different word with the same meaning.
 - grammar_variant: same meaning with a different tense, number, article, particle, or voice.
+  A sentence-ending particle or politeness marker added or removed (Thai นะ, ครับ, ค่ะ; Vietnamese nhé, ạ) is grammar_variant, even if it changes politeness or tone.
+  Negation words (Thai ไม่, Vietnamese không) change the meaning: meaning_change.
 - misspelling: the intended word with a spelling error (a character changed, added, or missing).
 - wrong_word: a different word with a different meaning.
 - meaning_change: the phrase or sentence says something different.
@@ -188,6 +190,7 @@ EXAMPLES:
 - STRICT, expected "ตัวเลข", student "ตัวเลก" → misspelling → INCORRECT.
 - STRICT, expected "과다하게 투자되는 걸 원하지 않다", student "과두하게 투자하고 싶지 않다" → misspelling ("과두하게" is not "과다하게") → INCORRECT.
 - STRICT, expected "과다하게 투자되는 걸 원하지 않다", student "과다하게 투자하고 싶지 않다" → grammar_variant → CORRECT.
+- STRICT, expected "กินข้าวแล้ว", student "กินข้าวแล้วนะ" → grammar_variant (particle) → CORRECT.
 - LENIENT, expected "happy", student "hapy" → misspelling → CORRECT (small typing error, meaning clear).
 - LENIENT, expected "don't", student "dont" → misspelling → CORRECT (apostrophe ignored, meaning unchanged).
 - LENIENT, expected "cái ghế", student "ghế" → grammar_variant → CORRECT (core meaning conveyed).
