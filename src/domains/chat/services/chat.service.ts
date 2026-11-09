@@ -1,5 +1,6 @@
 import { AiChatProducer } from '@/queues/producers/ai-chat.producer';
 import { LoggerService, PrismaService, RedisPrefix, RedisService } from '@/shared';
+import { AppLocale, DEFAULT_APP_LOCALE } from '@/shared/utils/locale.util';
 import { Injectable } from '@nestjs/common';
 import { ChatRole } from '@prisma/client';
 import { CHAT_CANCEL_KEY, CHAT_CANCEL_TTL_SECONDS, CHAT_GREETING_MESSAGE, CHAT_HISTORY_DEFAULT_LIMIT, CHAT_HISTORY_MAX_LIMIT } from '../constants';
@@ -16,10 +17,10 @@ export class ChatService {
         private readonly logger: LoggerService,
     ) {}
 
-    public async saveAndEnqueue(userId: string, content: string, tier: string): Promise<string> {
+    public async saveAndEnqueue(userId: string, content: string, tier: string, locale: AppLocale = DEFAULT_APP_LOCALE): Promise<string> {
         await this.redisService.del(RedisPrefix.CHAT, CHAT_CANCEL_KEY(userId));
         const message = await this.chatMessageRepository.create(userId, ChatRole.USER, content);
-        const { jobId } = await this.aiChatProducer.addChatJob({ userId, messageId: message.id, tier });
+        const { jobId } = await this.aiChatProducer.addChatJob({ userId, messageId: message.id, tier, locale });
         this.logger.info(`Chat job enqueued: jobId=${jobId} userId=${userId} messageId=${message.id}`);
         return message.id;
     }

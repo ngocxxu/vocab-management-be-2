@@ -23,10 +23,10 @@ export class VocabGenerateTextTargetProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.VOCAB_GENERATE_TEXT_TARGET].concurrency,
     })
     public async processVocabGenerateTextTarget(job: Job<VocabGenerateTextTargetJobData>): Promise<void> {
-        const { textSource, sourceLanguageCode, targetLanguageCode, userId } = job.data;
+        const { textSource, sourceLanguageCode, targetLanguageCode, userId, locale } = job.data;
         const jobId = String(job.id ?? '');
 
-        const result = await this.aiService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, undefined, userId);
+        const result = await this.aiService.translateVocab({ textSource, sourceLanguageCode, targetLanguageCode, userId, locale });
         this.notificationGateway.emitVocabGenerateTextTargetResult(userId, jobId, textSource, result);
         this.logger.info(`VocabGenerateTextTarget job ${jobId} completed for user ${userId}`);
     }

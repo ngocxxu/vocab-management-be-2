@@ -1,4 +1,5 @@
 import { AiProviderFactory } from '@/domains/ai/providers/ai-provider.factory';
+import { findItemArray } from '@/domains/ai/utils/ai-items.util';
 import { parseJsonOrThrow } from '@/domains/ai/utils/ai-json.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { normalizeSubjectName } from '../utils';
@@ -14,15 +15,16 @@ export class AiSubjectService {
 
         try {
             const provider = await this.providerFactory.getProvider(userId);
-            const raw = await provider.generateContent(prompt, userId);
-            const parsed = parseJsonOrThrow<unknown>(raw);
+            const raw = await provider.generateContent(prompt, userId, { json: true });
+            // Accept { items: [...] } (JSON mode) or a bare array
+            const items = findItemArray(parseJsonOrThrow<unknown>(raw));
 
-            if (!Array.isArray(parsed)) {
-                this.logger.warn(`AI returned non-array for subject suggestions: ${typeof parsed}`);
+            if (!items) {
+                this.logger.warn('AI returned no list for subject suggestions');
                 return [];
             }
 
-            return (parsed as unknown[])
+            return items
                 .filter((item): item is string => typeof item === 'string' && item.trim().length >= 2)
                 .map((name) => normalizeSubjectName(name))
                 .filter((name) => name.length >= 2)
@@ -51,7 +53,7 @@ Rules for categories:
 - Concrete domains only — no vague abstractions like "Things", "General", "Misc"
 - Think: animal types, body parts, professions, nature, technology, food, emotions, etc.
 
-After your reasoning, output ONLY a JSON array of exactly 5 strings. No markdown, no code blocks:
-["...", "...", "...", "...", "..."]`;
+Output ONLY a JSON object with an "items" array of exactly 5 strings. No markdown, no code blocks:
+{"items": ["...", "...", "...", "...", "..."]}`;
     }
 }

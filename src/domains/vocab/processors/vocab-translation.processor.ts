@@ -1,6 +1,7 @@
 import { QUEUE_CONFIG } from '@/queues/config/queue.config';
 import type { VocabTranslationJobData } from '@/queues/interfaces/job-payloads';
 import { LoggerService } from '@/shared';
+import type { AppLocale } from '@/shared/utils/locale.util';
 import { Process, Processor } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
 import { Prisma, TextTarget } from '@prisma/client';
@@ -40,7 +41,7 @@ export class VocabTranslationProcessor {
         concurrency: QUEUE_CONFIG[EReminderType.VOCAB_TRANSLATION].concurrency,
     })
     public async processVocabTranslation(job: Job<VocabTranslationJobData>): Promise<void> {
-        const { vocabId, textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId } = job.data;
+        const { vocabId, textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, locale } = job.data;
 
         const jobId = job.id?.toString() || 'unknown';
 
@@ -50,7 +51,7 @@ export class VocabTranslationProcessor {
             const vocab = await this.findVocabWithValidation(vocabId, userId);
             await this.removeEmptyTextTarget(vocab);
 
-            const translatedData = await this.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId);
+            const translatedData = await this.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, locale);
 
             await this.updateVocabWithTranslation(vocabId, translatedData);
             await this.vocabRepository.clearListCaches();
@@ -92,8 +93,9 @@ export class VocabTranslationProcessor {
         targetLanguageCode: string,
         subjectIds: string[] | undefined,
         userId: string,
+        locale?: AppLocale,
     ): Promise<TranslatedTextTargetResult> {
-        return this.aiService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId);
+        return this.aiService.translateVocab({ textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, locale });
     }
 
     private async updateVocabWithTranslation(vocabId: string, translatedData: TranslatedTextTargetResult): Promise<void> {

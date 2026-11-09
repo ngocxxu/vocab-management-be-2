@@ -60,6 +60,18 @@ describe('CloudflareProvider', () => {
             expect(text).toBe('[{"answerIndex": 0}]');
         });
 
+        it('does not send the JSON mode flag, which Cloudflare does not support', async () => {
+            // Arrange
+            mockCloudflareResult(QWEN_RESULT);
+
+            // Act
+            await provider.generateContent('Grade these answers', 'user-1', { json: true });
+
+            // Assert
+            const body = postMock.mock.calls[0][1] as Record<string, unknown>;
+            expect(body).not.toHaveProperty('response_format');
+        });
+
         it('returns an empty string when the reply carries no text', async () => {
             // Arrange
             mockCloudflareResult({ choices: [{ message: { role: 'assistant', content: null } }] });

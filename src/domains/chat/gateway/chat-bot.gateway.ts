@@ -1,5 +1,6 @@
 import { WsAuthService } from '@/auth';
 import { LoggerService, RedisPrefix, RedisService, RedisPubSubService, getWsCorsOptions } from '@/shared';
+import { parseAppLocale } from '@/shared/utils/locale.util';
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { plainToInstance } from 'class-transformer';
@@ -60,7 +61,7 @@ export class ChatBotGateway implements OnGatewayInit, OnGatewayConnection, OnGat
         }
 
         try {
-            const messageId = await this.chatService.saveAndEnqueue(user.userId, dto.message, user.tier);
+            const messageId = await this.chatService.saveAndEnqueue(user.userId, dto.message, user.tier, parseAppLocale(dto.locale));
             client.emit('message_queued', { messageId });
         } catch (err) {
             this.logger.error(

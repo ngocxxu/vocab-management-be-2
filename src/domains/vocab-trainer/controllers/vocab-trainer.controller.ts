@@ -1,9 +1,11 @@
+import { Locale } from '@/auth';
 import type { FsrsReviewQueue, FsrsReviewResult, FsrsReviewStats, FsrsReviewSummary } from '@/domains/vocab/types';
 import type { AnswerCheck } from '@/domains/vocab/utils/fsrs-answer-check.util';
 import { LoggerService, RolesGuard } from '@/shared';
 import { Roles } from '@/shared/decorators';
 import { CurrentUser } from '@/shared/decorators/user.decorator';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
+import type { AppLocale } from '@/shared/utils/locale.util';
 import { Body, Controller, Delete, Get, HttpStatus, Param, Post, Put, UseGuards, Query, BadRequestException, Patch, UsePipes } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -97,15 +99,20 @@ export class VocabTrainerController {
         type: SubmitTranslationAudioResponseDto,
     })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Exam of vocab trainer not found' })
-    public async submitExam(@Param('id') id: string, @Body() input: SubmitExamBodyInput, @CurrentUser() user: User): Promise<VocabTrainerDto | SubmitTranslationAudioResponseDto> {
+    public async submitExam(
+        @Param('id') id: string,
+        @Body() input: SubmitExamBodyInput,
+        @CurrentUser() user: User,
+        @Locale() locale: AppLocale,
+    ): Promise<VocabTrainerDto | SubmitTranslationAudioResponseDto> {
         if (input.questionType === QuestionType.MULTIPLE_CHOICE) {
             return this.vocabTrainerService.submitMultipleChoice(id, input as SubmitMultipleChoiceInput, user);
         } else if (input.questionType === QuestionType.FILL_IN_BLANK_CHOICE) {
             return this.vocabTrainerService.submitFillInBlankChoice(id, input as SubmitFillInBlankChoiceInput, user);
         } else if (input.questionType === QuestionType.FILL_IN_THE_BLANK) {
-            return this.vocabTrainerService.submitFillInBlank(id, input as SubmitFillInBlankInput, user);
+            return this.vocabTrainerService.submitFillInBlank(id, input as SubmitFillInBlankInput, user, locale);
         } else if (input.questionType === QuestionType.TRANSLATION_AUDIO && user.role !== UserRole.GUEST) {
-            return this.vocabTrainerService.submitTranslationAudio(id, input as SubmitTranslationAudioInput, user);
+            return this.vocabTrainerService.submitTranslationAudio(id, input as SubmitTranslationAudioInput, user, locale);
         } else {
             throw new BadRequestException('Question type is not suitable');
         }

@@ -88,6 +88,18 @@ _Avoid_: Question (that is the Classic trainer and the exam word)
 How a Card is asked. Recognise: the source text is shown and the target is the answer. Recall: the target is shown and the source is the answer. Both: a Card per Direction, so a word has two. Random: one Card per word, asked in Recognise or Recall at random.
 _Avoid_: Mode (that means Classic or FSRS), Type
 
+**Pass**:
+A Classic trainer exam submission that scores at least 70%. A Pass is only worth one step toward completion if it is counted (see Pass count).
+_Avoid_: Success, Correct run
+
+**Pass count**:
+How many Passes of a Classic trainer have been counted toward its completion. The trainer is completed and removed when it reaches 6. At most one Pass is counted per Reminder cycle, so opening the same trainer from several Reminders cannot count twice.
+_Avoid_: Repeat count, Reminder repeat (that is the old column name)
+
+**Reminder cycle**:
+One initial Reminder and the escalations that follow it, for one Classic trainer. It is the unit that decides what "the same Reminder" means: a Pass is counted at most once per Reminder cycle, whichever Reminder of the cycle the User opened.
+_Avoid_: Reminder occurrence, Chain (that is the schedule link in code)
+
 **Shown direction**:
 The Direction a Card is actually asked in right now. For a Recognise or Recall Card it is the Card's own Direction. For a Random Card it is picked at random and stays the same until the Card is answered.
 _Avoid_: Current direction, Resolved direction

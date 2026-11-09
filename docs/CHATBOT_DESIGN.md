@@ -25,7 +25,7 @@ ChatProcessor
   │  resolve AI provider (AiProviderFactory) ← FIRST
   │  build system prompt (fetch user context from DB)
   │  load last 10 messages (Postgres)
-  │  Intent Guard → OUT_OF_SCOPE? → short-circuit
+  │  OUT_OF_SCOPE marker → fixed reply, short-circuit
   │  call AI provider (full response, no streaming)
   │  agentic loop (per-tier iterations)
   │  save assistant message
@@ -117,7 +117,7 @@ Client flow: send message → show loading spinner → receive `ai_done { conten
    └── If set → delete flag, publish chat:{userId}:done { content: '' }, exit
 
 3. Resolve AI provider:
-   └── AiProviderFactory.getProvider(userId)   ← resolved FIRST, reused for Intent Guard + agentic loop
+   └── AiProviderFactory.getProvider(userId)   ← resolved FIRST, reused for the agentic loop
        Reads ai.provider config → gemini | openrouter | groq | omniroute
        Default: omniroute
 
@@ -136,18 +136,12 @@ Client flow: send message → show loading spinner → receive `ai_done { conten
 5. Load conversation history:
    └── Postgres: SELECT last 10 messages WHERE userId ORDER BY createdAt ASC
 
-6. Intent Guard (fast, no tools):
-   ├── Call provider.generateContent() to classify: APP | OUT_OF_SCOPE
-   │     "Classify the intent. Reply APP or OUT_OF_SCOPE.
-   │      APP = vocabulary, learning progress, folders, trainer sessions,
-   │            reminders, or features of this application.
-   │      OUT_OF_SCOPE = anything else.
-   │      Message: ${userMessage}"
-   ├── Intent Guard failure → fail open, treat as APP, continue
-   ├── OUT_OF_SCOPE → save + publish:
-   │     "Sorry, I can only help with app-related questions."
-   │     exit — skip agentic loop
-   └── APP → continue
+6. Out-of-scope check (no extra AI call):
+   ├── The main AI reply is checked before it is saved
+   ├── Reply is only OUT_OF_SCOPE (ignoring case, spaces, wrapping punctuation):
+   │     → save + publish the fixed message in the user's locale (en/vi)
+   │     exit — skip the rest of the loop
+   └── Any other reply → save and publish as normal
 
 7. Agentic loop (per-tier max iterations: GUEST=2, MEMBER=3, ADMIN=4):
    ├── Map McpTool[] → McpToolDeclaration[] (zod-to-json-schema)
@@ -402,7 +396,7 @@ Implementation: Redis INCR + EXPIRE. Tier read from JWT at handshake, stored in 
 History:        10 messages (Postgres)
 Tool result:    Trim to 2000 chars before appending to in-memory history
 Max response:   1000 tokens (configured per provider in ai.config)
-Intent Guard:   ~50 tokens per call (generateContent, fast)
+Out-of-scope:   no extra call (marker check on the main reply)
 ```
 
 ### Timeouts & Retries
@@ -419,17 +413,17 @@ Cancel flag TTL:      5 min (Redis EX 300)
 
 ## 10. Failure Handling
 
-| Failure                   | Behavior                                                      |
-| ------------------------- | ------------------------------------------------------------- |
-| AI provider timeout (60s) | BullMQ retry (max 3x) → DLQ → Sentry alert                    |
-| Intent Guard failure      | Fail open — treat as APP, continue                            |
-| Tool execution error      | Return error string to AI, AI continues with partial data     |
-| Tool timeout (5s)         | Return `"Tool timed out"` to AI, no crash                     |
-| Worker crash              | BullMQ auto-retry on next available worker                    |
-| Confirm timeout (30s)     | Treat as rejected, AI continues without write action          |
-| DLQ job                   | Sentry alert with full job context for debugging              |
-| Max iterations exhausted  | Save fallback assistant message, Sentry alert                 |
-| Enqueue failure           | Emit ai_error { retryable: true }, keep orphaned user message |
+| Failure                   | Behavior                                                            |
+| ------------------------- | ------------------------------------------------------------------- |
+| AI provider timeout (60s) | BullMQ retry (max 3x) → DLQ → Sentry alert                          |
+| OUT_OF_SCOPE marker reply | Save + publish fixed message in the user's locale, no extra AI call |
+| Tool execution error      | Return error string to AI, AI continues with partial data           |
+| Tool timeout (5s)         | Return `"Tool timed out"` to AI, no crash                           |
+| Worker crash              | BullMQ auto-retry on next available worker                          |
+| Confirm timeout (30s)     | Treat as rejected, AI continues without write action                |
+| DLQ job                   | Sentry alert with full job context for debugging                    |
+| Max iterations exhausted  | Save fallback assistant message, Sentry alert                       |
+| Enqueue failure           | Emit ai_error { retryable: true }, keep orphaned user message       |
 
 ---
 

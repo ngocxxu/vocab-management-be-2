@@ -9,6 +9,8 @@ export const CHAT_CANCEL_CHANNEL = 'chat:cancel';
 export const CHAT_CANCEL_KEY = (userId: string): string => `${userId}:cancelled`;
 export const CHAT_CANCEL_TTL_SECONDS = 300;
 export const CHAT_MAX_MESSAGE_LENGTH = 300;
+/** Longest locale tag accepted from the client, e.g. "vi-VN". */
+export const CHAT_LOCALE_MAX_LENGTH = 35;
 export const CHAT_HISTORY_DEFAULT_LIMIT = 10;
 export const CHAT_HISTORY_MAX_LIMIT = 50;
 

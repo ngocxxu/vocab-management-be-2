@@ -5,6 +5,7 @@ import axios, { AxiosError } from 'axios';
 import FormData from 'form-data';
 import { readChatModel } from '../utils/chat-model.util';
 import { AI_CONFIG } from '../utils/const.util';
+import { OPENAI_JSON_OBJECT_FORMAT } from '../utils/json-mode.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
@@ -39,6 +40,7 @@ export class GroqProvider extends OpenAiCompatibleProvider implements IAiProvide
                             content: prompt,
                         },
                     ],
+                    ...(options?.json && OPENAI_JSON_OBJECT_FORMAT),
                 },
                 {
                     headers: {
