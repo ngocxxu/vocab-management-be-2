@@ -1,19 +1,11 @@
 import { ConfigService } from '@/domains/platform/config/services';
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
+import { readChatModel } from '../utils/chat-model.util';
 import { CLOUDFLARE_AI_MODEL_TIER } from '../utils/cloudflare-models.const';
+import { CloudflareChatResult, readCloudflareReply } from '../utils/cloudflare-reply.util';
 import { ChatHistoryMessage, ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
-
-type CloudflareToolCall = {
-    name: string;
-    arguments: Record<string, unknown>;
-};
-
-type CloudflareChatResult = {
-    response: string | null;
-    tool_calls?: CloudflareToolCall[];
-};
 
 type CloudflareApiResponse<T> = {
     result: T;
@@ -39,7 +31,7 @@ export class CloudflareProvider extends OpenAiCompatibleProvider implements IAiP
     }
 
     public override async chat(params: ChatParams): Promise<ChatResponse> {
-        const modelName = await this.getModelName();
+        const modelName = await this.getChatModelName();
         const url = `${this.baseUrl}/${modelName}`;
         const messages = this.buildOpenAiMessages(params.systemPrompt, params.history);
         const body = this.buildChatBody(modelName, messages, params);
@@ -50,19 +42,19 @@ export class CloudflareProvider extends OpenAiCompatibleProvider implements IAiP
                 signal: params.signal,
             });
 
-            const result = response.data.result;
+            const reply = readCloudflareReply(response.data.result);
 
-            if (result.tool_calls?.length) {
-                const tc = result.tool_calls[0];
+            if (reply.toolCalls.length) {
+                const tc = reply.toolCalls[0];
                 return {
                     type: 'tool_call',
                     name: tc.name,
                     params: tc.arguments,
-                    toolCallId: `cf-${Date.now()}`,
+                    toolCallId: tc.id ?? `cf-${Date.now()}`,
                 };
             }
 
-            return { type: 'text', content: result.response ?? '' };
+            return { type: 'text', content: reply.text ?? '' };
         } catch (error) {
             this.handleApiError(error, 'chat', modelName);
             throw error;
@@ -84,18 +76,18 @@ export class CloudflareProvider extends OpenAiCompatibleProvider implements IAiP
                 { headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' }, signal: options?.signal },
             );
 
-            const result = response.data.result;
+            const reply = readCloudflareReply(response.data.result);
 
-            if (!result.response) {
-                if (result.tool_calls?.length) {
-                    this.logger.warn(`[CloudflareProvider] Model ${modelName} emitted tool_call without tools in request: ${result.tool_calls[0].name}`);
+            if (!reply.text) {
+                if (reply.toolCalls.length) {
+                    this.logger.warn(`[CloudflareProvider] Model ${modelName} emitted tool_call without tools in request: ${reply.toolCalls[0].name}`);
                 } else {
                     this.logger.warn(`[CloudflareProvider] No text response from model ${modelName}`);
                 }
                 return '';
             }
 
-            return result.response;
+            return reply.text;
         } catch (error) {
             this.handleApiError(error, 'generateContent', modelName);
             throw error;
@@ -125,10 +117,14 @@ export class CloudflareProvider extends OpenAiCompatibleProvider implements IAiP
     }
 
     public async getModelName(userId?: string): Promise<string> {
-        const configValue = await this.configService.getConfig(userId || null, 'ai.chat.model');
+        const configValue = await this.configService.getConfig(userId || null, 'ai.model');
         if (configValue && typeof configValue === 'string') return configValue;
         const models = CLOUDFLARE_AI_MODEL_TIER.TEXT_GENERATION;
         return models[Math.floor(Math.random() * models.length)];
+    }
+
+    public async getChatModelName(userId?: string): Promise<string> {
+        return readChatModel(this.configService, userId, async () => this.getModelName(userId));
     }
 
     public async getAudioModelName(userId?: string): Promise<string> {

@@ -128,6 +128,10 @@ _Avoid_: Tag, Category
 One translation or definition of a Vocab in its target language, with its word type, grammar, explanations, examples and Subjects. A Vocab has one or more Meanings. In code this is a text target.
 _Avoid_: Translation, Text target (in user-facing text)
 
+**Model catalog**:
+The list of model ids a provider reports when asked, shown in the admin model dropdowns. It is advisory only: it says nothing about price or free tier, and an admin may still enter a model that is not in it. When the provider cannot be reached the catalog is the last good list, marked degraded.
+_Avoid_: Model registry, Free models
+
 **Cross-folder link**:
 A related-word link between two Vocabs in different Language folders of the same User, when both folders have the same Language pair. The words keep their own folders; only the link crosses them.
 _Avoid_: Linked word (a link inside one folder is a link too, so name the kind)

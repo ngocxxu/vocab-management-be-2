@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import FormData from 'form-data';
+import { readChatModel } from '../utils/chat-model.util';
 import { AI_CONFIG } from '../utils/const.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
@@ -108,6 +109,10 @@ export class GroqProvider extends OpenAiCompatibleProvider implements IAiProvide
     public async getModelName(userId?: string): Promise<string> {
         const configValue = await this.configService.getConfig(userId || null, 'ai.model');
         return configValue && typeof configValue === 'string' ? configValue : AI_CONFIG.models?.[0] || '';
+    }
+
+    public async getChatModelName(userId?: string): Promise<string> {
+        return readChatModel(this.configService, userId, async () => this.getModelName(userId));
     }
 
     public async getAudioModelName(userId?: string): Promise<string> {
