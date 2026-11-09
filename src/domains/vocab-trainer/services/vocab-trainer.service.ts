@@ -1,5 +1,6 @@
 import { LoggerService, PaginationDto } from '@/shared';
 import { getOrderBy, getPagination } from '@/shared/utils';
+import type { AppLocale } from '@/shared/utils/locale.util';
 import { Injectable } from '@nestjs/common';
 import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerMode, TrainerStatus, User, VocabTrainer } from '@prisma/client';
 import { AiService } from '../../ai/services/ai.service';
@@ -299,7 +300,7 @@ export class VocabTrainerService {
         return this.aiService.getExamJobStatus(userId, vocabTrainerId, jobId);
     }
 
-    public async submitFillInBlank(id: string, input: SubmitFillInBlankInput, user: User): Promise<VocabTrainerDto> {
+    public async submitFillInBlank(id: string, input: SubmitFillInBlankInput, user: User, locale?: AppLocale): Promise<VocabTrainerDto> {
         const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(id, user.id);
 
         if (!trainer) {
@@ -359,6 +360,7 @@ export class VocabTrainerService {
 
         if (evaluationsToProcess.length > 0) {
             const { jobId } = await this.aiService.queueFillInBlankEvaluation({
+                locale,
                 vocabTrainerId: trainer.id,
                 evaluations: evaluationsToProcess.map((item) => ({
                     vocab: item.vocab,
@@ -385,7 +387,7 @@ export class VocabTrainerService {
         return this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
     }
 
-    public async submitTranslationAudio(id: string, input: SubmitTranslationAudioInput, user: User): Promise<SubmitTranslationAudioResponseDto> {
+    public async submitTranslationAudio(id: string, input: SubmitTranslationAudioInput, user: User, locale?: AppLocale): Promise<SubmitTranslationAudioResponseDto> {
         const trainer = await this.vocabTrainerRepository.findByIdWithVocabsAndResults(id, user.id);
 
         if (!trainer) {
@@ -443,6 +445,7 @@ export class VocabTrainerService {
         });
 
         const { jobId } = await this.aiService.queueAudioEvaluation({
+            locale,
             fileId,
             targetDialogue,
             sourceLanguageCode,

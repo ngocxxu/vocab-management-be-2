@@ -1,8 +1,12 @@
+import { LoggerService } from '@/shared';
 import { Injectable } from '@nestjs/common';
-import { VocabWithTextTargets, shuffleArray } from '../../vocab-trainer/utils';
+import { VocabWithTextTargets } from '../../vocab-trainer/utils';
+import { AiGenerationException } from '../exceptions';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
+import { unwrapItems } from '../utils/ai-items.util';
 import { parseJsonOrThrow } from '../utils/ai-json.util';
 import { TextTargetRecord, VocabForTextTargets } from '../utils/ai-text-types.util';
+import { buildChoiceQuestions, isAiChoiceItem } from '../utils/choice-question.util';
 import { AI_CONFIG } from '../utils/const.util';
 import { MultipleChoiceQuestion } from '../utils/type.util';
 import { AiLanguageNameService } from './ai-language-name.service';
@@ -21,11 +25,11 @@ type PreparedVocabItem = {
 @Injectable()
 export class AiMultipleChoiceService {
     private static readonly GENERATION_BATCH_SIZE = 3;
-    private static readonly PLACEHOLDER_LABEL_PATTERN = /^(?:[A-D]|correct_answer|wrong_option_\d+)$/i;
 
     public constructor(
         private readonly providerFactory: AiProviderFactory,
         private readonly languageNameService: AiLanguageNameService,
+        private readonly logger: LoggerService,
     ) {}
 
     public async generateMultipleChoiceQuestions(vocabList: VocabWithTextTargets[], userId?: string): Promise<MultipleChoiceQuestion[]> {
@@ -42,6 +46,11 @@ export class AiMultipleChoiceService {
             const batchItems = preparedItems.slice(index, index + AiMultipleChoiceService.GENERATION_BATCH_SIZE);
             const batchQuestions = await this.generateBatchQuestions(batchItems, userId);
             questions.push(...batchQuestions);
+        }
+
+        // An empty exam must fail the job, not be saved as a finished exam with no questions
+        if (questions.length === 0) {
+            throw new AiGenerationException('AI returned no usable multiple-choice questions');
         }
 
         return questions;
@@ -111,7 +120,7 @@ export class AiMultipleChoiceService {
             .join('\n');
 
         const prompt = `
-Return a JSON array only.
+Return a JSON object only, with the array under the "items" key.
 Generate ${vocabItems.length} multiple choice questions from the items below.
 Each item already contains the exact question content, type, and correct answer.
 Use exactly ${AI_CONFIG.questionCount} options per question.
@@ -123,7 +132,7 @@ Items:
 ${vocabDetails}
 
 Required output shape:
-[
+{ "items": [
   {
     "vocabIndex": 0,
     "type": "textTarget",
@@ -133,63 +142,27 @@ Required output shape:
     ],
     "correctAnswer": "answer text"
   }
-]
+]}
 
 Return JSON only. No prose. No markdown. No comments.
 `;
 
         const provider = await this.providerFactory.getProvider(userId);
-        const text = await provider.generateContent(prompt, userId);
+        const text = await provider.generateContent(prompt, userId, { json: true });
 
-        const batchResponse = parseJsonOrThrow<
-            Array<{
-                vocabIndex: number;
-                type: string;
-                content: string;
-                options: Array<{ label: string; value: string }>;
-                correctAnswer: string;
-            }>
-        >(text);
-
-        const questions: MultipleChoiceQuestion[] = [];
-        batchResponse.forEach((item) => {
-            if (item.vocabIndex >= 0 && item.vocabIndex < vocabItems.length) {
-                const normalizedOptions = item.options.map((option) => this.normalizeOption(option));
-                const shuffledOptions = shuffleArray(normalizedOptions);
-
-                questions.push({
-                    correctAnswer: item.correctAnswer,
-                    type: item.type as 'textSource' | 'textTarget',
-                    content: item.content,
-                    options: shuffledOptions,
-                });
-            }
+        const batchResponse = unwrapItems(parseJsonOrThrow<unknown>(text), isAiChoiceItem);
+        const { questions, droppedQuestions } = buildChoiceQuestions(batchResponse, vocabItems.length);
+        droppedQuestions.forEach(({ vocabIndex, reason }) => {
+            this.logger.warn(`Dropped multiple-choice question for vocabIndex ${vocabIndex}: ${reason}`);
         });
 
-        return questions;
-    }
-
-    private normalizeOption(option: { label: string; value: string }): { label: string; value: string } {
-        const trimmedValue = option.value.trim();
-        const trimmedLabel = option.label.trim();
-
-        if (trimmedValue.length === 0) {
-            return {
-                label: trimmedLabel,
-                value: trimmedLabel,
-            };
-        }
-
-        if (AiMultipleChoiceService.PLACEHOLDER_LABEL_PATTERN.test(trimmedLabel)) {
-            return {
-                label: trimmedValue,
-                value: trimmedValue,
-            };
-        }
-
-        return {
-            label: trimmedLabel,
-            value: trimmedValue,
-        };
+        return questions.map(
+            (question): MultipleChoiceQuestion => ({
+                correctAnswer: question.correctAnswer,
+                type: question.type as MultipleChoiceQuestion['type'],
+                content: question.content,
+                options: question.options,
+            }),
+        );
     }
 }

@@ -1,6 +1,7 @@
 import type { VocabTrainerQueueName } from '@/domains/ai/constants/vocab-trainer-job.constants';
 import type { VocabTrainerJobType } from '@/domains/ai/dto/active-vocab-trainer-job.dto';
 import type { VocabWithTextTargets } from '@/domains/vocab-trainer/utils';
+import type { AppLocale } from '@/shared/utils/locale.util';
 import type { TemplateData } from '@/shared/utils/type.util';
 
 interface VocabTrainerJobMetadata {
@@ -11,6 +12,7 @@ interface VocabTrainerJobMetadata {
 }
 
 export interface AudioEvaluationJobData extends VocabTrainerJobMetadata {
+    locale?: AppLocale;
     fileId: string;
     targetDialogue: Array<{ speaker: string; text: string }>;
     sourceLanguageCode: string;
@@ -35,6 +37,7 @@ export interface FillInBlankChoiceGenerationJobData extends VocabTrainerJobMetad
 }
 
 export interface FillInBlankEvaluationJobData extends VocabTrainerJobMetadata {
+    locale?: AppLocale;
     vocabTrainerId: string;
     evaluations: Array<{
         vocab: VocabWithTextTargets;
@@ -51,6 +54,7 @@ export interface FillInBlankEvaluationJobData extends VocabTrainerJobMetadata {
 }
 
 export interface VocabTranslationJobData {
+    locale?: AppLocale;
     vocabId: string;
     textSource: string;
     sourceLanguageCode: string;
@@ -92,6 +96,7 @@ export interface SubjectGenerateJobData {
 }
 
 export interface VocabGenerateTextTargetJobData {
+    locale?: AppLocale;
     textSource: string;
     sourceLanguageCode: string;
     targetLanguageCode: string;
@@ -102,4 +107,5 @@ export interface AiChatJobData {
     userId: string;
     messageId: string;
     tier: string;
+    locale?: AppLocale;
 }

@@ -3,6 +3,8 @@ import { Content, GenerativeModel, GoogleGenerativeAI, Part } from '@google/gene
 import { Injectable, Logger } from '@nestjs/common';
 import { readChatModel } from '../utils/chat-model.util';
 import { AI_CONFIG } from '../utils/const.util';
+import { GEMINI_JSON_GENERATION_CONFIG } from '../utils/json-mode.util';
+import { buildTranscriptionPrompt } from '../utils/transcription-prompt.util';
 import { ChatHistoryMessage, ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 
 @Injectable()
@@ -25,7 +27,8 @@ export class GeminiProvider implements IAiProvider {
     public async generateContent(prompt: string, userId?: string, options?: GenerateContentOptions): Promise<string> {
         try {
             const hasAudio = !!(options?.audioBuffer && options?.audioMimeType);
-            const model = await this.getModel(userId, hasAudio);
+            // JSON mode only for text requests; audio transcription keeps its plain reply
+            const model = await this.getModel(userId, hasAudio, options?.json === true && !hasAudio);
             const requestParts: (string | { inlineData: { data: string; mimeType: string } })[] = [prompt];
 
             // Validate and attach audio if present
@@ -60,7 +63,7 @@ export class GeminiProvider implements IAiProvider {
      */
     public async transcribeAudio(audioBuffer: Buffer, mimeType: string, sourceLanguage: string, userId?: string): Promise<string> {
         // Construct a specific prompt for transcription
-        const prompt = `Transcribe this ${sourceLanguage} audio recording. Return only the transcript text, no additional commentary.`;
+        const prompt = buildTranscriptionPrompt(sourceLanguage);
 
         // Reuse the core function
         const text = await this.generateContent(prompt, userId, {
@@ -152,8 +155,11 @@ export class GeminiProvider implements IAiProvider {
         return contents;
     }
 
-    private async getModel(userId?: string, useAudioModel = false): Promise<GenerativeModel> {
+    private async getModel(userId?: string, useAudioModel = false, jsonMode = false): Promise<GenerativeModel> {
         const modelName = useAudioModel ? await this.getAudioModelName(userId) : await this.getModelName(userId);
-        return this.genAI.getGenerativeModel({ model: modelName });
+        return this.genAI.getGenerativeModel({
+            model: modelName,
+            ...(jsonMode && { generationConfig: GEMINI_JSON_GENERATION_CONFIG }),
+        });
     }
 }

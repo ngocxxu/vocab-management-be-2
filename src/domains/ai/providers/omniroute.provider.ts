@@ -4,6 +4,7 @@ import axios, { AxiosError } from 'axios';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import FormData from 'form-data';
 import { readChatModel } from '../utils/chat-model.util';
+import { OPENAI_JSON_OBJECT_FORMAT } from '../utils/json-mode.util';
 import { ChatParams, ChatResponse, GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
@@ -70,6 +71,7 @@ export class OmniRouteProvider extends OpenAiCompatibleProvider implements IAiPr
                             content: prompt,
                         },
                     ],
+                    ...(options?.json && OPENAI_JSON_OBJECT_FORMAT),
                 },
                 {
                     headers: {

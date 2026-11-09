@@ -59,6 +59,7 @@ export class AudioEvaluationProcessor {
                     targetStyle,
                     targetAudience,
                     userId,
+                    locale: job.data.locale,
                 }),
                 'Translation evaluation',
             );

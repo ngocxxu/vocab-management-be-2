@@ -3,6 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 import { readChatModel } from '../utils/chat-model.util';
 import { AI_CONFIG } from '../utils/const.util';
+import { OPENAI_JSON_OBJECT_FORMAT } from '../utils/json-mode.util';
+import { buildTranscriptionPrompt } from '../utils/transcription-prompt.util';
 import { GenerateContentOptions, IAiProvider } from './ai-provider.interface';
 import { OpenAiCompatibleProvider } from './openai-compatible.provider';
 
@@ -64,6 +66,8 @@ export class OpenRouterProvider extends OpenAiCompatibleProvider implements IAiP
                             content,
                         },
                     ],
+                    // JSON mode only for text requests; audio requests keep their plain transcript reply
+                    ...(options?.json && !hasAudio && OPENAI_JSON_OBJECT_FORMAT),
                 },
                 {
                     headers: {
@@ -81,7 +85,7 @@ export class OpenRouterProvider extends OpenAiCompatibleProvider implements IAiP
     }
 
     public async transcribeAudio(audioBuffer: Buffer, mimeType: string, sourceLanguage: string, userId?: string): Promise<string> {
-        const prompt = `Transcribe this ${sourceLanguage} audio recording. Return only the transcript text, no additional commentary.`;
+        const prompt = buildTranscriptionPrompt(sourceLanguage);
 
         const result = await this.generateContent(prompt, userId, {
             audioBuffer,

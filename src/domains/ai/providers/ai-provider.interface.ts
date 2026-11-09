@@ -2,6 +2,8 @@ export interface GenerateContentOptions {
     audioBuffer?: Buffer;
     audioMimeType?: string;
     signal?: AbortSignal;
+    /** Ask the provider for a JSON-only reply (native JSON mode where supported). Parsing still runs as a safety net. */
+    json?: boolean;
 }
 
 export interface ChatHistoryMessage {

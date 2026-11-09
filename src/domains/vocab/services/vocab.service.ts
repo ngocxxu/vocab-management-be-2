@@ -8,6 +8,7 @@ import { VocabTranslationProducer } from '@/queues/producers/vocab-translation.p
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { LoggerService } from '@/shared/services/logger.service';
 import { RedisService } from '@/shared/services/redis.service';
+import type { AppLocale } from '@/shared/utils/locale.util';
 import { getOrderBy, getPagination } from '@/shared/utils/pagination.util';
 import { RedisPrefix } from '@/shared/utils/redis-key.util';
 import { Injectable } from '@nestjs/common';
@@ -254,7 +255,7 @@ export class VocabService {
      * @throws Error when validation fails
      * @throws PrismaError when database operation fails
      */
-    public async create(createVocabData: VocabInput, userId: string, role?: UserRole): Promise<VocabDto> {
+    public async create(createVocabData: VocabInput, userId: string, role?: UserRole, locale?: AppLocale): Promise<VocabDto> {
         if (role !== undefined) {
             await this.planQuotaService.assertCreationQuota(userId, role, 'vocab');
         }
@@ -278,6 +279,7 @@ export class VocabService {
             await this.vocabTranslationProducer.translateVocab({
                 vocabId: vocab.id,
                 ...queuePayload,
+                locale,
             } as VocabTranslationJobData);
         }
 

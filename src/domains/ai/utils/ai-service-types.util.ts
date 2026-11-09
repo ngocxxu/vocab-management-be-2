@@ -1,3 +1,4 @@
+import type { AppLocale } from '@/shared/utils/locale.util';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { VocabTrainerQueueName } from '../constants/vocab-trainer-job.constants';
 import { ActiveJobResponse, VocabTrainerJobType } from '../dto/active-vocab-trainer-job.dto';
@@ -14,6 +15,7 @@ type QueueJobIdentity = {
 };
 
 export type QueueAudioEvaluationParams = QueueJobIdentity & {
+    locale?: AppLocale;
     fileId: string;
     targetDialogue: Array<{ speaker: string; text: string }>;
     sourceLanguageCode: string;
@@ -38,6 +40,7 @@ export type QueueFillInBlankChoiceGenerationParams = QueueJobIdentity & {
 };
 
 export type QueueFillInBlankEvaluationParams = QueueJobIdentity & {
+    locale?: AppLocale;
     vocabTrainerId: string;
     evaluations: Array<{
         vocab: VocabWithTextTargets;
@@ -63,6 +66,17 @@ export type EvaluateTranslationParams = {
     targetAudience?: string;
     userId?: string;
     retryCount?: number;
+    locale?: AppLocale;
+};
+
+export type TranslateVocabParams = {
+    textSource: string;
+    sourceLanguageCode: string;
+    targetLanguageCode: string;
+    subjectIds?: string[];
+    userId?: string;
+    retryCount?: number;
+    locale?: AppLocale;
 };
 
 export type FormatMarkdownReportFn = (evaluation: EvaluationResult, transcript: string) => string;

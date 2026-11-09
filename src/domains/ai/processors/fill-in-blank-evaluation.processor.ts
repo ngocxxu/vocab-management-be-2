@@ -61,6 +61,7 @@ export class FillInBlankEvaluationProcessor {
                         questionType: evaluation.questionType,
                     })),
                     userId,
+                    job.data.locale,
                 ),
                 'Fill-in-blank evaluation',
             );

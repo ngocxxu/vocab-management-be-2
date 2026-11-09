@@ -1,3 +1,4 @@
+import type { AppLocale } from '@/shared/utils/locale.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { ExamJobStatusDto } from '../../vocab-trainer/dto/exam-job-status.dto';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
@@ -11,6 +12,7 @@ import {
     QueueFillInBlankEvaluationParams,
     QueueJobResult,
     QueueMultipleChoiceGenerationParams,
+    TranslateVocabParams,
 } from '../utils/ai-service-types.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../utils/type.util';
 import { AiAudioService } from './ai-audio.service';
@@ -41,15 +43,8 @@ export class AiService {
     /**
      * Translate vocab using AI when textTargets is empty
      */
-    public async translateVocab(
-        textSource: string,
-        sourceLanguageCode: string,
-        targetLanguageCode: string,
-        subjectIds?: string[],
-        userId?: string,
-        retryCount = 0,
-    ): Promise<TranslatedTextTargetResult> {
-        return this.translationService.translateVocab(textSource, sourceLanguageCode, targetLanguageCode, subjectIds, userId, retryCount);
+    public async translateVocab(params: TranslateVocabParams): Promise<TranslatedTextTargetResult> {
+        return this.translationService.translateVocab(params);
     }
 
     /**
@@ -77,8 +72,9 @@ export class AiService {
             questionType: 'textSource' | 'textTarget';
         }>,
         userId?: string,
+        locale?: AppLocale,
     ): Promise<Array<{ isCorrect: boolean; explanation?: string }>> {
-        return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId);
+        return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId, locale);
     }
 
     public async getExamJobStatus(userId: string, vocabTrainerId: string, jobId: string): Promise<ExamJobStatusDto> {
@@ -124,7 +120,7 @@ export class AiService {
         sourceLanguageCode: string,
         userId?: string,
         retryCount = 0,
-    ): Promise<{ dialogue: Array<{ speaker: string; text: string }>; vocabWordsUsed: string[] }> {
+    ): Promise<{ dialogue: Array<{ speaker: string; text: string }> }> {
         try {
             const targetLanguageName = await this.languageNameService.getLanguageName(targetLanguageCode);
             const sourceLanguageName = await this.languageNameService.getLanguageName(sourceLanguageCode);
@@ -132,42 +128,41 @@ export class AiService {
             const wordsList = targetLanguageWords.join(', ');
             const sourceWordsList = sourceLanguageWords.join(', ');
             const prompt = `
-    You are a language learning assistant. Generate a natural dialogue between two speakers (A and B) 
-    in ${targetLanguageName} that incorporates ALL of the following vocabulary words naturally:
+You are a language learning assistant. Generate a natural dialogue between two speakers (A and B) 
+in ${targetLanguageName} that incorporates ALL of the following vocabulary words naturally:
 
-    Vocabulary words (${targetLanguageName}): ${wordsList}
+Vocabulary words (${targetLanguageName}): ${wordsList}
 
-    Important context:
-    - This dialogue will be translated by the user from ${targetLanguageName} to ${sourceLanguageName}
-    - When the user translates this dialogue, they MUST use the source words or their synonyms: ${sourceWordsList}
-    - The dialogue should be structured so that when translated, it naturally requires the use of these source words
+Important context:
+- This dialogue will be translated by the user from ${targetLanguageName} to ${sourceLanguageName}
+- When the user translates this dialogue, they MUST use the source words or their synonyms: ${sourceWordsList}
+- The dialogue should be structured so that when translated, it naturally requires the use of these source words
 
-    Requirements:
-    1. Create a conversation between speakers A and B
-    2. Use ALL the provided vocabulary words naturally in context
-    3. The dialogue should be realistic and appropriate
-    4. The dialogue must have EXACTLY 4 lines total: 2 lines from speaker A and 2 lines from speaker B
-    5. Return the dialogue in JSON format
+Requirements:
+1. Create a conversation between speakers A and B
+2. Use ALL the provided vocabulary words naturally in context
+3. The dialogue should be realistic and appropriate
+4. The dialogue must have EXACTLY 4 lines total: 2 lines from speaker A and 2 lines from speaker B
+5. Return the dialogue in JSON format
 
-    Format your response as JSON:
-    {
-        "dialogue": [
-            {"speaker": "A", "text": "..."},
-            {"speaker": "B", "text": "..."},
-            {"speaker": "A", "text": "..."},
-            {"speaker": "B", "text": "..."}
-        ]
-    }
+Format your response as JSON:
+{
+    "dialogue": [
+        {"speaker": "A", "text": "..."},
+        {"speaker": "B", "text": "..."},
+        {"speaker": "A", "text": "..."},
+        {"speaker": "B", "text": "..."}
+    ]
+}
 
-    Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
+Return ONLY the JSON object, no markdown formatting, no code blocks, no additional text.
                 `;
 
             const provider = await this.providerFactory.getProvider(userId);
-            const text = await provider.generateContent(prompt, userId);
+            const text = await provider.generateContent(prompt, userId, { json: true });
 
             return parseJsonOrThrow<{
                 dialogue: Array<{ speaker: string; text: string }>;
-                vocabWordsUsed: string[];
             }>(text);
         } catch (error: unknown) {
             this.logger.error(`Error generating dialogue (attempt ${retryCount + 1}):`, error);

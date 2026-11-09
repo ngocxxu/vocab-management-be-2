@@ -61,6 +61,8 @@ export class CloudflareProvider extends OpenAiCompatibleProvider implements IAiP
         }
     }
 
+    // options.json is intentionally not sent: Workers AI JSON mode is not verified for these models.
+    // Replies are still parsed with parseJsonOrThrow as a safety net.
     public async generateContent(prompt: string, userId?: string, options?: GenerateContentOptions): Promise<string> {
         if (options?.audioBuffer && options?.audioMimeType) {
             return this.transcribeAudio(options.audioBuffer, options.audioMimeType, '', userId);

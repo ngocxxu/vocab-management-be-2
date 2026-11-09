@@ -1,8 +1,10 @@
+import { Locale } from '@/auth';
 import { VocabGenerateTextTargetProducer } from '@/queues/producers/vocab-generate-text-target.producer';
 import { LoggerService, RolesGuard } from '@/shared';
 import { CurrentUser, Public, Roles } from '@/shared/decorators';
 import { PaginationDto } from '@/shared/dto/pagination.dto';
 import { ApiKeyGuard, RequestWithApiKey } from '@/shared/guards/api-key.guard';
+import type { AppLocale } from '@/shared/utils/locale.util';
 import {
     BadRequestException,
     Body,
@@ -285,8 +287,8 @@ export class VocabController {
         description: 'Create a vocab. Optional relatedWords are created atomically with the vocab; invalid related words roll back the entire request.',
     })
     @ApiResponse({ status: HttpStatus.CREATED, type: VocabDto })
-    public async create(@Body() input: VocabInput, @CurrentUser() user: User): Promise<VocabDto> {
-        const vocab = await this.vocabService.create(input, user.id, user.role);
+    public async create(@Body() input: VocabInput, @CurrentUser() user: User, @Locale() locale: AppLocale): Promise<VocabDto> {
+        const vocab = await this.vocabService.create(input, user.id, user.role, locale);
         this.logger.info(`Created new vocab with ID ${vocab.id}`);
         return vocab;
     }
@@ -378,8 +380,10 @@ export class VocabController {
         @Body()
         input: { textSource: string; sourceLanguageCode: string; targetLanguageCode: string },
         @CurrentUser() user: User,
+        @Locale() locale: AppLocale,
     ): Promise<GenerateTextTargetJobDto> {
         const { jobId } = await this.vocabGenerateTextTargetProducer.queueVocabGenerateTextTarget({
+            locale,
             textSource: input.textSource,
             sourceLanguageCode: input.sourceLanguageCode,
             targetLanguageCode: input.targetLanguageCode,
