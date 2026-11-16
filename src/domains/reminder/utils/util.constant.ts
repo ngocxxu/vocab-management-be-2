@@ -35,6 +35,14 @@ export enum EEmailTemplate {
     FSRS_DUE_REMINDER = 'fsrs_due_reminder',
 }
 
+/** The fields each email template reads. The reminder routes reject any other key in `data`. PASSWORD_RESET has no renderer, so it is left out. */
+export const TEMPLATE_DATA_FIELDS: Partial<Record<EEmailTemplate, readonly string[]>> = {
+    [EEmailTemplate.WELCOME]: ['userName', 'loginUrl'],
+    [EEmailTemplate.REMINDER]: ['userName', 'content', 'dueDate'],
+    [EEmailTemplate.EXAM_REMINDER]: ['firstName', 'lastName', 'testName', 'repeatDays', 'examUrl'],
+    [EEmailTemplate.FSRS_DUE_REMINDER]: ['firstName', 'lastName', 'trainerName', 'reviewCount', 'newCount', 'reviewUrl'],
+};
+
 /** Which Reminder a Bell notification came from. The FE branches on these exact strings. */
 export enum EReminderNotificationKind {
     INITIAL = 'INITIAL',
