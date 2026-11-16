@@ -17,7 +17,7 @@ export class ReminderController {
 
     @Post('immediate')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Send immediate reminder' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Immediate reminder sent' })
     public async sendImmediateReminder(@Body() body: SendReminderInput) {
@@ -32,7 +32,7 @@ export class ReminderController {
 
     @Post('schedule')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Schedule reminder' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Reminder scheduled successfully' })
     public async scheduleReminder(@Body() body: ScheduleReminderInput) {
@@ -49,7 +49,7 @@ export class ReminderController {
 
     @Post('recurring')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Schedule recurring reminder' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Recurring reminder scheduled' })
     public async scheduleRecurringReminder(@Body() body: RecurringReminderInput) {
@@ -64,7 +64,7 @@ export class ReminderController {
 
     @Post('immediate/create-notification')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Send create notification' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Create notification sent' })
     public async sendImmediateCreateNotification(@Body() body: CreateNotificationReminderInput) {
@@ -79,7 +79,7 @@ export class ReminderController {
 
     @Post('schedule/create-notification')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Schedule create notification' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Create notification scheduled' })
     public async scheduleCreateNotification(@Body() body: CreateNotificationReminderInput) {
@@ -96,7 +96,7 @@ export class ReminderController {
 
     @Post('cancel')
     @UseGuards(RolesGuard)
-    @Roles([UserRole.ADMIN, UserRole.MEMBER])
+    @Roles([UserRole.ADMIN])
     @ApiOperation({ summary: 'Cancel reminder' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Reminder cancelled' })
     public async cancelReminder(@Body() body: CancelReminderInput) {
