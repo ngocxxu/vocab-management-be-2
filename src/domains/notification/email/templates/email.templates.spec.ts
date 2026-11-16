@@ -52,3 +52,52 @@ describe('FSRS due reminder template', () => {
         expect(onlyReview).toContain('questions to review');
     });
 });
+
+describe('HTML escaping and link checks', () => {
+    const examData = {
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        testName: 'Test 1',
+        repeatDays: '1',
+        examUrl: 'https://app.example/exam',
+    };
+
+    test('escapes names and text so they cannot add markup', () => {
+        // Arrange
+        const data = { ...examData, firstName: '<img src=x onerror=alert(1)>', testName: 'Test "1"' };
+
+        // Act
+        const html = EmailTemplates.render(EEmailTemplate.EXAM_REMINDER, data);
+
+        // Assert
+        expect(html).not.toContain('<img src=x');
+        expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+        expect(html).toContain('Test &quot;1&quot;');
+    });
+
+    test('shows reminder text as text, not markup', () => {
+        // Act
+        const html = EmailTemplates.render(EEmailTemplate.REMINDER, { userName: 'Ada', content: '<b>Hi</b>' });
+
+        // Assert
+        expect(html).not.toContain('<b>Hi</b>');
+        expect(html).toContain('&lt;b&gt;Hi&lt;/b&gt;');
+    });
+
+    test('leaves out the button when the link is not http or https', () => {
+        // Act
+        const html = EmailTemplates.render(EEmailTemplate.EXAM_REMINDER, { ...examData, examUrl: 'javascript:alert(1)' });
+
+        // Assert
+        expect(html).not.toContain('javascript:');
+        expect(html).not.toContain('Complete test now');
+    });
+
+    test('keeps an https link and escapes its ampersands', () => {
+        // Act
+        const html = EmailTemplates.render(EEmailTemplate.WELCOME, { userName: 'Ada', loginUrl: 'https://app.example/login?a=1&b=2' });
+
+        // Assert
+        expect(html).toContain('href="https://app.example/login?a=1&amp;b=2"');
+    });
+});

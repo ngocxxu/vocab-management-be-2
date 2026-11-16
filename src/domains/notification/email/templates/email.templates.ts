@@ -1,3 +1,4 @@
+import { escapeHtml, toSafeHttpUrl } from '@/shared/utils/html.util';
 import { EEmailTemplate } from '../../../reminder/utils';
 import { TemplateData } from '../utils/type';
 
@@ -25,21 +26,21 @@ export class EmailTemplates {
             heading: 'Test Reminder',
             body: `
               <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
-                Hello <strong style="color:#202124;">${data.firstName} ${data.lastName}</strong>,
+                Hello <strong style="color:#202124;">${escapeHtml(data.firstName)} ${escapeHtml(data.lastName)}</strong>,
               </p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
                 <tr>
                   <td style="background-color:#e8f0fe; border-radius:8px; padding:15px;">
                     <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.5; color:#202124;">
-                      This is a reminder to complete your test: <strong>"${data.testName}"</strong>
+                      This is a reminder to complete your test: <strong>"${escapeHtml(data.testName)}"</strong>
                     </p>
                   </td>
                 </tr>
               </table>
               <p style="margin:16px 0 0 0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:13px; color:#5f6368;">
-                <strong>Repeat schedule:</strong> Every ${data.repeatDays} days
+                <strong>Repeat schedule:</strong> Every ${escapeHtml(data.repeatDays)} days
               </p>
-              ${EmailTemplates.ctaButton(String(data.examUrl ?? ''), 'Complete test now')}
+              ${EmailTemplates.ctaButton(data.examUrl, 'Complete test now')}
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
                 <tr>
                   <td style="background-color:#fef7e0; border-radius:8px; padding:14px 15px;">
@@ -68,36 +69,38 @@ export class EmailTemplates {
             heading: 'Time to review',
             body: `
               <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
-                Hello <strong style="color:#202124;">${data.firstName} ${data.lastName}</strong>,
+                Hello <strong style="color:#202124;">${escapeHtml(data.firstName)} ${escapeHtml(data.lastName)}</strong>,
               </p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
                 <tr>
                   <td style="background-color:#e8f0fe; border-radius:8px; padding:15px;">
                     <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.5; color:#202124;">
-                      <strong>"${data.trainerName}"</strong>: ${lines.join(', ')}
+                      <strong>"${escapeHtml(data.trainerName)}"</strong>: ${lines.join(', ')}
                     </p>
                   </td>
                 </tr>
               </table>
-              ${EmailTemplates.ctaButton(String(data.reviewUrl ?? ''), 'Review now')}
+              ${EmailTemplates.ctaButton(data.reviewUrl, 'Review now')}
             `,
             footerNote: "You get at most one email a day for a trainer, and we stop after 3 emails in a row that you didn't act on. Turn reminders off in the trainer settings.",
         });
     }
 
     public static reminderTemplate(data: TemplateData): string {
+        const content = escapeHtml(data.content);
+
         return EmailTemplates.shell({
             icon: '&#9200;',
-            heading: `Hello ${data.userName}!`,
+            heading: `Hello ${escapeHtml(data.userName)}!`,
             body: `
-              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">${data.content}</p>
+              <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">${content}</p>
               ${
                   data.dueDate
                       ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;">
                 <tr>
                   <td style="background-color:#fef7e0; border-radius:8px; padding:12px 15px;">
                     <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial,
-                      sans-serif; font-size:13.5px; color:#b06000;"><strong>Due date:</strong> ${data.dueDate}</p>
+                      sans-serif; font-size:13.5px; color:#b06000;"><strong>Due date:</strong> ${escapeHtml(data.dueDate)}</p>
                   </td>
                 </tr>
               </table>`
@@ -113,9 +116,9 @@ export class EmailTemplates {
             heading: 'Welcome to Vocab Management!',
             body: `
               <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
-                Hi <strong style="color:#202124;">${data.userName}</strong>, thank you for joining our platform. Get ready to boost your vocabulary!
+                Hi <strong style="color:#202124;">${escapeHtml(data.userName)}</strong>, thank you for joining our platform. Get ready to boost your vocabulary!
               </p>
-              ${EmailTemplates.ctaButton(String(data.loginUrl ?? ''), 'Get started')}
+              ${EmailTemplates.ctaButton(data.loginUrl, 'Get started')}
             `,
         });
     }
@@ -126,20 +129,26 @@ export class EmailTemplates {
             heading: 'Password reset request',
             body: `
               <p style="margin:0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px; line-height:1.6; color:#5f6368;">
-                Hi <strong style="color:#202124;">${data.userName}</strong>, you requested to reset your password. Click the button below to choose a new one.
+                Hi <strong style="color:#202124;">${escapeHtml(data.userName)}</strong>, you requested to reset your password. Click the button below to choose a new one.
               </p>
-              ${EmailTemplates.ctaButton(String(data.resetUrl ?? ''), 'Reset password')}
+              ${EmailTemplates.ctaButton(data.resetUrl, 'Reset password')}
             `,
             footerNote: "This link will expire in 1 hour. If you didn't request this, please ignore this email.",
         });
     }
 
-    private static ctaButton(url: string, label: string): string {
+    /** Renders the button only when the link is an absolute http or https URL. */
+    private static ctaButton(url: unknown, label: string): string {
+        const href = toSafeHttpUrl(url);
+        if (!href) {
+            return '';
+        }
+
         return `
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:24px;">
             <tr>
               <td align="center" style="border-radius:8px; background-color:#1a73e8;">
-                <a href="${url}" target="_blank" style="display:block; padding:13px 24px;
+                <a href="${href}" target="_blank" style="display:block; padding:13px 24px;
                   font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:14.5px;
                   font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">
                   ${label}
