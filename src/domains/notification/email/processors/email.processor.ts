@@ -3,13 +3,12 @@ import { captureSentryException, LoggerService } from '@/shared';
 import { Process, Processor } from '@nestjs/bull';
 import { ReminderSchedule, ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
 import type { Job } from 'bull';
-import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { ReminderScheduleRepository } from '../../../reminder/repositories/reminder-schedule.repository';
 import { FsrsReminderService } from '../../../reminder/services/fsrs-reminder.service';
 import { ReminderInAppNotificationService } from '../../../reminder/services/reminder-in-app-notification.service';
 import { ActedCheckRegistry } from '../../../reminder/strategies/acted-check.registry';
 import { EEmailReminderType, EEmailTemplate, EReminderType } from '../../../reminder/utils';
-import { computeBackoffMs } from '../../../reminder/utils/reminder-date.util';
+import { decideReminderRetry } from '../../../reminder/utils/reminder-retry.util';
 import { EmailService } from '../services';
 import { EmailJobData, ReminderScheduleEmailJobData, TemplateData } from '../utils/type';
 
@@ -117,9 +116,12 @@ export class EmailProcessor {
             }
         }
         const reminderTitle = 'Vocab Trainer';
+        // Classic reminders use the schedule id as the idempotency key, so a retry cannot send the email twice.
+        // FSRS reminders are sent without a key, as before.
+        const idempotencyKey = isFsrsDue ? undefined : fresh.id;
 
         try {
-            await this.emailService.sendReminderEmail(fresh.recipient, reminderTitle, fresh.template, data);
+            await this.emailService.sendReminderEmail(fresh.recipient, reminderTitle, fresh.template, data, idempotencyKey);
         } catch (error: unknown) {
             await this.handleSendFailure(fresh.id, fresh.attempt, error);
             return;
@@ -160,36 +162,38 @@ export class EmailProcessor {
     private async handleSendFailure(scheduleId: string, attempt: number, error: unknown): Promise<void> {
         const msg = error instanceof Error ? error.message : String(error);
         const code = error instanceof Error ? (error as Error & { code?: string }).code : undefined;
-        const nextAttempt = attempt + 1;
-        const terminal = nextAttempt >= REMINDER_CONFIG.retry.maxAttempts || code === 'EENVELOPE' || /invalid|recipient/i.test(msg);
+        const status = error instanceof Error ? (error as Error & { statusCode?: number | null }).statusCode : undefined;
+        // 400 and 422 mean the request itself is wrong: the same request fails again, so it is terminal at once.
+        // A 429, a 409, a 5xx or no status at all is worth a retry.
+        const cannotRetry = status === 400 || status === 422 || code === 'EENVELOPE';
+        const decision = decideReminderRetry(attempt, new Date(), cannotRetry);
 
-        if (terminal) {
-            await this.reminderScheduleRepository.transitionStatus(scheduleId, ReminderScheduleStatus.SENDING, ReminderScheduleStatus.FAILED_TERMINAL, {
-                lastErrorCode: code ?? 'send_failed',
-                lastErrorMsg: msg,
-                completedAt: new Date(),
-            });
-            this.logger.error(`Reminder ${scheduleId} terminal failure: ${msg}`);
-            captureSentryException(error, {
-                tags: {
-                    'queue.name': EReminderType.EMAIL_REMINDER,
-                    'reminder.schedule_id': scheduleId,
-                },
-                contexts: {
-                    reminder_email_failure: {
-                        scheduleId,
-                        attempt,
-                        nextAttempt,
-                        code: code ?? 'send_failed',
-                        terminal,
-                    },
-                },
-            });
+        await this.reminderScheduleRepository.recordFailedAttempt(
+            scheduleId,
+            ReminderScheduleStatus.SENDING,
+            decision,
+            code ?? (decision.terminal ? 'send_failed' : 'retryable'),
+            msg,
+        );
+        if (!decision.terminal) {
             return;
         }
 
-        const backoff = computeBackoffMs(nextAttempt);
-        const nextAt = new Date(Date.now() + backoff);
-        await this.reminderScheduleRepository.resetSendingToPendingRetry(scheduleId, nextAttempt, nextAt, code ?? 'retryable', msg);
+        this.logger.error(`Reminder ${scheduleId} terminal failure: ${msg}`);
+        captureSentryException(error, {
+            tags: {
+                'queue.name': EReminderType.EMAIL_REMINDER,
+                'reminder.schedule_id': scheduleId,
+            },
+            contexts: {
+                reminder_email_failure: {
+                    scheduleId,
+                    attempt,
+                    nextAttempt: decision.nextAttempt,
+                    code: code ?? 'send_failed',
+                    terminal: true,
+                },
+            },
+        });
     }
 }

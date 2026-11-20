@@ -5,6 +5,8 @@ import { Prisma, ReminderChannel, ReminderSchedule, ReminderScheduleKind, Remind
 import { ESCALATION_CONFIG } from '../config/reminder.config';
 import { addUtcDays } from '../utils/reminder-date.util';
 import { buildReminderDedupeKey } from '../utils/reminder-dedupe-key.util';
+import { ReminderRetryDecision } from '../utils/reminder-retry.util';
+import { EEmailTemplate } from '../utils/util.constant';
 
 const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [ReminderScheduleStatus.PENDING, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED];
 
@@ -236,11 +238,33 @@ export class ReminderScheduleRepository extends BaseRepository {
         return typeof result === 'number' ? result : 0;
     }
 
-    public async findQueuedScheduleIds(take: number): Promise<Array<{ id: string }>> {
+    /** QUEUED rows not touched since `olderThan`, oldest first. Used to find rows whose Bull job never ran. */
+    public async findQueuedOlderThan(olderThan: Date, take: number): Promise<Array<{ id: string; attempt: number }>> {
         return this.prisma.reminderSchedule.findMany({
-            where: { status: ReminderScheduleStatus.QUEUED },
+            where: { status: ReminderScheduleStatus.QUEUED, updatedAt: { lt: olderThan } },
+            orderBy: { updatedAt: 'asc' },
             take,
-            select: { id: true },
+            select: { id: true, attempt: true },
+        });
+    }
+
+    /** FSRS rows stuck in SENDING since `olderThan`, oldest first. They are reported, never re-sent. */
+    public async findStalledFsrsSending(olderThan: Date, take: number): Promise<Array<{ id: string; template: string }>> {
+        return this.prisma.reminderSchedule.findMany({
+            where: { status: ReminderScheduleStatus.SENDING, updatedAt: { lt: olderThan }, template: EEmailTemplate.FSRS_DUE_REMINDER },
+            orderBy: { updatedAt: 'asc' },
+            take,
+            select: { id: true, template: true },
+        });
+    }
+
+    /** Classic rows stuck in SENDING since `olderThan`, oldest first. The reconciliation retries them when no job is left. */
+    public async findStalledClassicSending(olderThan: Date, take: number): Promise<Array<{ id: string; attempt: number }>> {
+        return this.prisma.reminderSchedule.findMany({
+            where: { status: ReminderScheduleStatus.SENDING, updatedAt: { lt: olderThan }, template: { not: EEmailTemplate.FSRS_DUE_REMINDER } },
+            orderBy: { updatedAt: 'asc' },
+            take,
+            select: { id: true, attempt: true },
         });
     }
 
@@ -253,6 +277,7 @@ export class ReminderScheduleRepository extends BaseRepository {
                 // Only these templates get escalations; the others would be picked again on every run and crowd out the real candidates.
                 template: { in: [...ESCALATION_CONFIG.enabledTemplates] },
             },
+            orderBy: { sentAt: 'asc' },
             take,
         });
     }
@@ -286,19 +311,38 @@ export class ReminderScheduleRepository extends BaseRepository {
         return tx.reminderSchedule.findUnique({ where: { id } });
     }
 
-    public async resetSendingToPendingRetry(scheduleId: string, nextAttempt: number, nextAttemptAt: Date, lastErrorCode: string, lastErrorMsg: string): Promise<number> {
+    /**
+     * Writes the outcome of a failed attempt for a row that is still in `from`: back to PENDING with the
+     * next attempt and time, or FAILED_TERMINAL. Returns false when the row has already moved on.
+     */
+    public async recordFailedAttempt(
+        scheduleId: string,
+        from: ReminderScheduleStatus,
+        decision: ReminderRetryDecision,
+        lastErrorCode: string,
+        lastErrorMsg: string,
+    ): Promise<boolean> {
+        if (decision.terminal) {
+            return this.transitionStatus(scheduleId, from, ReminderScheduleStatus.FAILED_TERMINAL, {
+                attempt: decision.nextAttempt,
+                lastErrorCode,
+                lastErrorMsg,
+                completedAt: new Date(),
+            });
+        }
+
         const result = await this.prisma.reminderSchedule.updateMany({
-            where: { id: scheduleId, status: ReminderScheduleStatus.SENDING },
+            where: { id: scheduleId, status: from },
             data: {
                 status: ReminderScheduleStatus.PENDING,
-                attempt: nextAttempt,
-                nextAttemptAt,
+                attempt: decision.nextAttempt,
+                nextAttemptAt: decision.nextAttemptAt,
                 lastErrorCode,
                 lastErrorMsg,
                 lockedBy: null,
                 lockedAt: null,
             },
         });
-        return result.count;
+        return result.count === 1;
     }
 }

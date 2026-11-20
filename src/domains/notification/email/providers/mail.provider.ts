@@ -6,7 +6,16 @@ export type SendMailInput = {
     to: string;
     subject: string;
     html: string;
+    /** Same key and same body: Resend replays the first response for 24 h instead of sending again. */
+    idempotencyKey?: string;
 };
+
+type ResendFailure = { name: string; message: string; statusCode: number | null };
+
+/** Keeps Resend's error name and status code, so a caller can tell a bad request from a failure worth retrying. */
+function toSendError(failure: ResendFailure): Error & { statusCode: number | null } {
+    return Object.assign(new Error(failure.message), { name: failure.name, statusCode: failure.statusCode });
+}
 
 @Injectable()
 export class MailProvider {
@@ -18,16 +27,12 @@ export class MailProvider {
     }
 
     public async sendMail(input: SendMailInput): Promise<void> {
-        const { error } = await this.resend.emails.send({
-            from: input.from,
-            to: [input.to],
-            subject: input.subject,
-            html: input.html,
-        });
+        const payload = { from: input.from, to: [input.to], subject: input.subject, html: input.html };
+        const { error } = input.idempotencyKey ? await this.resend.emails.send(payload, { idempotencyKey: input.idempotencyKey }) : await this.resend.emails.send(payload);
 
         if (error) {
             this.logger.error('Resend send failed:', error);
-            throw new Error(error.message);
+            throw toSendError(error);
         }
     }
 }

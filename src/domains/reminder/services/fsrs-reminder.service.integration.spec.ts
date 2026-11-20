@@ -576,11 +576,13 @@ describeWithDb('FsrsReminderService (real Postgres)', () => {
 
             // Assert
             expect(done?.status).toBe('SENT');
+            // FSRS reminders go out without an idempotency key.
             expect(emailService.sendReminderEmail).toHaveBeenCalledWith(
                 email,
                 'Vocab Trainer',
                 TEMPLATE,
                 expect.objectContaining({ trainerName: 'Exam words', reviewCount: 0, newCount: 2 }),
+                undefined,
             );
             const pending = await rowsOf('PENDING');
             expect(pending).toHaveLength(1);

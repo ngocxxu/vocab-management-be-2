@@ -9,7 +9,7 @@ export class EmailService {
 
     public constructor(private readonly mailProvider: MailProvider) {}
 
-    public async sendReminderEmail(userEmail: string, reminderType: string, templateName: string, data: TemplateData) {
+    public async sendReminderEmail(userEmail: string, reminderType: string, templateName: string, data: TemplateData, idempotencyKey?: string) {
         try {
             this.logger.log(`📤 Sending ${templateName} email to: ${userEmail}`);
 
@@ -18,6 +18,7 @@ export class EmailService {
                 to: userEmail,
                 subject: `[Reminder]: ${reminderType}`,
                 html: EmailTemplates.render(templateName, data),
+                idempotencyKey,
             });
         } catch (error) {
             this.logger.error('❌ Failed to send email:', {
