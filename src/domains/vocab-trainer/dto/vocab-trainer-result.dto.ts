@@ -24,13 +24,14 @@ export class VocabTrainerResultDto {
     public updatedAt: Date;
 
     @ApiProperty({
-        description: 'AI explanation for the answer',
+        description: 'AI explanation for the answer. Fill-in-blank: also the question text (content), null when the submit sent none.',
         required: false,
     })
     public data?: {
         explanation?: string;
         transcript?: string;
         markdownReport?: string;
+        content?: string | null;
     };
 
     public constructor(entity: VocabTrainerResult) {
@@ -45,6 +46,7 @@ export class VocabTrainerResultDto {
             explanation?: string;
             transcript?: string;
             markdownReport?: string;
+            content?: string | null;
         };
     }
 }

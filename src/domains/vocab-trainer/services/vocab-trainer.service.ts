@@ -28,7 +28,15 @@ import { SubmitTranslationAudioResponseDto } from '../dto/submit-translation-aud
 import { VocabTrainerBadRequestException, VocabTrainerNotFoundException, VocabTrainerWordNotFoundException } from '../exceptions';
 import { VocabTrainerMapper } from '../mappers';
 import { VocabTrainerRepository } from '../repositories';
-import { buildVocabIdMap, EQuestionType, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
+import {
+    buildVocabIdMap,
+    EQuestionType,
+    evaluateMultipleChoiceAnswers,
+    toAnswerSubmissions,
+    toFillInBlankEvaluations,
+    VocabTrainerWithTypedAnswers,
+    VocabWithTextTargets,
+} from '../utils';
 import { assertTrainerUpdateAllowed, assertValidTrainerCreate } from '../utils/fsrs-trainer-rules';
 import { assertReminderSettings } from '../utils/pass-rules.util';
 import { FsrsDefaultsService } from './fsrs-defaults.service';
@@ -315,6 +323,8 @@ export class VocabTrainerService {
         if (!wordTestInputs?.length) {
             throw new VocabTrainerBadRequestException('wordTestInputs is required for fill in the blank');
         }
+        // One entry per question, with the question text (null when absent). Kept in the snapshot and the job, never graded (#17).
+        const answerSubmissions = toAnswerSubmissions(wordTestInputs);
 
         const trainerWithVocabs = trainer as VocabTrainer & {
             vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
@@ -362,22 +372,15 @@ export class VocabTrainerService {
         }
 
         if (evaluationsToProcess.length > 0) {
+            const evaluations = toFillInBlankEvaluations(evaluationsToProcess);
+
             const { jobId } = await this.aiService.queueFillInBlankEvaluation({
                 locale,
                 vocabTrainerId: trainer.id,
-                // Runs under the user's job lock, and only when this submit starts the job (#42, D-ai).
-                decideAttempt: async () => ({
-                    countsAsAttempt: await this.vocabTrainerAttempt.resolveCountsAsAttempt(trainer.id),
-                    submittedAt: new Date().toISOString(),
-                }),
-                evaluations: evaluationsToProcess.map((item) => ({
-                    vocab: item.vocab,
-                    userAnswer: item.answerSubmission.userAnswer,
-                    systemAnswer: item.answerSubmission.systemAnswer,
-                    questionType: item.answerType,
-                    vocabId: item.vocab.id,
-                })),
-                answerSubmissions: wordTestInputs,
+                // Under the user's job lock, and only when this submit starts the job (#42, D-ai). The answers are stored first (#17).
+                ...this.vocabTrainerAttempt.fillInBlankHooks(trainer.id, user.id, { locale, evaluations, answerSubmissions }),
+                evaluations,
+                answerSubmissions,
                 userId: user.id,
                 jobType: 'fill-in-blank',
                 queueName: 'fill-in-blank-evaluation',
@@ -392,7 +395,8 @@ export class VocabTrainerService {
             updatedAt: new Date(),
         });
 
-        return this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+        const attempt = await this.vocabTrainerRepository.findAttemptByTrainerId(trainer.id, user.id);
+        return this.vocabTrainerMapper.toResponse({ ...trainer, attempt } as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
     }
 
     public async submitTranslationAudio(id: string, input: SubmitTranslationAudioInput, user: User, locale?: AppLocale): Promise<SubmitTranslationAudioResponseDto> {
@@ -465,6 +469,17 @@ export class VocabTrainerService {
             vocabTrainerId: trainer.id,
             jobType: 'audio',
             queueName: 'audio-evaluation',
+            // Under the user's job lock, and only when this submit starts the job. Audio never counts a Pass (#17).
+            ...this.vocabTrainerAttempt.audioHooks(trainer.id, user.id, {
+                locale,
+                fileId,
+                targetDialogue,
+                sourceLanguageCode,
+                targetLanguageCode,
+                sourceWords,
+                targetStyle,
+                targetAudience,
+            }),
         });
 
         await this.vocabTrainerRepository.update(trainer.id, {

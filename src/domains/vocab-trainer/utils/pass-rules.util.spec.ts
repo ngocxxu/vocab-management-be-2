@@ -1,6 +1,15 @@
 import { TrainerMode } from '@prisma/client';
 import { VocabTrainerBadRequestException } from '../exceptions';
-import { assertReminderSettings, countsAsAttempt, hasReachedMaxRepeat, isAttemptApplied, isReminderPromptPending, nextFailStreak, PASS_RULES } from './pass-rules.util';
+import {
+    assertReminderSettings,
+    countsAsAttempt,
+    hasReachedMaxRepeat,
+    isAttemptApplied,
+    isReminderPromptPending,
+    isSupersededAttempt,
+    nextFailStreak,
+    PASS_RULES,
+} from './pass-rules.util';
 
 const NOW = new Date('2026-11-23T10:00:00.000Z');
 const HOUR_MS = 60 * 60 * 1000;
@@ -214,6 +223,23 @@ describe('isAttemptApplied', () => {
 
     test('a trainer that was never submitted is not applied', () => {
         expect(isAttemptApplied({ lastExamSubmittedAt: null }, NOW)).toBe(false);
+    });
+});
+
+describe('isSupersededAttempt', () => {
+    const LATEST = new Date('2026-11-23T10:00:00.000Z');
+    const OLDER = new Date('2026-11-23T09:00:00.000Z');
+
+    test('a job whose submit is the latest one is not superseded', () => {
+        expect(isSupersededAttempt({ submittedAt: LATEST }, new Date(LATEST))).toBe(false);
+    });
+
+    test('a job whose submit was replaced by a newer one is superseded', () => {
+        expect(isSupersededAttempt({ submittedAt: LATEST }, OLDER)).toBe(true);
+    });
+
+    test('a job with no stored submit yet (queued before the attempt table) is not superseded', () => {
+        expect(isSupersededAttempt(null, OLDER)).toBe(false);
     });
 });
 

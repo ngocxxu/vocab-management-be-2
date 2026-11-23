@@ -2,8 +2,12 @@ import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { buildPrismaWhere } from '@/shared/utils/query-builder.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerMode, VocabTrainer, VocabTrainerResult } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, VocabTrainer, VocabTrainerAttempt, VocabTrainerResult } from '@prisma/client';
 import { VocabTrainerQueryParamsInput } from '../dto/vocab-trainer-query-params.input';
+import { AttemptKind, AttemptUndo, GRADING_STATUS, REGRADE_LIMIT } from '../utils/attempt-snapshot.util';
+
+/** The submit fields the trainer DTO shows. The answers snapshot is left out: list and detail reads do not need it. */
+const ATTEMPT_SUMMARY = { select: { submittedAt: true, gradingStatus: true, regradeCount: true } } as const;
 
 @Injectable()
 export class VocabTrainerRepository extends BaseRepository {
@@ -40,6 +44,7 @@ export class VocabTrainerRepository extends BaseRepository {
                 include: {
                     vocabAssignments: true,
                     results: true,
+                    attempt: ATTEMPT_SUMMARY,
                 },
                 orderBy,
                 skip,
@@ -63,6 +68,7 @@ export class VocabTrainerRepository extends BaseRepository {
             include: {
                 vocabAssignments: true,
                 results: true,
+                attempt: ATTEMPT_SUMMARY,
             },
         });
     }
@@ -88,6 +94,7 @@ export class VocabTrainerRepository extends BaseRepository {
                     },
                 },
                 results: true,
+                attempt: ATTEMPT_SUMMARY,
             },
         });
     }
@@ -113,6 +120,7 @@ export class VocabTrainerRepository extends BaseRepository {
                     },
                 },
                 results: true,
+                attempt: ATTEMPT_SUMMARY,
             },
         });
     }
@@ -134,6 +142,7 @@ export class VocabTrainerRepository extends BaseRepository {
             include: {
                 vocabAssignments: true,
                 results: true,
+                attempt: ATTEMPT_SUMMARY,
             },
         });
     }
@@ -223,6 +232,7 @@ export class VocabTrainerRepository extends BaseRepository {
             include: {
                 vocabAssignments: true,
                 results: true,
+                attempt: ATTEMPT_SUMMARY,
             },
         });
     }
@@ -304,6 +314,86 @@ export class VocabTrainerRepository extends BaseRepository {
                 results: true,
             },
         });
+    }
+
+    /** The latest AI-graded submit (fill-in-blank or audio) of the trainer, or null when there is none. */
+    public async findAttemptByTrainerId(trainerId: string, userId: string, tx?: Prisma.TransactionClient): Promise<VocabTrainerAttempt | null> {
+        return this.client(tx).vocabTrainerAttempt.findFirst({ where: { trainerId, userId } });
+    }
+
+    /**
+     * Writes a new AI-graded submit in place of the trainer's previous one, as `grading` with no regrade used. It runs under the
+     * user's job lock, before the job is queued (#17). The returned undo puts the previous submit back, or removes the row.
+     */
+    public async recordAttemptSubmit(data: {
+        trainerId: string;
+        userId: string;
+        kind: AttemptKind;
+        submittedAt: Date;
+        countsAsAttempt: boolean;
+        answersSnapshot: Prisma.InputJsonValue;
+    }): Promise<AttemptUndo> {
+        const previous = await this.findAttemptByTrainerId(data.trainerId, data.userId);
+        const record = { ...data, gradingStatus: GRADING_STATUS.GRADING, regradeCount: 0 };
+        await this.prisma.vocabTrainerAttempt.upsert({ where: { trainerId: data.trainerId }, create: record, update: record });
+
+        return async () => {
+            if (previous) {
+                const restored = { ...previous, answersSnapshot: previous.answersSnapshot as Prisma.InputJsonValue };
+                await this.prisma.vocabTrainerAttempt.upsert({ where: { trainerId: previous.trainerId }, create: restored, update: restored });
+                return;
+            }
+            await this.prisma.vocabTrainerAttempt.deleteMany({ where: { trainerId: data.trainerId } });
+        };
+    }
+
+    /** Marks the submit as graded, in the transaction that writes its results. Only the submit the job belongs to (same submit time). */
+    public async markAttemptGraded(trainerId: string, userId: string, submittedAt: Date, tx?: Prisma.TransactionClient): Promise<number> {
+        const result = await this.client(tx).vocabTrainerAttempt.updateMany({ where: { trainerId, userId, submittedAt }, data: { gradingStatus: GRADING_STATUS.GRADED } });
+
+        return result.count;
+    }
+
+    /**
+     * Marks a grading that is still running as failed, so the client can regrade it. Only the submit the job belongs to, and only
+     * while it is `grading`: a graded submit is never changed back.
+     */
+    public async markAttemptGradingFailed(trainerId: string, userId: string, submittedAt: Date): Promise<number> {
+        const result = await this.prisma.vocabTrainerAttempt.updateMany({
+            where: { trainerId, userId, submittedAt, gradingStatus: GRADING_STATUS.GRADING },
+            data: { gradingStatus: GRADING_STATUS.GRADING_FAILED },
+        });
+
+        return result.count;
+    }
+
+    /**
+     * Regrade, first step, under the user's job lock: `grading_failed` becomes `grading` and one regrade is used, in one
+     * conditional update. Null when the submit cannot be regraded now. `rollback` gives both back when the job could not be queued.
+     */
+    public async claimAttemptRegrade(trainerId: string, userId: string): Promise<{ attempt: VocabTrainerAttempt; rollback: () => Promise<void> } | null> {
+        const attempt = await this.findAttemptByTrainerId(trainerId, userId);
+        if (!attempt) {
+            return null;
+        }
+
+        const claimed = await this.prisma.vocabTrainerAttempt.updateMany({
+            where: { trainerId, userId, submittedAt: attempt.submittedAt, gradingStatus: GRADING_STATUS.GRADING_FAILED, regradeCount: { lt: REGRADE_LIMIT } },
+            data: { gradingStatus: GRADING_STATUS.GRADING, regradeCount: { increment: 1 } },
+        });
+        if (claimed.count === 0) {
+            return null;
+        }
+
+        return {
+            attempt,
+            rollback: async () => {
+                await this.prisma.vocabTrainerAttempt.updateMany({
+                    where: { trainerId, userId, submittedAt: attempt.submittedAt, gradingStatus: GRADING_STATUS.GRADING },
+                    data: { gradingStatus: GRADING_STATUS.GRADING_FAILED, regradeCount: { decrement: 1 } },
+                });
+            },
+        };
     }
 
     public async findByIds(ids: string[], userId?: string): Promise<VocabTrainer[]> {

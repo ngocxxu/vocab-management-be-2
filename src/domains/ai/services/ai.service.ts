@@ -13,6 +13,7 @@ import {
     QueueFillInBlankEvaluationParams,
     QueueJobResult,
     QueueMultipleChoiceGenerationParams,
+    QueueRegradeParams,
     TranslateVocabParams,
 } from '../utils/ai-service-types.util';
 import { EvaluationResult, MultipleChoiceQuestion } from '../utils/type.util';
@@ -96,6 +97,10 @@ export class AiService {
 
     public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
         return this.queueService.queueFillInBlankEvaluation(params);
+    }
+
+    public async queueRegrade(params: QueueRegradeParams): Promise<QueueJobResult> {
+        return this.queueService.queueRegrade(params);
     }
 
     public async getActiveJobForTrainer(userId: string, vocabTrainerId: string): Promise<ActiveVocabTrainerJob | null> {

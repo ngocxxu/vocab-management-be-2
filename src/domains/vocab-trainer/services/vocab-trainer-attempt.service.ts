@@ -1,3 +1,4 @@
+import type { AudioAttemptDecision, FillInBlankAttemptDecision } from '../../ai/utils/ai-service-types.util';
 import { captureSentryException, LoggerService } from '@/shared';
 import { Injectable } from '@nestjs/common';
 import { NotificationAction, NotificationType, Prisma, PriorityLevel, TrainerStatus, VocabTrainer } from '@prisma/client';
@@ -7,6 +8,7 @@ import { ReminderInAppNotificationService } from '../../reminder/services/remind
 import { VocabTrainerReminderAfterExamService } from '../../reminder/services/vocab-trainer-reminder-after-exam.service';
 import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
 import { VocabTrainerRepository } from '../repositories/vocab-trainer.repository';
+import { ATTEMPT_KIND, AttemptUndo, toSnapshotJson } from '../utils/attempt-snapshot.util';
 import { countsAsAttempt, hasReachedMaxRepeat, nextFailStreak } from '../utils/pass-rules.util';
 
 export interface AttemptUser {
@@ -77,6 +79,44 @@ export class VocabTrainerAttemptService {
         const latestFinalInitialAt = trainer.reminderDisabled ? null : await this.reminderSchedules.findLatestFinalInitialAt(trainerId, tx);
 
         return countsAsAttempt({ remindersOff: trainer.reminderDisabled, hasInFlightInitial, latestFinalInitialAt, lastCountedAt: trainer.reminderLastCountedAt, now });
+    }
+
+    /**
+     * The two queue hooks of a fill-in-blank submit that the AI grades (#17). `decideAttempt` runs under the user's job lock and
+     * only when the submit starts the job. `recordAttempt` writes the answers and the question snapshot before the job is queued.
+     */
+    public fillInBlankHooks(trainerId: string, userId: string, snapshot: object) {
+        return {
+            decideAttempt: async (): Promise<FillInBlankAttemptDecision> => ({
+                countsAsAttempt: await this.resolveCountsAsAttempt(trainerId),
+                submittedAt: new Date().toISOString(),
+            }),
+            recordAttempt: async (decision: FillInBlankAttemptDecision): Promise<AttemptUndo> =>
+                this.vocabTrainerRepository.recordAttemptSubmit({
+                    trainerId,
+                    userId,
+                    kind: ATTEMPT_KIND.FILL_IN_BLANK,
+                    submittedAt: new Date(decision.submittedAt),
+                    countsAsAttempt: decision.countsAsAttempt,
+                    answersSnapshot: toSnapshotJson(snapshot),
+                }),
+        };
+    }
+
+    /** The two queue hooks of an audio submit. Audio never counts a Pass, so the decision is only the submit time (#17). */
+    public audioHooks(trainerId: string, userId: string, snapshot: object) {
+        return {
+            decideAttempt: (): AudioAttemptDecision => ({ submittedAt: new Date().toISOString() }),
+            recordAttempt: async (decision: AudioAttemptDecision): Promise<AttemptUndo> =>
+                this.vocabTrainerRepository.recordAttemptSubmit({
+                    trainerId,
+                    userId,
+                    kind: ATTEMPT_KIND.AUDIO,
+                    submittedAt: new Date(decision.submittedAt),
+                    countsAsAttempt: false,
+                    answersSnapshot: toSnapshotJson(snapshot),
+                }),
+        };
     }
 
     /** Applies the attempt inside the caller's transaction. The trainer row must be locked by that transaction. */

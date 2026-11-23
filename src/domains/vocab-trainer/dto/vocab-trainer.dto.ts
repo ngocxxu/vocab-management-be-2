@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { FsrsDirection, TrainerMode, TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { shuffleArray } from '../utils';
+import { AttemptSummary, GradingStatus, REGRADE_LIMIT } from '../utils/attempt-snapshot.util';
 import { isReminderPromptPending, PASS_RULES } from '../utils/pass-rules.util';
 import { FillInBlankQuestionDto } from './fill-in-blank-question.dto';
 import { FlipCardQuestionDto } from './flip-card-question.dto';
@@ -73,6 +74,19 @@ export class VocabTrainerDto {
     @ApiProperty({ description: 'FSRS: words that got no card because they have no translation yet (only set on create/update)', required: false, type: [String] })
     public fsrsSkippedVocabIds?: string[];
 
+    @ApiProperty({ description: 'Time of the latest AI-graded submit (fill-in-blank or audio); null when there is none', nullable: true, type: Date })
+    public lastSubmittedAt: Date | null;
+
+    @ApiProperty({
+        description: 'Grading state of the latest AI-graded submit. grading_failed can be regraded (see regradeCount). null when there is none',
+        nullable: true,
+        enum: ['grading', 'graded', 'grading_failed'],
+    })
+    public gradingStatus: GradingStatus | null;
+
+    @ApiProperty({ description: `How many regrades the latest submit has used (0 to ${REGRADE_LIMIT})` })
+    public regradeCount: number;
+
     @ApiProperty({ description: 'User ID', example: 'string' })
     public userId: string;
 
@@ -113,6 +127,7 @@ export class VocabTrainerDto {
         entity: VocabTrainer & {
             vocabAssignments?: VocabTrainerWord[];
             results?: VocabTrainerResult[];
+            attempt?: AttemptSummary | null;
             questionAnswers?: JsonValue[];
             jobId?: string;
         },
@@ -147,6 +162,9 @@ export class VocabTrainerDto {
         this.vocabAssignments = entity.vocabAssignments?.map((a) => new VocabTrainerWordDto(a));
         this.results = entity.results?.map((r) => new VocabTrainerResultDto(r));
         this.jobId = entity.jobId;
+        this.lastSubmittedAt = entity.attempt?.submittedAt ?? null;
+        this.gradingStatus = (entity.attempt?.gradingStatus as GradingStatus | undefined) ?? null;
+        this.regradeCount = entity.attempt?.regradeCount ?? 0;
 
         if (isTranslationAudio) {
             this.questionAnswers = entity.questionAnswers as Array<{

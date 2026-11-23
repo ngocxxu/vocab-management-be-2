@@ -60,6 +60,11 @@ describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redi
     });
 
     const trainerRow = async () => prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+    const attemptRow = async () => prisma.vocabTrainerAttempt.findUniqueOrThrow({ where: { trainerId } });
+    const recordSubmit = async (gradingStatus: string, submittedAt = new Date(SUBMITTED_AT)) =>
+        prisma.vocabTrainerAttempt.create({
+            data: { trainerId, userId: user.id, kind: 'fill-in-blank', submittedAt, countsAsAttempt: true, gradingStatus, regradeCount: 0, answersSnapshot: {} },
+        });
 
     beforeAll(async () => {
         prisma = new PrismaService({ datasources: { db: { url: databaseUrl } } });
@@ -89,6 +94,7 @@ describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redi
             { findById: (id: string) => ({ id, email: user.email, firstName: user.firstName, lastName: user.lastName }) } as never,
             { updateMastery: jest.fn().mockResolvedValue(undefined) } as never,
             attempt,
+            { notifyGraded: jest.fn(), notifyFailed: jest.fn() } as never,
         );
     });
 
@@ -231,6 +237,66 @@ describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redi
         expect(trainer.lastExamSubmittedAt?.toISOString()).toBe(SUBMITTED_AT);
         expect(await prisma.reminderSchedule.count({ where: { entityId: trainerId } })).toBe(0);
     });
+
+    test('a graded submit is marked graded in the same transaction as its results (BE-4)', async () => {
+        // Arrange
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue(correctAnswers());
+        await recordSubmit('grading');
+
+        // Act
+        await processor.processFillInBlankEvaluation(jobFor() as never);
+
+        // Assert
+        expect((await attemptRow()).gradingStatus).toBe('graded');
+        expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId } })).toBe(words.length);
+    });
+
+    test('the final failure marks the grading as failed and releases the lock (BE-4)', async () => {
+        // Arrange
+        aiService.evaluateAllFillInBlankAnswers.mockRejectedValue(new Error('provider down'));
+        await recordSubmit('grading');
+
+        // Act
+        await expect(processor.processFillInBlankEvaluation({ ...jobFor(), attemptsMade: 2 } as never)).rejects.toThrow('provider down');
+
+        // Assert
+        expect((await attemptRow()).gradingStatus).toBe('grading_failed');
+        expect((await trainerRow()).reminderRepeat).toBe(0);
+        expect(await lock.getActiveJob(user.id)).toBeNull();
+    });
+
+    test('a job for a submit that a newer submit replaced is skipped: no AI call, no result, no Pass (BE-6)', async () => {
+        // Arrange
+        await recordSubmit('grading', new Date('2026-11-23T11:00:00.000Z'));
+
+        // Act
+        const result = await processor.processFillInBlankEvaluation(jobFor() as never);
+
+        // Assert
+        expect(result).toEqual({ results: [], superseded: true });
+        expect(aiService.evaluateAllFillInBlankAnswers).not.toHaveBeenCalled();
+        expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId } })).toBe(0);
+        expect((await trainerRow()).reminderRepeat).toBe(0);
+        expect(await lock.getActiveJob(user.id)).toBeNull();
+    });
+
+    test('a newer submit that lands while the AI runs stops the older job before it writes (BE-6)', async () => {
+        // Arrange
+        await recordSubmit('grading');
+        aiService.evaluateAllFillInBlankAnswers.mockImplementation(async () => {
+            await prisma.vocabTrainerAttempt.update({ where: { trainerId }, data: { submittedAt: new Date('2026-11-23T11:00:00.000Z') } });
+            return correctAnswers();
+        });
+
+        // Act
+        const result = await processor.processFillInBlankEvaluation(jobFor() as never);
+
+        // Assert
+        expect(result).toEqual({ results: [], superseded: true });
+        expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId } })).toBe(0);
+        expect((await trainerRow()).reminderRepeat).toBe(0);
+        expect((await attemptRow()).gradingStatus).toBe('grading');
+    });
 });
 
 describeWithDb('AI queue joins a running evaluation (real Redis)', () => {
@@ -256,6 +322,7 @@ describeWithDb('AI queue joins a running evaluation (real Redis)', () => {
 
     test('a second submit joins the running job and never decides whether it counts', async () => {
         // Arrange
+        const recordAttempt = jest.fn().mockResolvedValue(jest.fn().mockResolvedValue(undefined));
         const params = (decideAttempt: jest.Mock) =>
             ({
                 userId,
@@ -265,6 +332,7 @@ describeWithDb('AI queue joins a running evaluation (real Redis)', () => {
                 evaluations: [],
                 answerSubmissions: [],
                 decideAttempt,
+                recordAttempt,
             }) as never;
         const first = jest.fn().mockResolvedValue({ countsAsAttempt: true, submittedAt: SUBMITTED_AT });
         const second = jest.fn().mockResolvedValue({ countsAsAttempt: true, submittedAt: SUBMITTED_AT });
@@ -278,6 +346,8 @@ describeWithDb('AI queue joins a running evaluation (real Redis)', () => {
         expect(joined.activeJob).toBeDefined();
         expect(first).toHaveBeenCalledTimes(1);
         expect(second).not.toHaveBeenCalled();
+        // Only the submit that started the job writes its attempt row (BE-1); the joined submit writes nothing.
+        expect(recordAttempt).toHaveBeenCalledTimes(1);
         expect(producer.evaluateAnswers).toHaveBeenCalledTimes(1);
         expect(await queue.getActiveJobForTrainer(userId, 'trainer-join')).not.toBeNull();
         await lock.releaseIfOwned(userId, (await lock.getActiveJob(userId))?.lockToken ?? '');
