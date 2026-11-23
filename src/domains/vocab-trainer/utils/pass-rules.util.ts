@@ -15,25 +15,31 @@ export const PASS_RULES = {
 
 export interface CountDecisionInput {
     remindersOff: boolean;
-    /** A classic INITIAL reminder of the trainer is PENDING, CLAIMED, QUEUED or SENDING. */
+    /** A classic INITIAL reminder of the trainer is PENDING, CLAIMED, QUEUED or SENDING. Blocks the attempt with reminders on or off. */
     hasInFlightInitial: boolean;
+    /** Reminders on only: the latest classic INITIAL reminder in a final state (SENT, FAILED_TERMINAL, CANCELLED), at its finalized time. */
+    latestFinalInitialAt: Date | null;
     lastCountedAt: Date | null;
     now: Date;
 }
 
 /**
  * Whether an attempt counts as a new reminder cycle. Only a counted attempt can add a Pass or move the fail streak.
- * A repeat while a reminder is in flight does not count. With reminders off, counting is capped at one per 24 hours.
+ * Nothing counts while a classic INITIAL reminder is in flight. With reminders on, a Pass also needs nothing counted yet,
+ * or a reminder that reached a final state after the last count. With reminders off, counting is capped at one per 24 hours.
  */
 export function countsAsAttempt(input: CountDecisionInput): boolean {
     if (input.hasInFlightInitial) {
         return false;
     }
-    if (!input.remindersOff) {
+    if (input.remindersOff) {
+        return input.lastCountedAt === null || input.now.getTime() - input.lastCountedAt.getTime() >= PASS_RULES.countCooldownMs;
+    }
+    if (input.lastCountedAt === null) {
         return true;
     }
 
-    return input.lastCountedAt === null || input.now.getTime() - input.lastCountedAt.getTime() >= PASS_RULES.countCooldownMs;
+    return input.latestFinalInitialAt !== null && input.latestFinalInitialAt.getTime() > input.lastCountedAt.getTime();
 }
 
 /** Only counted attempts move the streak: a pass resets it, a failure adds one. */

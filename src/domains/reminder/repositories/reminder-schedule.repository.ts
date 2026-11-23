@@ -140,6 +140,42 @@ export class ReminderScheduleRepository extends BaseRepository {
         return count > 0;
     }
 
+    /**
+     * When the latest classic INITIAL reminder of the trainer reached a final state (SENT, FAILED_TERMINAL or CANCELLED), or null.
+     * Each state is read by the timestamp it sets: sentAt, completedAt, cancelledAt. Read-only.
+     */
+    public async findLatestFinalInitialAt(trainerId: string, tx?: Prisma.TransactionClient): Promise<Date | null> {
+        const client = this.client(tx).reminderSchedule;
+        const classicInitial: Prisma.ReminderScheduleWhereInput = {
+            entityType: VOCAB_TRAINER_ENTITY,
+            entityId: trainerId,
+            template: EEmailTemplate.EXAM_REMINDER,
+            reminderType: ReminderScheduleKind.INITIAL,
+        };
+        const sent = await client.findFirst({
+            where: { ...classicInitial, status: ReminderScheduleStatus.SENT, sentAt: { not: null } },
+            orderBy: { sentAt: 'desc' },
+            select: { sentAt: true },
+        });
+        const failed = await client.findFirst({
+            where: { ...classicInitial, status: ReminderScheduleStatus.FAILED_TERMINAL, completedAt: { not: null } },
+            orderBy: { completedAt: 'desc' },
+            select: { completedAt: true },
+        });
+        const cancelled = await client.findFirst({
+            where: { ...classicInitial, status: ReminderScheduleStatus.CANCELLED, cancelledAt: { not: null } },
+            orderBy: { cancelledAt: 'desc' },
+            select: { cancelledAt: true },
+        });
+
+        const finalizedAt = [sent?.sentAt, failed?.completedAt, cancelled?.cancelledAt].filter((time): time is Date => time instanceof Date);
+        if (finalizedAt.length === 0) {
+            return null;
+        }
+
+        return new Date(Math.max(...finalizedAt.map((time) => time.getTime())));
+    }
+
     /** What the send guard needs before an email goes out: the owner is active and the trainer (when there is one) still matches. */
     public async findSendGuardState(userId: string, trainerId: string | null): Promise<{ userActive: boolean; trainer: { mode: TrainerMode; reminderDisabled: boolean } | null }> {
         const [user, trainer] = await Promise.all([

@@ -33,7 +33,8 @@ export class VocabTrainerReminderService {
     public async setRemindersEnabled(trainerId: string, userId: string, enabled: boolean): Promise<VocabTrainer> {
         const contact = enabled ? await this.reminderSchedules.findUserContact(userId) : null;
 
-        const updated = await this.vocabTrainerRepository.inTransaction(async (tx) => {
+        // Serializable with retry: a write conflict (P2034) runs this callback again. The contact is read before it.
+        const updated = await this.vocabTrainerRepository.runSerializableWithRetry(async (tx) => {
             const trainer = await this.vocabTrainerRepository.lockAndFindForUpdate(tx, trainerId);
             // Scoped to the owner, like every other trainer query: another user's trainer is not found.
             if (!trainer || trainer.userId !== userId) {

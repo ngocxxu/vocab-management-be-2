@@ -4,83 +4,156 @@ import { assertReminderSettings, countsAsAttempt, hasReachedMaxRepeat, isAttempt
 
 const NOW = new Date('2026-11-23T10:00:00.000Z');
 const HOUR_MS = 60 * 60 * 1000;
+const HOURS_AGO = (hours: number): Date => new Date(NOW.getTime() - hours * HOUR_MS);
 
 describe('countsAsAttempt', () => {
-    test('the first attempt of a trainer with reminders on counts', () => {
-        // Arrange
-        const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: null, now: NOW };
+    describe('with reminders on', () => {
+        test('the first Pass of a trainer counts, without a reminder first', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: null, latestFinalInitialAt: null, now: NOW };
 
-        // Act
-        const counts = countsAsAttempt(input);
+            // Act
+            const counts = countsAsAttempt(input);
 
-        // Assert
-        expect(counts).toBe(true);
+            // Assert
+            expect(counts).toBe(true);
+        });
+
+        test('a repeat after a counted Pass does not count while no reminder has reached a final state', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: HOURS_AGO(1), latestFinalInitialAt: null, now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(false);
+        });
+
+        test('a repeat does not count while the next reminder is pending and nothing reached a final state after the last count', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: true, lastCountedAt: HOURS_AGO(1), latestFinalInitialAt: HOURS_AGO(3), now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(false);
+        });
+
+        test('a Pass counts once a reminder reached a final state after the last count', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: HOURS_AGO(2), latestFinalInitialAt: HOURS_AGO(1), now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(true);
+        });
+
+        test('a final state at the same instant as the last count does not open the next Pass', () => {
+            // Arrange: the reminder cancelled by the counted attempt itself is stamped with the attempt time
+            const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: NOW, latestFinalInitialAt: NOW, now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(false);
+        });
+
+        test('a final state from before the last count does not open the next Pass', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: HOURS_AGO(1), latestFinalInitialAt: HOURS_AGO(2), now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(false);
+        });
+
+        test('the 24 hour cap does not apply with reminders on', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: HOURS_AGO(1), latestFinalInitialAt: HOURS_AGO(0.5), now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(true);
+        });
     });
 
-    test('an attempt while a classic reminder is in flight does not count', () => {
-        // Arrange
-        const input = { remindersOff: false, hasInFlightInitial: true, lastCountedAt: null, now: NOW };
+    describe('with reminders on, and a reminder in flight', () => {
+        test('the first Pass is blocked while a reminder is in flight', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: true, lastCountedAt: null, latestFinalInitialAt: null, now: NOW };
 
-        // Act
-        const counts = countsAsAttempt(input);
+            // Act
+            const counts = countsAsAttempt(input);
 
-        // Assert
-        expect(counts).toBe(false);
+            // Assert
+            expect(counts).toBe(false);
+        });
+
+        test('a Pass is blocked while a reminder is SENDING, even when a final state came after the last count', () => {
+            // Arrange
+            const input = { remindersOff: false, hasInFlightInitial: true, lastCountedAt: HOURS_AGO(2), latestFinalInitialAt: HOURS_AGO(1), now: NOW };
+
+            // Act
+            const counts = countsAsAttempt(input);
+
+            // Assert
+            expect(counts).toBe(false);
+        });
     });
 
-    test('with reminders off, an attempt counts when nothing was counted before', () => {
-        // Arrange
-        const input = { remindersOff: true, hasInFlightInitial: false, lastCountedAt: null, now: NOW };
+    describe('with reminders off (unchanged)', () => {
+        test('an attempt counts when nothing was counted before', () => {
+            // Arrange
+            const input = { remindersOff: true, hasInFlightInitial: false, lastCountedAt: null, latestFinalInitialAt: null, now: NOW };
 
-        // Act
-        const counts = countsAsAttempt(input);
+            // Act
+            const counts = countsAsAttempt(input);
 
-        // Assert
-        expect(counts).toBe(true);
-    });
+            // Assert
+            expect(counts).toBe(true);
+        });
 
-    test('with reminders off, a second counted attempt within 24 hours does not count', () => {
-        // Arrange
-        const input = { remindersOff: true, hasInFlightInitial: false, lastCountedAt: new Date(NOW.getTime() - 23 * HOUR_MS), now: NOW };
+        test('an attempt while a classic reminder is in flight does not count', () => {
+            // Arrange
+            const input = { remindersOff: true, hasInFlightInitial: true, lastCountedAt: null, latestFinalInitialAt: null, now: NOW };
 
-        // Act
-        const counts = countsAsAttempt(input);
+            // Act
+            const counts = countsAsAttempt(input);
 
-        // Assert
-        expect(counts).toBe(false);
-    });
+            // Assert
+            expect(counts).toBe(false);
+        });
 
-    test('with reminders off, an attempt counts again once 24 hours have passed', () => {
-        // Arrange
-        const input = { remindersOff: true, hasInFlightInitial: false, lastCountedAt: new Date(NOW.getTime() - 24 * HOUR_MS), now: NOW };
+        test('a second counted attempt within 24 hours does not count', () => {
+            // Arrange
+            const input = { remindersOff: true, hasInFlightInitial: false, lastCountedAt: HOURS_AGO(23), latestFinalInitialAt: null, now: NOW };
 
-        // Act
-        const counts = countsAsAttempt(input);
+            // Act
+            const counts = countsAsAttempt(input);
 
-        // Assert
-        expect(counts).toBe(true);
-    });
+            // Assert
+            expect(counts).toBe(false);
+        });
 
-    test('with reminders on, the 24 hour cap does not apply', () => {
-        // Arrange
-        const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: new Date(NOW.getTime() - HOUR_MS), now: NOW };
+        test('an attempt counts again once 24 hours have passed', () => {
+            // Arrange
+            const input = { remindersOff: true, hasInFlightInitial: false, lastCountedAt: HOURS_AGO(24), latestFinalInitialAt: null, now: NOW };
 
-        // Act
-        const counts = countsAsAttempt(input);
+            // Act
+            const counts = countsAsAttempt(input);
 
-        // Assert
-        expect(counts).toBe(true);
-    });
-
-    test('a terminally failed reminder is not in flight, so the next attempt counts', () => {
-        // Arrange: the repository reports hasInFlightInitial = false when the only INITIAL row is FAILED_TERMINAL
-        const input = { remindersOff: false, hasInFlightInitial: false, lastCountedAt: NOW, now: NOW };
-
-        // Act
-        const counts = countsAsAttempt(input);
-
-        // Assert
-        expect(counts).toBe(true);
+            // Assert
+            expect(counts).toBe(true);
+        });
     });
 });
 

@@ -105,7 +105,7 @@ The days from a counted attempt to the next Reminder of a Classic trainer. Set p
 _Avoid_: Interval, Repeat days
 
 **Counted attempt**:
-An exam submission that starts a new Reminder cycle. Only a counted attempt can add a Pass or move the fail streak. A submission is not counted while a Classic INITIAL Reminder is pending, claimed, queued or sending. With reminders off, it is counted at most once per 24 hours.
+An exam submission that starts a new Reminder cycle. Only a counted attempt can add a Pass or move the fail streak. A submission is not counted while a Classic INITIAL Reminder is pending, claimed, queued or sending. With reminders on, it also needs either no Pass counted yet, or a Classic INITIAL Reminder that reached a final state (sent, failed terminally or cancelled) after the last counted attempt. With reminders off, it is counted at most once per 24 hours.
 _Avoid_: Valid attempt, Submit (a submit is any attempt, counted or not)
 
 **Fail streak**:

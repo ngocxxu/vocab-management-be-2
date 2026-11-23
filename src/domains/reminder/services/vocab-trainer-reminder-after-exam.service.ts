@@ -20,12 +20,14 @@ export interface AfterExamReminderInput {
     /** X: days until the next reminder. The trainer's own setting. */
     spacingDays: number;
     reminderDisabled: boolean;
+    /** The counted attempt's submit time. Reminders it cancels are stamped with it, so they never open the next Pass. */
+    submittedAt?: Date;
 }
 
 @Injectable()
 export class VocabTrainerReminderAfterExamService {
-    public async cancelSchedulesForTrainerTx(tx: Prisma.TransactionClient, trainerId: string, cancelledBy: string, reason: string): Promise<void> {
-        const now = new Date();
+    public async cancelSchedulesForTrainerTx(tx: Prisma.TransactionClient, trainerId: string, cancelledBy: string, reason: string, at: Date = new Date()): Promise<void> {
+        const now = at;
         await tx.reminderSchedule.updateMany({
             where: {
                 entityType: VOCAB_TRAINER_ENTITY,
@@ -46,7 +48,7 @@ export class VocabTrainerReminderAfterExamService {
 
     /** A counted attempt restarts the cycle: the open reminders go and the next one is planned, unless reminders are off. */
     public async syncRemindersAfterExamSubmission(tx: Prisma.TransactionClient, input: AfterExamReminderInput): Promise<void> {
-        await this.cancelSchedulesForTrainerTx(tx, input.trainerId, input.userId, 'exam_submitted');
+        await this.cancelSchedulesForTrainerTx(tx, input.trainerId, input.userId, 'exam_submitted', input.submittedAt);
 
         if (input.reminderDisabled) {
             return;
@@ -84,9 +86,11 @@ export class VocabTrainerReminderAfterExamService {
             examUrl: input.examUrl,
         };
 
-        try {
-            await tx.reminderSchedule.create({
-                data: {
+        // skipDuplicates is INSERT ... ON CONFLICT DO NOTHING. An open row with the same key is skipped, and the transaction stays usable.
+        // A P2002 from a single insert would abort the caller's transaction, and the commit would then roll back the whole attempt silently.
+        await tx.reminderSchedule.createMany({
+            data: [
+                {
                     dedupeKey,
                     channel: ReminderChannel.EMAIL,
                     recipient: input.userEmail,
@@ -102,12 +106,8 @@ export class VocabTrainerReminderAfterExamService {
                     escalationMax: ESCALATION_CONFIG.maxEscalations,
                     status: ReminderScheduleStatus.PENDING,
                 },
-            });
-        } catch (e: unknown) {
-            if (e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2002' || e.code === 'P2034')) {
-                return;
-            }
-            throw e;
-        }
+            ],
+            skipDuplicates: true,
+        });
     }
 }

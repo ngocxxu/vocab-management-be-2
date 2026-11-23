@@ -72,14 +72,11 @@ export class VocabTrainerAttemptService {
             return false;
         }
 
+        // Nothing counts while a classic reminder is in flight. Reminders on also need the latest final reminder.
         const hasInFlightInitial = await this.reminderSchedules.hasInFlightInitial(trainerId, tx);
+        const latestFinalInitialAt = trainer.reminderDisabled ? null : await this.reminderSchedules.findLatestFinalInitialAt(trainerId, tx);
 
-        return countsAsAttempt({
-            remindersOff: trainer.reminderDisabled,
-            hasInFlightInitial,
-            lastCountedAt: trainer.reminderLastCountedAt,
-            now,
-        });
+        return countsAsAttempt({ remindersOff: trainer.reminderDisabled, hasInFlightInitial, latestFinalInitialAt, lastCountedAt: trainer.reminderLastCountedAt, now });
     }
 
     /** Applies the attempt inside the caller's transaction. The trainer row must be locked by that transaction. */
@@ -122,6 +119,7 @@ export class VocabTrainerAttemptService {
                 examUrl,
                 spacingDays: trainer.reminderSpacingDays,
                 reminderDisabled: trainer.reminderDisabled,
+                submittedAt,
             });
         }
 

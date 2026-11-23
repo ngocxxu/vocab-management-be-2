@@ -1,5 +1,28 @@
+import { BaseRepository } from '@/database/base.repository';
+import { Prisma } from '@prisma/client';
 import { StaleAiJobError } from '../utils/ai-job.util';
 import { FillInBlankEvaluationProcessor } from './fill-in-blank-evaluation.processor';
+
+// The real retry loop of BaseRepository. The mocked repositories below run it on top of their mocked inTransaction.
+type MockTransactions = { inTransaction: (work: (tx: object) => Promise<unknown>) => Promise<unknown> };
+
+/** BaseRepository with its own retry loop. Its transaction is the mocked inTransaction of the caller. */
+class RetryHarness extends BaseRepository {
+    public constructor(private readonly transactions: MockTransactions) {
+        super({} as never);
+    }
+
+    public override async inTransaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+        const result = await this.transactions.inTransaction(work as (tx: object) => Promise<unknown>);
+        return result as T;
+    }
+}
+
+const retryOn = async (transactions: MockTransactions, work: (tx: object) => Promise<unknown>): Promise<unknown> => {
+    const result = await new RetryHarness(transactions).runSerializableWithRetry(work);
+    return result;
+};
+const writeConflict = () => new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock.', { code: 'P2034', clientVersion: '6.11.1' });
 
 const SUBMITTED_AT = '2026-11-23T10:00:00.000Z';
 
@@ -35,6 +58,10 @@ describe('FillInBlankEvaluationProcessor failure lifecycle', () => {
             lockAndFindForUpdate: jest.fn().mockResolvedValue(opts.lockedTrainer === undefined ? baseTrainer : opts.lockedTrainer),
             inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
                 const result = await fn({});
+                return result;
+            }),
+            runSerializableWithRetry: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
+                const result = await retryOn(trainerRepository, fn);
                 return result;
             }),
             deleteVocabTrainerResults: jest.fn().mockResolvedValue(undefined),
@@ -198,6 +225,25 @@ describe('FillInBlankEvaluationProcessor counting', () => {
         expect(attempt.afterCommit).toHaveBeenCalledTimes(1);
         expect(attempt.afterCommit.mock.invocationCallOrder[0]).toBeGreaterThan(tx);
     });
+
+    test('the apply transaction runs through runSerializableWithRetry: a write conflict thrown once is retried, and the attempt is applied', async () => {
+        // Arrange
+        const { processor, attempt, aiService, trainerRepository } = build({});
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([{ isCorrect: true }]);
+        trainerRepository.inTransaction.mockImplementationOnce(async (fn: (tx: object) => Promise<unknown>) => {
+            await fn({});
+            throw writeConflict();
+        });
+
+        // Act
+        const result = await processor.processFillInBlankEvaluation(jobWith({}) as never);
+
+        // Assert
+        expect(trainerRepository.runSerializableWithRetry).toHaveBeenCalledTimes(1);
+        expect(trainerRepository.inTransaction).toHaveBeenCalledTimes(2);
+        expect(attempt.afterCommit).toHaveBeenCalledTimes(1);
+        expect(result).toEqual(expect.objectContaining({ results: expect.any(Array) }));
+    });
 });
 
 function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; lockedTrainer?: Record<string, unknown> | null; aiError?: Error }) {
@@ -213,6 +259,10 @@ function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; loc
         lockAndFindForUpdate: jest.fn().mockResolvedValue(opts.lockedTrainer === undefined ? baseTrainer : opts.lockedTrainer),
         inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
             const result = await fn({});
+            return result;
+        }),
+        runSerializableWithRetry: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
+            const result = await retryOn(trainerRepository, fn);
             return result;
         }),
         deleteVocabTrainerResults: jest.fn().mockResolvedValue(undefined),

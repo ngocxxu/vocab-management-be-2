@@ -710,7 +710,8 @@ export class VocabTrainerService {
 
         const submittedAt = new Date();
         // Count, results and the Pass run in one transaction on the locked trainer row. Two parallel submits count once.
-        const applied = await this.vocabTrainerRepository.inTransaction(async (tx) => {
+        // Serializable with retry: a write conflict (P2034) runs the callback again. Every value it uses is computed above, so a retry changes nothing.
+        const applied = await this.vocabTrainerRepository.runSerializableWithRetry(async (tx) => {
             const locked = await this.vocabTrainerRepository.lockAndFindForUpdate(tx, trainer.id);
             if (!locked) {
                 throw new VocabTrainerNotFoundException(id);

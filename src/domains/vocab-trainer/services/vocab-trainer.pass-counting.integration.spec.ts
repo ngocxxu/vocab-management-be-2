@@ -1,8 +1,9 @@
 import redisConfig from '@/config/redis.config';
+import { REMINDER_CONFIG } from '@/domains/reminder/config/reminder.config';
 import { RedisKeyManager, RedisPrefix } from '@/shared';
 import { PrismaService } from '@/shared/services/prisma.service';
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { QuestionType, ReminderScheduleKind, ReminderScheduleStatus, TrainerStatus, User } from '@prisma/client';
+import { Prisma, QuestionType, ReminderScheduleKind, ReminderScheduleStatus, TrainerStatus, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 import { AiQueueService } from '../../ai/services/ai-queue.service';
@@ -24,10 +25,13 @@ const { url: redisUrl } = redisConfig();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SPEC_EMAIL = 'pass-count-spec';
 
+const writeConflict = () => new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock.', { code: 'P2034', clientVersion: '6.11.1' });
+
 describeWithDb('Pass counting (real Postgres and Redis)', () => {
     let prisma: PrismaService;
     let redis: Redis;
     let service: VocabTrainerService;
+    let attemptService: VocabTrainerAttemptService;
     let lock: VocabTrainerJobLockService;
     let aiQueue: AiQueueService;
     let reminderInApp: { hideTrainerBells: jest.Mock };
@@ -77,6 +81,32 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
         });
     };
 
+    /** Classic INITIAL reminders of the trainer that are PENDING, CLAIMED, QUEUED or SENDING. */
+    const inFlightInitialCount = async (trainerId: string): Promise<number> =>
+        prisma.reminderSchedule.count({
+            where: {
+                entityType: 'vocab_trainer',
+                entityId: trainerId,
+                reminderType: ReminderScheduleKind.INITIAL,
+                status: { in: [ReminderScheduleStatus.PENDING, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED, ReminderScheduleStatus.SENDING] },
+            },
+        });
+
+    /** Ends the open classic INITIAL reminder in a final state, with the timestamp that state is read by. */
+    const finishLastReminder = async (trainerId: string, status: ReminderScheduleStatus) => {
+        const at = new Date();
+        const stamp =
+            status === ReminderScheduleStatus.SENT
+                ? { sentAt: at, completedAt: at }
+                : status === ReminderScheduleStatus.CANCELLED
+                  ? { cancelledAt: at, completedAt: at }
+                  : { completedAt: at };
+        await prisma.reminderSchedule.updateMany({
+            where: { entityType: 'vocab_trainer', entityId: trainerId, reminderType: ReminderScheduleKind.INITIAL, status: ReminderScheduleStatus.PENDING },
+            data: { status, ...stamp },
+        });
+    };
+
     const createClassicTrainer = async (overrides: Record<string, unknown> = {}): Promise<string> => {
         const dto = await service.create(
             { name: `Trainer ${randomUUID()}`, status: TrainerStatus.PENDING, questionType: QuestionType.MULTIPLE_CHOICE, vocabAssignmentIds: words, ...overrides } as never,
@@ -99,7 +129,7 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
         reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined) };
         notifications = { create: jest.fn().mockResolvedValue({ id: 'n1' }) };
         const fsrsReminder = { sync: jest.fn().mockResolvedValue(undefined), cancelForTrainer: jest.fn() };
-        const attempt = new VocabTrainerAttemptService(trainerRepository, reminderAfterExam, reminderInApp as never, notifications as never, logger as never, reminderSchedules);
+        attemptService = new VocabTrainerAttemptService(trainerRepository, reminderAfterExam, reminderInApp as never, notifications as never, logger as never, reminderSchedules);
         const reminderSettings = new VocabTrainerReminderService(
             trainerRepository,
             reminderAfterExam,
@@ -119,7 +149,7 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
             new FsrsRepository(prisma),
             unused,
             fsrsReminder as never,
-            attempt,
+            attemptService,
             reminderSettings,
         );
     });
@@ -229,6 +259,178 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
             expect(initial?.dueAt.getTime() ?? 0).toBeLessThanOrEqual(before + 5 * DAY_MS + 60_000);
             expect(initial?.payload).toMatchObject({ repeatDays: '5' });
         });
+    });
+
+    describe('final state after the last count', () => {
+        test('a Pass counts after the next reminder ends FAILED_TERMINAL, so the trainer is not stuck', async () => {
+            // Arrange
+            const trainerId = await createClassicTrainer();
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+            await finishLastReminder(trainerId, ReminderScheduleStatus.FAILED_TERMINAL);
+            expect(await inFlightInitialCount(trainerId)).toBe(0);
+
+            // Act
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+            // Assert
+            expect((await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } })).reminderRepeat).toBe(2);
+            expect(await activeInitial(trainerId)).not.toBeNull();
+        });
+
+        test('a Pass counts after the next reminder is CANCELLED', async () => {
+            // Arrange
+            const trainerId = await createClassicTrainer();
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+            await finishLastReminder(trainerId, ReminderScheduleStatus.CANCELLED);
+            expect(await inFlightInitialCount(trainerId)).toBe(0);
+
+            // Act
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+            // Assert
+            expect((await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } })).reminderRepeat).toBe(2);
+            expect(await activeInitial(trainerId)).not.toBeNull();
+        });
+
+        test('after reminders are turned off and on, a Pass waits for the new reminder to be SENT, then counts once', async () => {
+            // Arrange
+            const trainerId = await createClassicTrainer();
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+            await service.update(trainerId, { name: 'x', questionType: QuestionType.MULTIPLE_CHOICE, reminderDisabled: true } as never, user.id);
+            await service.update(trainerId, { name: 'x', questionType: QuestionType.MULTIPLE_CHOICE, reminderDisabled: false } as never, user.id);
+
+            // Act: a Pass while the new reminder is pending is blocked, because a reminder is in flight
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+            const whilePending = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+
+            // Act: the new reminder is sent, so one Pass counts
+            await markLastReminderSent(trainerId);
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+            const afterSent = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+
+            // Act: a repeat while the reminder that this Pass planned is pending
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+            // Assert
+            const trainer = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+            expect(whilePending.reminderRepeat).toBe(1);
+            expect(afterSent.reminderRepeat).toBe(2);
+            expect(trainer.reminderRepeat).toBe(2);
+            expect(await inFlightInitialCount(trainerId)).toBe(1);
+        });
+
+        test('a Pass is blocked while a reminder is SENDING, even after a final state came after the last count', async () => {
+            // Arrange: a Pass, then reminders off and on. The cancelled reminder is a final state after the Pass, and the new one is sending.
+            const trainerId = await createClassicTrainer();
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+            await service.update(trainerId, { name: 'x', questionType: QuestionType.MULTIPLE_CHOICE, reminderDisabled: true } as never, user.id);
+            await service.update(trainerId, { name: 'x', questionType: QuestionType.MULTIPLE_CHOICE, reminderDisabled: false } as never, user.id);
+            await prisma.reminderSchedule.updateMany({
+                where: { entityType: 'vocab_trainer', entityId: trainerId, reminderType: ReminderScheduleKind.INITIAL, status: ReminderScheduleStatus.PENDING },
+                data: { status: ReminderScheduleStatus.SENDING },
+            });
+            expect(await prisma.reminderSchedule.count({ where: { entityId: trainerId, status: ReminderScheduleStatus.CANCELLED } })).toBeGreaterThan(0);
+
+            // Act
+            const response = await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+            // Assert: the response too. A counted attempt that hits the open SENDING row's dedupe key is rolled back silently,
+            // so the database alone can look right while the response says the Pass counted.
+            expect(response.reminderRepeat).toBe(1);
+            expect((await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } })).reminderRepeat).toBe(1);
+            expect(await inFlightInitialCount(trainerId)).toBe(1);
+        });
+
+        test('with reminders off, a second Pass within 24 hours does not count', async () => {
+            // Arrange
+            const trainerId = await createClassicTrainer();
+            await service.update(trainerId, { name: 'x', questionType: QuestionType.MULTIPLE_CHOICE, reminderDisabled: true } as never, user.id);
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+            // Act
+            await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+            // Assert
+            expect((await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } })).reminderRepeat).toBe(1);
+        });
+    });
+
+    describe('reminder chain cap (gap a)', () => {
+        const CAPPED_CYCLES = REMINDER_CONFIG.chain.maxCycles;
+        const REPRO_TIMEOUT_MS = 60_000;
+
+        test(
+            'a repeat completion after the reminder chain is capped does not add a second Pass',
+            async () => {
+                // Arrange: complete every reminder cycle up to the chain cap. Each cycle is ended by its reminder being sent.
+                const trainerId = await createClassicTrainer();
+                for (let cycle = 0; cycle < CAPPED_CYCLES; cycle += 1) {
+                    await service.submitMultipleChoice(trainerId, submitBody(false) as never, user);
+                    await markLastReminderSent(trainerId);
+                }
+
+                // Act: the first attempt after the cap starts a new cycle, so it counts. The chain cap then stops any new reminder.
+                await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+                const afterFirstPass = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+
+                // Precondition: nothing is in flight, so the in-flight rule has nothing to block with.
+                expect(await reminderRows(trainerId)).toHaveLength(CAPPED_CYCLES);
+                expect(await activeInitial(trainerId)).toBeNull();
+
+                // Act: a repeat completion, with no reminder sent since the Pass was counted.
+                await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+                // Assert: the repeat must not add a second Pass for the same reminder cycle.
+                const trainer = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+                expect(afterFirstPass.reminderRepeat).toBe(1);
+                expect(trainer.reminderRepeat).toBe(1);
+            },
+            REPRO_TIMEOUT_MS,
+        );
+
+        test(
+            'control: below the cap, a repeat completion while the next reminder is pending does not add a Pass',
+            async () => {
+                // Arrange: complete one cycle fewer than the cap, so the next reminder is still scheduled.
+                const trainerId = await createClassicTrainer();
+                for (let cycle = 0; cycle < CAPPED_CYCLES - 1; cycle += 1) {
+                    await service.submitMultipleChoice(trainerId, submitBody(false) as never, user);
+                    await markLastReminderSent(trainerId);
+                }
+                await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+                expect(await activeInitial(trainerId)).not.toBeNull();
+
+                // Act
+                await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+                // Assert
+                const trainer = await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+                expect(trainer.reminderRepeat).toBe(1);
+            },
+            REPRO_TIMEOUT_MS,
+        );
+
+        test(
+            'after the chain cap, Passes with reminders on count once and then never again',
+            async () => {
+                // Arrange: complete every reminder cycle up to the cap, each ended by its reminder being sent
+                const trainerId = await createClassicTrainer();
+                for (let cycle = 0; cycle < CAPPED_CYCLES; cycle += 1) {
+                    await service.submitMultipleChoice(trainerId, submitBody(false) as never, user);
+                    await markLastReminderSent(trainerId);
+                }
+
+                // Act: the first Pass after the cap counts. Four more attempts follow, and no reminder is ever planned again.
+                for (let attempt = 0; attempt < 4; attempt += 1) {
+                    await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+                }
+
+                // Assert
+                expect((await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } })).reminderRepeat).toBe(1);
+                expect(await activeInitial(trainerId)).toBeNull();
+            },
+            REPRO_TIMEOUT_MS,
+        );
     });
 
     describe('AI job lock', () => {
@@ -390,6 +592,60 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
             expect(rows.length).toBeGreaterThan(0);
             expect(rows.every((row) => row.status === ReminderScheduleStatus.CANCELLED)).toBe(true);
             expect(reminderInApp.hideTrainerBells).toHaveBeenCalledWith(trainerId);
+        });
+    });
+
+    describe('a write conflict in the submit (serializable retry)', () => {
+        /** Results that the attempt's delete removes. Another session changes them before the delete runs. */
+        const seedResults = async (trainerId: string) =>
+            prisma.vocabTrainerResult.createMany({
+                data: words.map((vocabId) => ({ vocabTrainerId: trainerId, vocabId, status: TrainerStatus.FAILED, userSelected: 'seed', systemSelected: 'seed' })),
+            });
+
+        test('a serializable conflict reaches the caller as P2034, the code the retry looks for', async () => {
+            // Arrange
+            const trainerId = await createClassicTrainer();
+            await seedResults(trainerId);
+
+            // Act
+            const conflicting = prisma.$transaction(
+                async (tx) => {
+                    await tx.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } });
+                    await prisma.vocabTrainerResult.updateMany({ where: { vocabTrainerId: trainerId }, data: { userSelected: 'changed elsewhere' } });
+                    await tx.vocabTrainerResult.deleteMany({ where: { vocabTrainerId: trainerId } });
+                },
+                { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            );
+
+            // Assert
+            await expect(conflicting).rejects.toMatchObject({ code: 'P2034' });
+        });
+
+        test('a write conflict thrown after the attempt is written rolls it back, and the retry applies it once', async () => {
+            // Arrange
+            const trainerId = await createClassicTrainer();
+            await seedResults(trainerId);
+            const original = attemptService.applyAttemptTx.bind(attemptService) as typeof attemptService.applyAttemptTx;
+            const spy = jest.spyOn(attemptService, 'applyAttemptTx').mockImplementationOnce(async (tx, input) => {
+                await original(tx, input);
+                // The conflict surfaces after every write of the attempt. The callback fails, so Prisma rolls the attempt back.
+                throw writeConflict();
+            });
+
+            try {
+                // Act
+                const response = await service.submitMultipleChoice(trainerId, submitBody(true) as never, user);
+
+                // Assert
+                expect(spy).toHaveBeenCalledTimes(2);
+                expect(response.reminderRepeat).toBe(1);
+                expect((await prisma.vocabTrainer.findUniqueOrThrow({ where: { id: trainerId } })).reminderRepeat).toBe(1);
+                expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId } })).toBe(words.length);
+                expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId, userSelected: 'seed' } })).toBe(0);
+                expect((await reminderRows(trainerId)).filter((row) => row.status === ReminderScheduleStatus.PENDING)).toHaveLength(1);
+            } finally {
+                spy.mockRestore();
+            }
         });
     });
 });

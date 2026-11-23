@@ -20,7 +20,7 @@ Issue #42 (parent #16) needs one rule: an attempt adds a Pass only if it starts 
 
 ## Consequences
 
-- The check for an in-flight reminder is a read, not a guard. The row lock on the trainer and the user's job lock serialise counted attempts and reminder toggles for one trainer. A reminder that reaches SENDING after the decision does not change the decision.
+- The in-flight check and the final-state check are guards. Both are read under the trainer row lock, so a counted attempt cannot race a reminder change for the same trainer. The user's job lock covers the AI path. A reminder that reaches SENDING after the decision does not change the decision.
 - A retry after a successful commit re-sends the stored result. It does not call the AI again.
 - Jobs queued before this change have no stored answer. They count as before, at the job time.
 - Integration tests cover the parallel submit (with a check that removing the lock fails it), the 409, the retry and the deleted trainer, on a real Postgres and Redis.
