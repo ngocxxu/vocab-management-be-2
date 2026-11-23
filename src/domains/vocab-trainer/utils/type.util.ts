@@ -11,10 +11,6 @@ export enum EQuestionType {
     TRANSLATION_AUDIO = 'translation-audio',
 }
 
-export enum EReminderRepeat {
-    MAX_REPEAT = 6,
-}
-
 // Type for VocabTrainerWord with vocab relation
 export type VocabTrainerWordWithVocab = Prisma.VocabTrainerWordGetPayload<{
     include: { vocab: true };

@@ -16,8 +16,9 @@ export interface AfterExamReminderInput {
     firstName: string;
     lastName: string;
     trainerName: string;
-    scorePercentage: number;
     examUrl: string;
+    /** X: days until the next reminder. The trainer's own setting. */
+    spacingDays: number;
     reminderDisabled: boolean;
 }
 
@@ -43,6 +44,7 @@ export class VocabTrainerReminderAfterExamService {
         });
     }
 
+    /** A counted attempt restarts the cycle: the open reminders go and the next one is planned, unless reminders are off. */
     public async syncRemindersAfterExamSubmission(tx: Prisma.TransactionClient, input: AfterExamReminderInput): Promise<void> {
         await this.cancelSchedulesForTrainerTx(tx, input.trainerId, input.userId, 'exam_submitted');
 
@@ -50,6 +52,11 @@ export class VocabTrainerReminderAfterExamService {
             return;
         }
 
+        await this.scheduleInitialTx(tx, input);
+    }
+
+    /** Plans the next INITIAL reminder without cancelling anything. Used when reminders are turned on again. */
+    public async scheduleInitialTx(tx: Prisma.TransactionClient, input: AfterExamReminderInput): Promise<void> {
         const terminalInitialCount = await tx.reminderSchedule.count({
             where: {
                 entityType: VOCAB_TRAINER_ENTITY,
@@ -66,14 +73,14 @@ export class VocabTrainerReminderAfterExamService {
         }
 
         const chainIndex = terminalInitialCount + 1;
-        const dueAt = addUtcDays(new Date(), REMINDER_CONFIG.chain.initialDelayDays);
+        const dueAt = addUtcDays(new Date(), input.spacingDays);
         const dedupeKey = buildReminderDedupeKey.vocabTrainerInitial(input.trainerId, chainIndex);
 
         const payload: TemplateData = {
             firstName: input.firstName,
             lastName: input.lastName,
             testName: input.trainerName,
-            repeatDays: String(REMINDER_CONFIG.chain.initialDelayDays),
+            repeatDays: String(input.spacingDays),
             examUrl: input.examUrl,
         };
 

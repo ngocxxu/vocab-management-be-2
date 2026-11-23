@@ -1,12 +1,13 @@
 import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared/services';
 import { Injectable } from '@nestjs/common';
-import { Prisma, ReminderChannel, ReminderSchedule, ReminderScheduleKind, ReminderScheduleStatus } from '@prisma/client';
+import { Prisma, ReminderChannel, ReminderSchedule, ReminderScheduleKind, ReminderScheduleStatus, TrainerMode } from '@prisma/client';
 import { ESCALATION_CONFIG } from '../config/reminder.config';
+import { VOCAB_TRAINER_ENTITY } from '../strategies/vocab-trainer-acted-check.strategy';
 import { addUtcDays } from '../utils/reminder-date.util';
 import { buildReminderDedupeKey } from '../utils/reminder-dedupe-key.util';
 import { ReminderRetryDecision } from '../utils/reminder-retry.util';
-import { EEmailTemplate } from '../utils/util.constant';
+import { EEmailTemplate, IN_FLIGHT_INITIAL_STATUSES } from '../utils/util.constant';
 
 const ACTIVE_CANCEL_STATUSES: ReminderScheduleStatus[] = [ReminderScheduleStatus.PENDING, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED];
 
@@ -122,6 +123,31 @@ export class ReminderScheduleRepository extends BaseRepository {
             orderBy: { sentAt: 'desc' },
             take,
         });
+    }
+
+    /** True while a classic INITIAL reminder of the trainer is PENDING, CLAIMED, QUEUED or SENDING. Read-only. */
+    public async hasInFlightInitial(trainerId: string, tx?: Prisma.TransactionClient): Promise<boolean> {
+        const count = await this.client(tx).reminderSchedule.count({
+            where: {
+                entityType: VOCAB_TRAINER_ENTITY,
+                entityId: trainerId,
+                template: EEmailTemplate.EXAM_REMINDER,
+                reminderType: ReminderScheduleKind.INITIAL,
+                status: { in: IN_FLIGHT_INITIAL_STATUSES },
+            },
+        });
+
+        return count > 0;
+    }
+
+    /** What the send guard needs before an email goes out: the owner is active and the trainer (when there is one) still matches. */
+    public async findSendGuardState(userId: string, trainerId: string | null): Promise<{ userActive: boolean; trainer: { mode: TrainerMode; reminderDisabled: boolean } | null }> {
+        const [user, trainer] = await Promise.all([
+            this.prisma.user.findUnique({ where: { id: userId }, select: { isActive: true } }),
+            trainerId ? this.prisma.vocabTrainer.findFirst({ where: { id: trainerId, userId }, select: { mode: true, reminderDisabled: true } }) : null,
+        ]);
+
+        return { userActive: user?.isActive === true, trainer };
     }
 
     public async createSchedule(data: Prisma.ReminderScheduleUncheckedCreateInput): Promise<ReminderSchedule> {

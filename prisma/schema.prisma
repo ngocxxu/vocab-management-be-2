@@ -316,20 +316,25 @@ model VocabRelatedWord {
 }
 
 model VocabTrainer {
-  id                  String        @id @default(cuid()) @map("id")
-  name                String        @map("name")
-  status              TrainerStatus @map("status")
-  countTime           Int           @default(0) @map("count_time")
-  setCountTime        Int           @default(0) @map("set_count_time")
-  reminderTime        Int           @default(0) @map("reminder_time")
-  reminderDisabled    Boolean       @default(false) @map("reminder_disabled")
-  reminderRepeat      Int           @default(2) @map("reminder_repeat")
-  reminderLastRemind  DateTime      @default(now()) @map("reminder_last_remind")
-  lastExamSubmittedAt DateTime?     @map("last_exam_submitted_at") @db.Timestamptz // Last time user submitted the exam at
-  questionType        QuestionType  @default(MULTIPLE_CHOICE) @map("question_type")
-  questionAnswers     Json[]        @default([]) @map("question_answers")
-  createdAt           DateTime      @default(now()) @map("created_at")
-  updatedAt           DateTime      @updatedAt @map("updated_at")
+  id                    String        @id @default(cuid()) @map("id")
+  name                  String        @map("name")
+  status                TrainerStatus @map("status")
+  countTime             Int           @default(0) @map("count_time")
+  setCountTime          Int           @default(0) @map("set_count_time")
+  reminderTime          Int           @default(0) @map("reminder_time")
+  reminderDisabled      Boolean       @default(false) @map("reminder_disabled")
+  reminderRepeat        Int           @default(2) @map("reminder_repeat")
+  reminderLastRemind    DateTime      @default(now()) @map("reminder_last_remind")
+  lastExamSubmittedAt   DateTime?     @map("last_exam_submitted_at") @db.Timestamptz // Last time user submitted the exam at
+  // Classic reminder cycle (see docs/features/pass-counting.md). The CHECK ranges are hand-written in the migration.
+  reminderSpacingDays   Int           @default(2) @map("reminder_spacing_days") // X: days until the next reminder, 2-30
+  reminderMaxRepeat     Int           @default(6) @map("reminder_max_repeat") // T: Passes that complete the trainer, 3-20
+  reminderFailStreak    Int           @default(0) @map("reminder_fail_streak") // Counted failed attempts in a row; 3 asks the user to keep reminders on
+  reminderLastCountedAt DateTime?     @map("reminder_last_counted_at") @db.Timestamptz // Last counted attempt; caps counting when reminders are off
+  questionType          QuestionType  @default(MULTIPLE_CHOICE) @map("question_type")
+  questionAnswers       Json[]        @default([]) @map("question_answers")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
 
   mode TrainerMode @default(CLASSIC) @map("mode")
 

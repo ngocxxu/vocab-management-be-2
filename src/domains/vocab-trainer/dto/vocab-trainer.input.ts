@@ -3,6 +3,7 @@ import { FsrsDirection, QuestionType, TrainerMode, TrainerStatus } from '@prisma
 import { Type } from 'class-transformer';
 import { ArrayNotEmpty, ArrayUnique, IsArray, IsBoolean, IsDate, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { FSRS_MAX_DESIRED_RETENTION, FSRS_MAX_INTERVAL_DAYS, FSRS_MIN_DESIRED_RETENTION } from '../utils/fsrs-trainer-rules';
+import { PASS_RULES } from '../utils/pass-rules.util';
 
 export class VocabTrainerInput {
     @ApiProperty({ description: 'Name of the vocab trainer', example: 'Vocab Trainer 1' })
@@ -11,12 +12,14 @@ export class VocabTrainerInput {
     public name: string;
 
     @ApiProperty({
-        description: 'Status of the trainer',
+        description: 'Status of the trainer. Ignored on update: an exam sets it.',
         example: TrainerStatus.PENDING,
         enum: TrainerStatus,
+        required: false,
     })
+    @IsOptional()
     @IsEnum(TrainerStatus)
-    public status: TrainerStatus;
+    public status?: TrainerStatus;
 
     @ApiProperty({
         description: 'Type of questions for this trainer',
@@ -53,18 +56,34 @@ export class VocabTrainerInput {
     @IsBoolean()
     public reminderDisabled?: boolean;
 
-    @ApiProperty({ description: 'Reminder repeat', required: false, example: 2 })
+    @ApiProperty({ description: 'Passes earned. Ignored on update: only an exam adds a Pass.', required: false, example: 2 })
     @IsOptional()
     @Type(() => Number)
     @IsInt()
     @Min(0)
     public reminderRepeat?: number;
 
-    @ApiProperty({ description: 'Last reminder date', required: false })
+    @ApiProperty({ description: 'Last reminder date. Ignored on update.', required: false })
     @IsOptional()
     @Type(() => Date)
     @IsDate()
     public reminderLastRemind?: Date;
+
+    @ApiProperty({ description: 'Classic: days until the next reminder (X), 2-30', required: false, minimum: 2, maximum: 30, example: 2 })
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    @Min(PASS_RULES.spacingDays.min)
+    @Max(PASS_RULES.spacingDays.max)
+    public reminderSpacingDays?: number;
+
+    @ApiProperty({ description: 'Classic: Passes that complete the trainer (T), 3-20. Cannot go below the Passes earned.', required: false, minimum: 3, maximum: 20, example: 6 })
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    @Min(PASS_RULES.maxRepeat.min)
+    @Max(PASS_RULES.maxRepeat.max)
+    public reminderMaxRepeat?: number;
 
     @ApiProperty({
         description: 'IDs of vocabs to assign to this trainer',

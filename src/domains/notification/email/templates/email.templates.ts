@@ -37,7 +37,7 @@ export class EmailTemplates {
                 </tr>
               </table>
               <p style="margin:16px 0 0 0; font-family:'Lexend', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:13px; color:#5f6368;">
-                <strong>Repeat schedule:</strong> Every ${data.repeatDays} days
+                <strong>Next reminder:</strong> in ${data.repeatDays} days after your attempt.
               </p>
               ${EmailTemplates.ctaButton(String(data.examUrl ?? ''), 'Complete test now')}
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">

@@ -1,4 +1,5 @@
 import type { VocabTrainerQueueName } from '../constants/vocab-trainer-job.constants';
+import type { ActiveVocabTrainerJob } from '../dto/active-vocab-trainer-job.dto';
 import type { AudioEvaluationJobData, FillInBlankChoiceGenerationJobData, FillInBlankEvaluationJobData, MultipleChoiceGenerationJobData } from '@/queues/interfaces/job-payloads';
 import { AudioEvaluationProducer } from '@/queues/producers/audio-evaluation.producer';
 import { FillInBlankChoiceGenerationProducer } from '@/queues/producers/fill-in-blank-choice-generation.producer';
@@ -42,7 +43,19 @@ export class AiQueueService {
     }
 
     public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
-        return this.withUserActiveJobLock(params, async (jobData, opts) => this.fillInBlankProducer.evaluateAnswers(jobData as FillInBlankEvaluationJobData, opts));
+        return this.withUserActiveJobLock(params, async (jobData, opts) => {
+            // Decided here, under the user's job lock: a submit that joins the running job never gets this far (#42, D-ai).
+            const { decideAttempt, ...data } = jobData;
+            const attempt = await decideAttempt();
+
+            return this.fillInBlankProducer.evaluateAnswers({ ...data, ...attempt } as FillInBlankEvaluationJobData, opts);
+        });
+    }
+
+    /** The active job of the user when it belongs to this trainer, else null. Used to refuse a multiple-choice submit during an AI job. */
+    public async getActiveJobForTrainer(userId: string, vocabTrainerId: string): Promise<ActiveVocabTrainerJob | null> {
+        const job = await this.vocabTrainerJobLockService.getActiveJob(userId);
+        return job?.trainerId === vocabTrainerId ? job : null;
     }
 
     /** Lets a client that missed the socket event recover. A job of another user or trainer is reported as `unknown`. */

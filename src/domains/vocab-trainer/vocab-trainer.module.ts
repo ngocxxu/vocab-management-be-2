@@ -7,12 +7,12 @@ import { ReminderModule } from '../reminder';
 import { VocabModule } from '../vocab';
 import { SrsSettingsController, VocabTrainerController } from './controllers';
 import { VocabTrainerRepository } from './repositories';
-import { FsrsDefaultsService, VocabTrainerService } from './services';
+import { FsrsDefaultsService, VocabTrainerAttemptService, VocabTrainerReminderService, VocabTrainerService } from './services';
 
 @Module({
     imports: [forwardRef(() => ReminderModule), forwardRef(() => AiModule), LanguageModule, NotificationModule, VocabModule, ConfigModule],
     controllers: [VocabTrainerController, SrsSettingsController],
-    providers: [VocabTrainerRepository, VocabTrainerService, FsrsDefaultsService],
-    exports: [VocabTrainerService, VocabTrainerRepository],
+    providers: [VocabTrainerRepository, VocabTrainerService, FsrsDefaultsService, VocabTrainerAttemptService, VocabTrainerReminderService],
+    exports: [VocabTrainerService, VocabTrainerRepository, VocabTrainerAttemptService],
 })
 export class VocabTrainerModule {}

@@ -5,7 +5,7 @@ import type { TemplateData } from '@/shared/utils/type.util';
 import { Injectable } from '@nestjs/common';
 import { NotificationAction, NotificationType, PriorityLevel, ReminderSchedule, ReminderScheduleKind } from '@prisma/client';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
-import { EEmailTemplate, EReminderNotificationKind, EXPIRES_AT_30_DAYS } from '../utils';
+import { EEmailTemplate, EReminderNotificationKind, EXPIRES_AT_30_DAYS, EXPIRES_AT_90_DAYS } from '../utils';
 
 const REMINDER_NOTIFICATION = { type: NotificationType.VOCAB_TRAINER, action: NotificationAction.REMIND } as const;
 
@@ -37,7 +37,7 @@ export class ReminderInAppNotificationService {
             const notification = await this.notificationService.create({
                 ...REMINDER_NOTIFICATION,
                 priority: kind === EReminderNotificationKind.ESCALATION ? PriorityLevel.MEDIUM : PriorityLevel.LOW,
-                expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
+                expiresAt: new Date(Date.now() + this.bellLifetimeMs(kind)),
                 isActive: true,
                 recipientUserIds: [row.userId],
                 data: {
@@ -55,6 +55,21 @@ export class ReminderInAppNotificationService {
             this.logger.error(`In-app reminder notification failed for schedule ${row.id}: ${errorMessage(error)}`);
             captureSentryException(error, { tags: { 'reminder.schedule_id': row.id } });
         }
+    }
+
+    /** Hides every reminder Bell of the trainer. Called when the user passes, turns reminders off, deletes or completes it. Never throws. */
+    public async hideTrainerBells(trainerId: string): Promise<void> {
+        try {
+            await this.notificationService.hideReminderBells(trainerId);
+        } catch (error: unknown) {
+            this.logger.error(`Hiding reminder bells failed for trainer ${trainerId}: ${errorMessage(error)}`);
+            captureSentryException(error, { tags: { 'reminder.trainer_id': trainerId } });
+        }
+    }
+
+    /** Classic bells stay 90 days; FSRS bells stay 30 days. */
+    private bellLifetimeMs(kind: EReminderNotificationKind): number {
+        return kind === EReminderNotificationKind.FSRS_DUE ? EXPIRES_AT_30_DAYS : EXPIRES_AT_90_DAYS;
     }
 
     /** Best effort: the row is saved already, so a missed push only means the bell shows it on its next refresh. */

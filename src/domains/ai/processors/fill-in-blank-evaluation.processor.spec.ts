@@ -1,25 +1,75 @@
 import { StaleAiJobError } from '../utils/ai-job.util';
 import { FillInBlankEvaluationProcessor } from './fill-in-blank-evaluation.processor';
 
-describe('FillInBlankEvaluationProcessor failure lifecycle', () => {
-    const jobData = {
-        vocabTrainerId: 't1',
-        evaluations: [{ vocab: {}, userAnswer: 'a', systemAnswer: 'b', questionType: 'textSource', vocabId: 'v1' }],
-        answerSubmissions: [{}],
-        userId: 'u1',
-        lockToken: 'tok',
-    };
+const SUBMITTED_AT = '2026-11-23T10:00:00.000Z';
 
-    const build = (opts: { owns?: boolean; aiError?: Error }) => {
+const jobData = {
+    vocabTrainerId: 't1',
+    evaluations: [{ vocab: {}, userAnswer: 'a', systemAnswer: 'b', questionType: 'textSource', vocabId: 'v1' }],
+    answerSubmissions: [{}],
+    userId: 'u1',
+    lockToken: 'tok',
+    countsAsAttempt: true,
+    submittedAt: SUBMITTED_AT,
+};
+const baseTrainer = {
+    id: 't1',
+    name: 'Week 1',
+    userId: 'u1',
+    lastExamSubmittedAt: null,
+    reminderRepeat: 1,
+    reminderMaxRepeat: 6,
+    reminderDisabled: false,
+    countTime: 0,
+    questionType: 'FILL_IN_THE_BLANK',
+};
+
+describe('FillInBlankEvaluationProcessor failure lifecycle', () => {
+    const build = (opts: { owns?: boolean; aiError?: Error; trainer?: Record<string, unknown> | null; lockedTrainer?: Record<string, unknown> | null }) => {
         const gateway = { emitFillInBlankEvaluationProgress: jest.fn() };
         const lock = { isOwner: jest.fn().mockResolvedValue(opts.owns ?? true), refreshLock: jest.fn(), releaseIfOwned: jest.fn() };
         const aiService = { evaluateAllFillInBlankAnswers: jest.fn().mockRejectedValue(opts.aiError ?? new Error('provider down')) };
         const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        const unused = {} as never;
-        const processor = new FillInBlankEvaluationProcessor(logger as never, aiService as never, lock as never, gateway as never, unused, unused, unused, unused, unused);
+        const trainerRepository = {
+            findVocabTrainerByIdMinimal: jest.fn().mockResolvedValue(opts.trainer === undefined ? baseTrainer : opts.trainer),
+            lockAndFindForUpdate: jest.fn().mockResolvedValue(opts.lockedTrainer === undefined ? baseTrainer : opts.lockedTrainer),
+            inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
+                const result = await fn({});
+                return result;
+            }),
+            deleteVocabTrainerResults: jest.fn().mockResolvedValue(undefined),
+            createVocabTrainerResultsMany: jest.fn().mockResolvedValue(undefined),
+            findResultsByTrainerId: jest.fn().mockResolvedValue([]),
+        };
+        const attempt = {
+            applyAttemptTx: jest.fn((_tx: unknown, input: { counts: boolean }) => ({
+                counts: input.counts,
+                passed: true,
+                completed: false,
+                trainerId: 't1',
+                userId: 'u1',
+                trainerName: 'x',
+                maxRepeat: 6,
+                passes: 1,
+                trainer: baseTrainer,
+            })),
+            afterCommit: jest.fn().mockResolvedValue(undefined),
+        };
+        const userRepository = { findById: jest.fn().mockResolvedValue({ id: 'u1', email: 'a@example.com', firstName: 'A', lastName: 'B' }) };
+        const mastery = { updateMastery: jest.fn().mockResolvedValue(undefined) };
+        const processor = new FillInBlankEvaluationProcessor(
+            logger as never,
+            aiService as never,
+            lock as never,
+            gateway as never,
+            trainerRepository as never,
+            userRepository as never,
+            mastery as never,
+            attempt as never,
+        );
         const job = (attemptsMade: number) => ({ id: 'j1', data: jobData, attemptsMade, opts: { attempts: 3 }, discard: jest.fn() });
 
-        return { processor, gateway, lock, job };
+        return { processor, gateway, lock, job, trainerRepository, attempt, aiService, mastery };
     };
 
     test('a stale job tells the client it failed, discards itself and does not touch the newer lock owner', async () => {
@@ -75,3 +125,126 @@ describe('FillInBlankEvaluationProcessor failure lifecycle', () => {
         expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'failed', expect.anything());
     });
 });
+
+describe('FillInBlankEvaluationProcessor counting', () => {
+    const jobWith = (data: Record<string, unknown>) => ({ id: 'j1', data: { ...jobData, ...data }, attemptsMade: 0, opts: { attempts: 3 }, discard: jest.fn(), timestamp: 0 });
+
+    const build = (opts: Parameters<typeof buildProcessorFor>[0]) => buildProcessorFor(opts);
+
+    test('a retry of an attempt that was already applied does nothing: no AI call and no second Pass', async () => {
+        // Arrange: the trainer already carries this submit time, as after a commit that was followed by a failed retry
+        const { processor, aiService, attempt, lock } = build({ trainer: { ...baseTrainer, lastExamSubmittedAt: new Date(SUBMITTED_AT) } });
+
+        // Act
+        await processor.processFillInBlankEvaluation(jobWith({}) as never);
+
+        // Assert
+        expect(aiService.evaluateAllFillInBlankAnswers).not.toHaveBeenCalled();
+        expect(attempt.applyAttemptTx).not.toHaveBeenCalled();
+        expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+    });
+
+    test('applies the decision stored in the job and does not decide again', async () => {
+        // Arrange
+        const { processor, attempt } = build({});
+
+        // Act
+        await processor.processFillInBlankEvaluation(jobWith({ countsAsAttempt: false }) as never);
+
+        // Assert
+        expect(attempt.applyAttemptTx).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ counts: false, submittedAt: new Date(SUBMITTED_AT) }));
+    });
+
+    test('a trainer deleted before the job runs: no AI call, nothing written, no error', async () => {
+        // Arrange
+        const { processor, aiService, trainerRepository, lock } = build({ trainer: null });
+
+        // Act
+        const result = await processor.processFillInBlankEvaluation(jobWith({}) as never);
+
+        // Assert
+        expect(result).toEqual({ results: [], trainerDeleted: true });
+        expect(aiService.evaluateAllFillInBlankAnswers).not.toHaveBeenCalled();
+        expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
+        expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+    });
+
+    test('a trainer deleted while the AI runs: nothing is written and the job still completes', async () => {
+        // Arrange
+        const { processor, attempt, trainerRepository, lock, gateway, aiService } = build({ lockedTrainer: null });
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([{ isCorrect: true }]);
+
+        // Act
+        const result = await processor.processFillInBlankEvaluation(jobWith({}) as never);
+
+        // Assert
+        expect(result).toEqual(expect.objectContaining({ trainerDeleted: true }));
+        expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
+        expect(attempt.applyAttemptTx).not.toHaveBeenCalled();
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'completed', expect.anything());
+        expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+    });
+
+    test('the bells run after the commit, once the attempt is applied', async () => {
+        // Arrange
+        const { processor, attempt, aiService, trainerRepository } = build({});
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([{ isCorrect: true }]);
+
+        // Act
+        await processor.processFillInBlankEvaluation(jobWith({}) as never);
+
+        // Assert
+        const tx = trainerRepository.inTransaction.mock.invocationCallOrder[0];
+        expect(attempt.afterCommit).toHaveBeenCalledTimes(1);
+        expect(attempt.afterCommit.mock.invocationCallOrder[0]).toBeGreaterThan(tx);
+    });
+});
+
+function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; lockedTrainer?: Record<string, unknown> | null; aiError?: Error }) {
+    const gateway = { emitFillInBlankEvaluationProgress: jest.fn() };
+    const lock = { isOwner: jest.fn().mockResolvedValue(true), refreshLock: jest.fn(), releaseIfOwned: jest.fn() };
+    const aiService = { evaluateAllFillInBlankAnswers: jest.fn().mockResolvedValue([{ isCorrect: true }]) };
+    if (opts.aiError) {
+        aiService.evaluateAllFillInBlankAnswers.mockRejectedValue(opts.aiError);
+    }
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const trainerRepository = {
+        findVocabTrainerByIdMinimal: jest.fn().mockResolvedValue(opts.trainer === undefined ? baseTrainer : opts.trainer),
+        lockAndFindForUpdate: jest.fn().mockResolvedValue(opts.lockedTrainer === undefined ? baseTrainer : opts.lockedTrainer),
+        inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
+            const result = await fn({});
+            return result;
+        }),
+        deleteVocabTrainerResults: jest.fn().mockResolvedValue(undefined),
+        createVocabTrainerResultsMany: jest.fn().mockResolvedValue(undefined),
+        findResultsByTrainerId: jest.fn().mockResolvedValue([]),
+    };
+    const attempt = {
+        applyAttemptTx: jest.fn((_tx: unknown, input: { counts: boolean; submittedAt: Date }) => ({
+            counts: input.counts,
+            passed: true,
+            completed: false,
+            trainerId: 't1',
+            userId: 'u1',
+            trainerName: 'Week 1',
+            maxRepeat: 6,
+            passes: 2,
+            trainer: baseTrainer,
+        })),
+        afterCommit: jest.fn().mockResolvedValue(undefined),
+    };
+    const userRepository = { findById: jest.fn().mockResolvedValue({ id: 'u1', email: 'a@example.com', firstName: 'A', lastName: 'B' }) };
+    const mastery = { updateMastery: jest.fn().mockResolvedValue(undefined) };
+    const processor = new FillInBlankEvaluationProcessor(
+        logger as never,
+        aiService as never,
+        lock as never,
+        gateway as never,
+        trainerRepository as never,
+        userRepository as never,
+        mastery as never,
+        attempt as never,
+    );
+
+    return { processor, gateway, lock, aiService, trainerRepository, attempt };
+}

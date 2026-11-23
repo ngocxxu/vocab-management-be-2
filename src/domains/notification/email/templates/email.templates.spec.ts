@@ -52,3 +52,18 @@ describe('FSRS due reminder template', () => {
         expect(onlyReview).toContain('questions to review');
     });
 });
+
+describe('Exam reminder template', () => {
+    test('says when the next reminder comes, counted from the attempt', () => {
+        // Arrange
+        const data = { firstName: 'Ada', lastName: 'Lovelace', testName: 'Exam words', repeatDays: '5', examUrl: 'https://app.example/t1/exam' };
+
+        // Act
+        const html = EmailTemplates.render(EEmailTemplate.EXAM_REMINDER, data);
+
+        // Assert: the text a reader sees, without the markup
+        const visibleText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        expect(visibleText).toContain('Next reminder: in 5 days after your attempt.');
+        expect(visibleText).not.toContain('Repeat schedule');
+    });
+});

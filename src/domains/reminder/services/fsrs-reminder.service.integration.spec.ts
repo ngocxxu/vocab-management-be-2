@@ -13,6 +13,7 @@ import { ReminderScheduleRepository } from '../repositories/reminder-schedule.re
 import { ActedCheckRegistry } from '../strategies/acted-check.registry';
 import { VOCAB_TRAINER_ENTITY, VocabTrainerActedCheckStrategy } from '../strategies/vocab-trainer-acted-check.strategy';
 import { FsrsReminderService } from './fsrs-reminder.service';
+import { ReminderSendGuardService } from './reminder-send-guard.service';
 
 // Runs against a real Postgres:
 //   FSRS_TEST_DATABASE_URL=postgresql://admin:admin@localhost:5433/vocab_fsrs_test?schema=public pnpm test fsrs-reminder
@@ -562,7 +563,7 @@ describeWithDb('FsrsReminderService (real Postgres)', () => {
             emailService = { sendReminderEmail: jest.fn().mockResolvedValue(undefined) };
             const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), log: jest.fn() } as never;
             const inApp = { notifyReminderSent: jest.fn().mockResolvedValue(undefined) };
-            processor = new EmailProcessor(emailService as never, logger, reminders, registry, service, inApp as never);
+            processor = new EmailProcessor(emailService as never, logger, reminders, registry, service, inApp as never, new ReminderSendGuardService(reminders));
         });
 
         test('sends the numbers counted now and plans the next reminder', async () => {

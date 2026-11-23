@@ -17,3 +17,4 @@ export * from './fsrs-review.dto';
 export * from './clone-vocab-trainer.input';
 export * from './srs-settings.dto';
 export * from './exam-job-status.dto';
+export * from './reminder-prompt.input';

@@ -6,6 +6,7 @@ import type { Job } from 'bull';
 import { ReminderScheduleRepository } from '../../../reminder/repositories/reminder-schedule.repository';
 import { FsrsReminderService } from '../../../reminder/services/fsrs-reminder.service';
 import { ReminderInAppNotificationService } from '../../../reminder/services/reminder-in-app-notification.service';
+import { ReminderSendGuardService } from '../../../reminder/services/reminder-send-guard.service';
 import { ActedCheckRegistry } from '../../../reminder/strategies/acted-check.registry';
 import { EEmailReminderType, EEmailTemplate, EReminderType } from '../../../reminder/utils';
 import { decideReminderRetry } from '../../../reminder/utils/reminder-retry.util';
@@ -21,6 +22,7 @@ export class EmailProcessor {
         private readonly actedCheckRegistry: ActedCheckRegistry,
         private readonly fsrsReminderService: FsrsReminderService,
         private readonly reminderInAppNotificationService: ReminderInAppNotificationService,
+        private readonly reminderSendGuardService: ReminderSendGuardService,
     ) {}
 
     @Process({
@@ -90,6 +92,19 @@ export class EmailProcessor {
                 });
                 return;
             }
+        }
+
+        // The row can be QUEUED while its trainer or its user changed: such a reminder is cancelled, not sent.
+        const guard = await this.reminderSendGuardService.check(fresh);
+        if (!guard.send) {
+            const cancelledAt = new Date();
+            await this.reminderScheduleRepository.transitionStatus(fresh.id, ReminderScheduleStatus.SENDING, ReminderScheduleStatus.CANCELLED, {
+                cancelledAt,
+                cancelledBy: 'system',
+                cancelReason: guard.reason,
+                completedAt: cancelledAt,
+            });
+            return;
         }
 
         let data = fresh.payload as TemplateData;

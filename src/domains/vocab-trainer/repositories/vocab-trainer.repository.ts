@@ -2,7 +2,7 @@ import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { buildPrismaWhere } from '@/shared/utils/query-builder.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma, QuestionType, TrainerMode, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, VocabTrainer, VocabTrainerResult } from '@prisma/client';
 import { VocabTrainerQueryParamsInput } from '../dto/vocab-trainer-query-params.input';
 
 @Injectable()
@@ -177,6 +177,24 @@ export class VocabTrainerRepository extends BaseRepository {
         await this.client(tx).vocabTrainerResult.create({ data });
     }
 
+    /**
+     * Locks the trainer row until the transaction ends (SELECT ... FOR UPDATE), then reads it. Counting an attempt and
+     * toggling reminders both take this lock, so they never interleave for one trainer. Null when the trainer is gone.
+     */
+    public async lockAndFindForUpdate(tx: Prisma.TransactionClient, id: string): Promise<VocabTrainer | null> {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM vocab_trainer WHERE id = ${id} FOR UPDATE`;
+        if (locked.length === 0) {
+            return null;
+        }
+
+        return tx.vocabTrainer.findUnique({ where: { id } });
+    }
+
+    /** The result rows of the latest applied attempt. Used to answer a retried AI job without writing again. */
+    public async findResultsByTrainerId(trainerId: string): Promise<VocabTrainerResult[]> {
+        return this.prisma.vocabTrainerResult.findMany({ where: { vocabTrainerId: trainerId }, orderBy: { createdAt: 'asc' } });
+    }
+
     public async findVocabTrainerByIdMinimal(id: string, tx?: Prisma.TransactionClient): Promise<VocabTrainer | null> {
         return this.client(tx).vocabTrainer.findUnique({ where: { id } });
     }
@@ -228,14 +246,12 @@ export class VocabTrainerRepository extends BaseRepository {
         id: string,
         trainerData: {
             name?: string;
-            status?: TrainerStatus;
             questionType?: QuestionType;
             reminderTime?: number;
             countTime?: number;
             setCountTime?: number;
-            reminderDisabled?: boolean;
-            reminderRepeat?: number;
-            reminderLastRemind?: Date;
+            reminderSpacingDays?: number;
+            reminderMaxRepeat?: number;
             fsrsDesiredRetention?: number;
             fsrsMaximumInterval?: number;
             fsrsNewPerDay?: number | null;
@@ -248,14 +264,12 @@ export class VocabTrainerRepository extends BaseRepository {
             where: { id },
             data: {
                 name: trainerData.name,
-                status: trainerData.status,
                 questionType: trainerData.questionType ?? existing.questionType,
                 reminderTime: trainerData.reminderTime ?? existing.reminderTime,
                 countTime: trainerData.countTime ?? existing.countTime,
                 setCountTime: trainerData.setCountTime ?? existing.setCountTime,
-                reminderDisabled: trainerData.reminderDisabled ?? existing.reminderDisabled,
-                reminderRepeat: trainerData.reminderRepeat ?? existing.reminderRepeat,
-                reminderLastRemind: trainerData.reminderLastRemind ?? existing.reminderLastRemind,
+                reminderSpacingDays: trainerData.reminderSpacingDays ?? existing.reminderSpacingDays,
+                reminderMaxRepeat: trainerData.reminderMaxRepeat ?? existing.reminderMaxRepeat,
                 fsrsDesiredRetention: trainerData.fsrsDesiredRetention,
                 fsrsMaximumInterval: trainerData.fsrsMaximumInterval,
                 fsrsNewPerDay: trainerData.fsrsNewPerDay,

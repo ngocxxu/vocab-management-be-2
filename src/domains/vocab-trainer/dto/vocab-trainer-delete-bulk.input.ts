@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsNotEmpty, IsString } from 'class-validator';
+import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsNotEmpty, IsString } from 'class-validator';
+
+export const MAX_BULK_DELETE_IDS = 100;
 
 export class VocabTrainerDeleteBulkInput {
     @ApiProperty({
@@ -9,6 +11,7 @@ export class VocabTrainerDeleteBulkInput {
     })
     @IsArray()
     @ArrayNotEmpty()
+    @ArrayMaxSize(MAX_BULK_DELETE_IDS)
     @IsString({ each: true })
     @IsNotEmpty({ each: true })
     public readonly ids: string[];

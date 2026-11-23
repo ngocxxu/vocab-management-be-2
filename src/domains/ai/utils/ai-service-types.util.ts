@@ -39,9 +39,17 @@ export type QueueFillInBlankChoiceGenerationParams = QueueJobIdentity & {
     userId: string;
 };
 
+/** Decided under the user's job lock, then stored in the job. The processor applies this, never decides again (#42). */
+export type FillInBlankAttemptDecision = {
+    countsAsAttempt: boolean;
+    submittedAt: string;
+};
+
 export type QueueFillInBlankEvaluationParams = QueueJobIdentity & {
     locale?: AppLocale;
     vocabTrainerId: string;
+    /** Called only when this submit gets the user's job lock. A submit that joins the running job never calls it. */
+    decideAttempt: () => Promise<FillInBlankAttemptDecision>;
     evaluations: Array<{
         vocab: VocabWithTextTargets;
         userAnswer: string;

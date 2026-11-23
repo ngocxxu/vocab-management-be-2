@@ -1,5 +1,7 @@
 # Reminder mail & Escalation (thiết kế v3)
 
+> **Update (#42):** the rules for counting a Pass, the per-trainer spacing (X) and max passes (T), the fail-streak prompt, the send guard and the bell lifetimes (classic 90 days, FSRS 30 days) changed. See `docs/features/pass-counting.md`. The email now says "Next reminder: in N days after your attempt." The sections below describe the v3 design and are not all updated.
+
 Tài liệu mô tả luồng **DB-first**: `reminder_schedule` là nguồn sự thật, **SchedulerPoller** claim đến hạn, **Bull** chỉ vận chuyển thực thi (`attempts: 1`, retry do DB), **EmailWorker** gửi mail và (với initial) tạo escalation trong **cùng transaction** với `sent`.
 
 **Nguyên tắc v3**
@@ -381,12 +383,12 @@ Trước khi bật poller: xử lý **in-flight Bull delayed** để tránh **do
 
 ```typescript
 export const ESCALATION_CONFIG = {
-  maxEscalations: 3,
-  escalationIntervalDays: 1,
-  enabledTemplates: ['vocab-review'],
-  overrides: {
-    'vocab-review': { maxEscalations: 3, escalationIntervalDays: 1 },
-  },
+    maxEscalations: 3,
+    escalationIntervalDays: 1,
+    enabledTemplates: ['vocab-review'],
+    overrides: {
+        'vocab-review': { maxEscalations: 3, escalationIntervalDays: 1 },
+    },
 };
 ```
 
