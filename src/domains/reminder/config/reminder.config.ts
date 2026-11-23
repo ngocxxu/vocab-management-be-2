@@ -1,7 +1,6 @@
 export const REMINDER_CONFIG = {
     chain: {
         maxCycles: 30,
-        initialDelayDays: 2,
     },
     escalation: {
         maxEscalations: 3,

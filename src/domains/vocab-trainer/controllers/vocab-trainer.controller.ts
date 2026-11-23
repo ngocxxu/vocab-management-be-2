@@ -25,6 +25,7 @@ import {
     VocabTrainerInput,
     SubmitTranslationAudioResponseDto,
 } from '../dto';
+import { ReminderPromptInput } from '../dto/reminder-prompt.input';
 import { SubmitExamBodyInput } from '../dto/submit-exam.dto';
 import { SubmitFillInBlankChoiceInput } from '../dto/submit-fill-in-blank-choice.dto';
 import { SubmitFillInBlankInput } from '../dto/submit-fill-in-blank.dto';
@@ -152,6 +153,17 @@ export class VocabTrainerController {
         const trainer = await this.vocabTrainerService.updateFsrsSettings(id, input, user.id);
         this.logger.info(`Updated FSRS settings of vocab trainer with ID ${id}`);
         return trainer;
+    }
+
+    @Patch(':id/reminder-prompt')
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Answer the reminder prompt: continueReminders true keeps reminders on, false turns them off. No prompt pending returns the trainer unchanged.' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'The trainer is an FSRS trainer' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
+    public async answerReminderPrompt(@Param('id') id: string, @Body() input: ReminderPromptInput, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+        return this.vocabTrainerService.answerReminderPrompt(id, input, user.id);
     }
 
     @Get(':id/review-queue')

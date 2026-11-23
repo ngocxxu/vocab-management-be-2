@@ -21,6 +21,7 @@ describe('AiQueueService locale', () => {
             evaluations: [],
             answerSubmissions: [],
             locale: 'vi',
+            decideAttempt: jest.fn().mockResolvedValue({ countsAsAttempt: true, submittedAt: '2026-11-23T10:00:00.000Z' }),
         } as never);
 
         // Assert

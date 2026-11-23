@@ -1,3 +1,5 @@
+import { ReminderScheduleStatus } from '@prisma/client';
+
 export enum EReminderType {
     EMAIL_REMINDER = 'email_reminder',
     NOTIFICATION = 'notification',
@@ -51,3 +53,14 @@ export enum EReminderNotificationKind {
 }
 
 export const EXPIRES_AT_30_DAYS = 1000 * 60 * 60 * 24 * 30; // 30 days
+
+/** Bell of a classic reminder: kept 90 days (FSRS bells keep EXPIRES_AT_30_DAYS). */
+export const EXPIRES_AT_90_DAYS = 1000 * 60 * 60 * 24 * 90; // 90 days
+
+/** A classic INITIAL reminder in one of these states blocks counting a new attempt (#42). A FAILED_TERMINAL one does not. */
+export const IN_FLIGHT_INITIAL_STATUSES: ReminderScheduleStatus[] = [
+    ReminderScheduleStatus.PENDING,
+    ReminderScheduleStatus.CLAIMED,
+    ReminderScheduleStatus.QUEUED,
+    ReminderScheduleStatus.SENDING,
+];

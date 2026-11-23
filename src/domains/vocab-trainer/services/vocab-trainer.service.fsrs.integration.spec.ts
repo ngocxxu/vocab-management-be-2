@@ -26,6 +26,8 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
     let words: string[];
     let wordWithoutTranslation: string;
     const reminders = { sync: jest.fn(), cancelForTrainer: jest.fn() };
+    // Classic and FSRS trainers share one cleanup path when they are deleted.
+    const reminderSettings = { onTrainerRemoved: jest.fn().mockResolvedValue(undefined), setRemindersEnabled: jest.fn() };
 
     const input = (overrides: Partial<VocabTrainerInput> = {}): VocabTrainerInput =>
         ({
@@ -58,7 +60,18 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         prisma = new PrismaService({ datasources: { db: { url: databaseUrl } } });
         const unused = {} as never;
         defaults = new FsrsDefaultsService(new ConfigService(new ConfigRepository(prisma)));
-        service = new VocabTrainerService(new VocabTrainerRepository(prisma), unused, unused, unused, unused, unused, new FsrsRepository(prisma), defaults, reminders as never);
+        // Order: repository, AI, mastery, logger, FSRS repository, defaults, FSRS reminder, attempt, reminder settings.
+        service = new VocabTrainerService(
+            new VocabTrainerRepository(prisma),
+            unused,
+            unused,
+            unused,
+            new FsrsRepository(prisma),
+            defaults,
+            reminders as never,
+            unused,
+            reminderSettings as never,
+        );
         await prisma.$connect();
     });
 
@@ -165,14 +178,26 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
         await prisma.vocabFsrsCard.updateMany({ where: { vocabTrainerId: trainer.id, vocabId: kept }, data: { reps: 4, state: 'REVIEW', stability: 12 } });
 
         // Act
-        await service.update(trainer.id, input({ vocabAssignmentIds: [kept, words[2]] }), user.id);
+        const updated = await service.update(trainer.id, input({ vocabAssignmentIds: [kept, words[2]] }), user.id);
 
         // Assert
+        expect(updated.fsrsSkippedVocabIds).toEqual([]);
         const cards = await cardsOf(trainer.id);
         expect(cards).toHaveLength(4);
         expect(cards.some((c) => c.vocabId === removed)).toBe(false);
         expect(cards.filter((c) => c.vocabId === kept).map((c) => c.reps)).toEqual([4, 4]);
         expect(await prisma.vocabFsrsReviewLog.count({ where: { vocabTrainerId: trainer.id, answerId: 'log-1' } })).toBe(1);
+    });
+
+    test('an update that adds a word without a translation reports it as skipped', async () => {
+        // Arrange
+        const trainer = await service.create(input(), user.id);
+
+        // Act
+        const updated = await service.update(trainer.id, input({ vocabAssignmentIds: [...words, wordWithoutTranslation] }), user.id);
+
+        // Assert
+        expect(updated.fsrsSkippedVocabIds).toEqual([wordWithoutTranslation]);
     });
 
     test('adding a word creates only its cards', async () => {
@@ -549,9 +574,10 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
             // Assert
             expect(reminders.sync).not.toHaveBeenCalled();
             expect(reminders.cancelForTrainer).not.toHaveBeenCalled();
+            expect(reminderSettings.onTrainerRemoved).toHaveBeenCalledWith(classic.id, user.id);
         });
 
-        test('deleting an FSRS trainer cancels its reminders', async () => {
+        test('deleting an FSRS trainer cancels its reminders and hides its bells', async () => {
             // Arrange
             const trainer = await service.create(input(), user.id);
 
@@ -559,7 +585,7 @@ describeWithDb('VocabTrainerService FSRS enrollment (real Postgres)', () => {
             await service.delete(trainer.id, user.id);
 
             // Assert
-            expect(reminders.cancelForTrainer).toHaveBeenCalledWith(trainer.id, 'trainer_deleted');
+            expect(reminderSettings.onTrainerRemoved).toHaveBeenCalledWith(trainer.id, user.id);
         });
     });
 

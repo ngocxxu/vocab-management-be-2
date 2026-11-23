@@ -39,6 +39,10 @@ export interface FillInBlankChoiceGenerationJobData extends VocabTrainerJobMetad
 export interface FillInBlankEvaluationJobData extends VocabTrainerJobMetadata {
     locale?: AppLocale;
     vocabTrainerId: string;
+    /** Whether this attempt counts as a new reminder cycle, decided when the job was queued (#42). Absent on jobs queued before #42: counted. */
+    countsAsAttempt?: boolean;
+    /** The submit time, ISO. A retry that finds this time already on the trainer is a no-op. Absent on older jobs: the job time. */
+    submittedAt?: string;
     evaluations: Array<{
         vocab: VocabWithTextTargets;
         userAnswer: string;

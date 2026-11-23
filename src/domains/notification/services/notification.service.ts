@@ -184,6 +184,11 @@ export class NotificationService {
         return new NotificationDto(notification);
     }
 
+    /** Hides the reminder Bells of one trainer. The rows stay; they stop showing. Returns how many were hidden. */
+    public async hideReminderBells(trainerId: string): Promise<number> {
+        return this.notificationRepository.hideReminderBells(trainerId);
+    }
+
     public async cleanupExpired(): Promise<number> {
         return this.notificationRepository.deleteManyExpired();
     }

@@ -10,7 +10,7 @@ import { ReminderController } from './controllers';
 import { ReminderReconciliationService } from './reconciliation/reminder-reconciliation.service';
 import { ReminderScheduleRepository } from './repositories/reminder-schedule.repository';
 import { SchedulerPollerService } from './scheduler/scheduler-poller.service';
-import { FsrsReminderService, ReminderInAppNotificationService, ReminderService, VocabTrainerReminderAfterExamService } from './services';
+import { FsrsReminderService, ReminderInAppNotificationService, ReminderSendGuardService, ReminderService, VocabTrainerReminderAfterExamService } from './services';
 import { ActedCheckRegistry } from './strategies/acted-check.registry';
 import { VocabTrainerActedCheckStrategy } from './strategies/vocab-trainer-acted-check.strategy';
 
@@ -25,9 +25,18 @@ import { VocabTrainerActedCheckStrategy } from './strategies/vocab-trainer-acted
         VocabTrainerReminderAfterExamService,
         FsrsReminderService,
         ReminderInAppNotificationService,
+        ReminderSendGuardService,
         SchedulerPollerService,
         ReminderReconciliationService,
     ],
-    exports: [ReminderService, ReminderScheduleRepository, VocabTrainerReminderAfterExamService, FsrsReminderService, ReminderInAppNotificationService, ActedCheckRegistry],
+    exports: [
+        ReminderService,
+        ReminderScheduleRepository,
+        VocabTrainerReminderAfterExamService,
+        FsrsReminderService,
+        ReminderInAppNotificationService,
+        ReminderSendGuardService,
+        ActedCheckRegistry,
+    ],
 })
 export class ReminderModule {}

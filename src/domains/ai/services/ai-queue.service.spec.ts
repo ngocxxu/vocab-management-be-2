@@ -2,7 +2,13 @@ import { AiConflictException } from '../exceptions';
 import { AiQueueService } from './ai-queue.service';
 
 describe('AiQueueService', () => {
-    const fibParams = { vocabTrainerId: 't1', userId: 'u1', jobType: 'fill-in-blank', queueName: 'fill-in-blank-evaluation' } as const;
+    const fibParams = {
+        vocabTrainerId: 't1',
+        userId: 'u1',
+        jobType: 'fill-in-blank',
+        queueName: 'fill-in-blank-evaluation',
+        decideAttempt: jest.fn().mockResolvedValue({ countsAsAttempt: true, submittedAt: '2026-11-23T10:00:00.000Z' }),
+    } as const;
 
     const activeJob = (overrides: Record<string, unknown> = {}) => ({
         jobId: 'active-job',
@@ -93,6 +99,54 @@ describe('AiQueueService', () => {
             // Act + Assert
             await expect(service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [] } as never)).rejects.toThrow('redis down');
             expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+        });
+    });
+
+    describe('queueFillInBlankEvaluation: counting decision', () => {
+        const decision = { countsAsAttempt: true, submittedAt: '2026-11-23T10:00:00.000Z' };
+
+        test('decides whether the attempt counts only once the lock is held, and stores the answer in the job', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'new-job' }) });
+            const decideAttempt = jest.fn().mockResolvedValue(decision);
+
+            // Act
+            await service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [], decideAttempt } as never);
+
+            // Assert
+            expect(decideAttempt).toHaveBeenCalledTimes(1);
+            const jobData = fillInBlankProducer.evaluateAnswers.mock.calls[0][0] as Record<string, unknown>;
+            expect(jobData).toMatchObject({ countsAsAttempt: true, submittedAt: decision.submittedAt });
+            expect(jobData).not.toHaveProperty('decideAttempt');
+        });
+
+        test('a submit that re-attaches to the running job never decides, so it cannot count again', async () => {
+            // Arrange
+            const { service, lock } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: false, activeJob: activeJob() });
+            const decideAttempt = jest.fn().mockResolvedValue(decision);
+
+            // Act
+            await service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [], decideAttempt } as never);
+
+            // Assert
+            expect(decideAttempt).not.toHaveBeenCalled();
+        });
+
+        test('a submit refused by another trainer job never decides', async () => {
+            // Arrange
+            const { service, lock } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: false, activeJob: activeJob({ trainerId: 'other' }) });
+            const decideAttempt = jest.fn().mockResolvedValue(decision);
+
+            // Act
+            await expect(service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [], decideAttempt } as never)).rejects.toBeInstanceOf(
+                AiConflictException,
+            );
+
+            // Assert
+            expect(decideAttempt).not.toHaveBeenCalled();
         });
     });
 

@@ -2,17 +2,17 @@ import { LoggerService, PaginationDto } from '@/shared';
 import { getOrderBy, getPagination } from '@/shared/utils';
 import type { AppLocale } from '@/shared/utils/locale.util';
 import { Injectable } from '@nestjs/common';
-import { NotificationAction, NotificationType, PriorityLevel, Prisma, QuestionType, TrainerMode, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, TrainerStatus, User, VocabTrainer } from '@prisma/client';
+import { AiConflictException } from '../../ai/exceptions';
 import { AiService } from '../../ai/services/ai.service';
-import { NotificationService } from '../../notification/services';
-import { FsrsReminderService, VocabTrainerReminderAfterExamService } from '../../reminder/services';
-import { EXPIRES_AT_30_DAYS } from '../../reminder/utils';
+import { FsrsReminderService } from '../../reminder/services';
 import { FsrsMapper } from '../../vocab/mappers/fsrs.mapper';
 import { FsrsRepository } from '../../vocab/repositories/fsrs.repository';
 import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service';
 import {
     CloneVocabTrainerInput,
     ExamJobStatusDto,
+    ReminderPromptInput,
     SubmitExamBodyInput,
     SubmitFillInBlankChoiceInput,
     SubmitFillInBlankInput,
@@ -28,9 +28,12 @@ import { SubmitTranslationAudioResponseDto } from '../dto/submit-translation-aud
 import { VocabTrainerBadRequestException, VocabTrainerNotFoundException, VocabTrainerWordNotFoundException } from '../exceptions';
 import { VocabTrainerMapper } from '../mappers';
 import { VocabTrainerRepository } from '../repositories';
-import { EQuestionType, EReminderRepeat, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
+import { buildVocabIdMap, EQuestionType, evaluateMultipleChoiceAnswers, VocabTrainerWithTypedAnswers, VocabWithTextTargets } from '../utils';
 import { assertTrainerUpdateAllowed, assertValidTrainerCreate } from '../utils/fsrs-trainer-rules';
+import { assertReminderSettings } from '../utils/pass-rules.util';
 import { FsrsDefaultsService } from './fsrs-defaults.service';
+import { VocabTrainerAttemptService } from './vocab-trainer-attempt.service';
+import { VocabTrainerReminderService } from './vocab-trainer-reminder.service';
 
 export interface FlipCardQuestion {
     frontText: string[];
@@ -46,14 +49,14 @@ export class VocabTrainerService {
 
     public constructor(
         private readonly vocabTrainerRepository: VocabTrainerRepository,
-        private readonly vocabTrainerReminderAfterExam: VocabTrainerReminderAfterExamService,
         private readonly aiService: AiService,
-        private readonly notificationService: NotificationService,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly logger: LoggerService,
         private readonly fsrsRepository: FsrsRepository,
         private readonly fsrsDefaultsService: FsrsDefaultsService,
         private readonly fsrsReminderService: FsrsReminderService,
+        private readonly vocabTrainerAttempt: VocabTrainerAttemptService,
+        private readonly vocabTrainerReminder: VocabTrainerReminderService,
     ) {}
 
     /**
@@ -362,6 +365,11 @@ export class VocabTrainerService {
             const { jobId } = await this.aiService.queueFillInBlankEvaluation({
                 locale,
                 vocabTrainerId: trainer.id,
+                // Runs under the user's job lock, and only when this submit starts the job (#42, D-ai).
+                decideAttempt: async () => ({
+                    countsAsAttempt: await this.vocabTrainerAttempt.resolveCountsAsAttempt(trainer.id),
+                    submittedAt: new Date().toISOString(),
+                }),
                 evaluations: evaluationsToProcess.map((item) => ({
                     vocab: item.vocab,
                     userAnswer: item.answerSubmission.userAnswer,
@@ -481,6 +489,7 @@ export class VocabTrainerService {
      */
     public async create(input: VocabTrainerInput, userId: string): Promise<VocabTrainerDto> {
         assertValidTrainerCreate(input);
+        assertReminderSettings(input, { mode: input.mode ?? TrainerMode.CLASSIC });
         if (input.mode === TrainerMode.FSRS) {
             return this.createFsrsTrainer(input, userId);
         }
@@ -497,7 +506,8 @@ export class VocabTrainerService {
     }
 
     /**
-     * Update a vocab trainer
+     * Update a vocab trainer. Status, Passes and the last-remind time are ignored: only an exam changes them (#42).
+     * `reminderDisabled` goes through the same toggle as the prompt, so turning reminders off cancels the pending ones.
      */
     public async update(id: string, input: UpdateVocabTrainerInput, userId?: string): Promise<VocabTrainerDto> {
         const existing = await this.vocabTrainerRepository.findById(id, userId);
@@ -506,13 +516,16 @@ export class VocabTrainerService {
         }
 
         assertTrainerUpdateAllowed(input, existing);
+        assertReminderSettings(input, existing);
 
-        const { vocabAssignmentIds, ...trainerData } = input;
+        const { vocabAssignmentIds, reminderDisabled, ...trainerData } = input;
+        const remindersToggled = reminderDisabled !== undefined && reminderDisabled !== existing.reminderDisabled;
 
+        let skippedVocabIds: string[] | undefined;
         if (vocabAssignmentIds !== undefined) {
             const uniqueVocabIds = [...new Set(vocabAssignmentIds)];
 
-            const updated = await this.vocabTrainerRepository.inTransaction(async (tx) => {
+            await this.vocabTrainerRepository.inTransaction(async (tx) => {
                 const trainerWithAssignments = await this.vocabTrainerRepository.replaceVocabTrainerWordAssignments(
                     tx,
                     id,
@@ -525,22 +538,42 @@ export class VocabTrainerService {
                     throw new VocabTrainerNotFoundException(id);
                 }
 
-                const trainerDto = this.vocabTrainerMapper.toResponse(trainerWithAssignments);
                 if (existing.mode === TrainerMode.FSRS) {
-                    trainerDto.fsrsSkippedVocabIds = await this.enrollFsrsCards(tx, trainerWithAssignments, uniqueVocabIds);
+                    skippedVocabIds = await this.enrollFsrsCards(tx, trainerWithAssignments, uniqueVocabIds);
                 }
-
-                return trainerDto;
             });
-            await this.syncFsrsReminder(existing);
-
-            return updated;
+        } else {
+            await this.vocabTrainerRepository.update(id, this.vocabTrainerMapper.buildUpdateInput(trainerData, existing));
         }
 
-        const trainer = await this.vocabTrainerRepository.update(id, this.vocabTrainerMapper.buildUpdateInput(trainerData, existing));
+        if (remindersToggled) {
+            await this.vocabTrainerReminder.setRemindersEnabled(id, existing.userId, !reminderDisabled);
+        }
         await this.syncFsrsReminder(existing);
 
-        return this.vocabTrainerMapper.toResponse(trainer);
+        const trainer = await this.vocabTrainerRepository.findById(id, userId);
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+
+        const dto = this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+        if (skippedVocabIds !== undefined) {
+            dto.fsrsSkippedVocabIds = skippedVocabIds;
+        }
+
+        return dto;
+    }
+
+    /** Yes/No answer to the reminder prompt of a Classic trainer. Yes keeps reminders on; No turns them off. */
+    public async answerReminderPrompt(id: string, input: ReminderPromptInput, userId: string): Promise<VocabTrainerDto> {
+        await this.vocabTrainerReminder.answerReminderPrompt(id, userId, input.continueReminders);
+
+        const trainer = await this.vocabTrainerRepository.findById(id, userId);
+        if (!trainer) {
+            throw new VocabTrainerNotFoundException(id);
+        }
+
+        return this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
     }
 
     /** Changes the settings of an FSRS trainer that stay editable. Mode and directions are fixed at creation. */
@@ -626,13 +659,11 @@ export class VocabTrainerService {
     }
 
     /**
-     * Delete a vocab trainer
+     * Delete a vocab trainer. Its open reminders are cancelled and its bells hidden, so no reminder goes out for it.
      */
     public async delete(id: string, userId?: string): Promise<VocabTrainerDto> {
         const trainer = await this.vocabTrainerRepository.delete(id, userId);
-        if (trainer.mode === TrainerMode.FSRS) {
-            await this.fsrsReminderService.cancelForTrainer(id, 'trainer_deleted');
-        }
+        await this.vocabTrainerReminder.onTrainerRemoved(trainer.id, trainer.userId);
 
         return this.vocabTrainerMapper.toResponse(trainer);
     }
@@ -661,122 +692,57 @@ export class VocabTrainerService {
             throw new VocabTrainerBadRequestException('wordTestSelects is required for choice-based exam');
         }
 
-        // Map vocabId from questionAnswers or vocabAssignments
-        const questionAnswers = trainer.questionAnswers as Array<{
-            vocabId?: string;
-            correctAnswer?: string;
-            options?: Array<{ label: string; value: string }>;
-        }>;
-
-        const vocabIdMap = new Map<string, string>();
-
-        // Try to get vocabId from questionAnswers first
-        questionAnswers.forEach((q) => {
-            if (q.vocabId && q.correctAnswer) {
-                vocabIdMap.set(q.correctAnswer, q.vocabId);
-            }
-            // Also map from options if available
-            if (q.options) {
-                q.options.forEach((opt) => {
-                    if (q.vocabId) {
-                        vocabIdMap.set(opt.value, q.vocabId);
-                    }
-                });
-            }
-        });
-
-        const trainerWithVocabs = trainer as unknown as VocabTrainer & {
-            vocabAssignments: Array<{ vocab: VocabWithTextTargets }>;
-        };
-        if (trainerWithVocabs.vocabAssignments) {
-            trainerWithVocabs.vocabAssignments.forEach((assignment) => {
-                const vocab = assignment.vocab;
-                vocabIdMap.set(vocab.textSource, vocab.id);
-                vocab.textTargets?.forEach((tt) => {
-                    vocabIdMap.set(tt.textTarget, vocab.id);
-                });
-            });
-        }
+        const vocabIdMap = buildVocabIdMap(trainer.questionAnswers, trainer.vocabAssignments);
 
         // Use the utility function for answer evaluation
         const { createResults, correctAnswers } = evaluateMultipleChoiceAnswers(trainer.id, wordTestSelects, vocabIdMap);
 
-        // Batch insert all results
-        await this.vocabTrainerRepository.deleteResultsByTrainerId(trainer.id);
-        await this.vocabTrainerRepository.createResults(createResults);
-
-        // Update mastery scores for each vocab
-        for (const resultItem of createResults) {
-            const vocabId = (resultItem as Prisma.VocabTrainerResultCreateManyInput & { vocabId?: string }).vocabId;
-            if (vocabId) {
-                const isCorrect = resultItem.status === TrainerStatus.PASSED;
-                await this.vocabMasteryService.updateMastery(vocabId, user.id, isCorrect);
-            }
-        }
-
-        // Calculate overall status
         const totalQuestions = wordTestSelects.length;
         const scorePercentage = (correctAnswers / totalQuestions) * 100;
         const overallStatus = scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
-
-        const passCount = overallStatus === TrainerStatus.PASSED ? (trainer.reminderRepeat || 0) + 1 : trainer.reminderRepeat || 0;
-
-        const shouldDelete = passCount >= Number(EReminderRepeat.MAX_REPEAT);
         const examUrl = `${process.env.FRONTEND_URL}/${trainer.id}/exam/${examQuestionType}`;
 
-        if (shouldDelete) {
-            await this.notificationService.create({
-                type: NotificationType.VOCAB_TRAINER,
-                action: NotificationAction.CREATE,
-                priority: PriorityLevel.LOW,
-                data: {
-                    trainerName: trainer.name,
-                    message: 'Your test has been completed after 6 passes',
-                    completedAt: new Date().toISOString(),
-                },
-                expiresAt: new Date(Date.now() + EXPIRES_AT_30_DAYS),
-                isActive: true,
-                recipientUserIds: [user.id],
-            });
-
-            await this.vocabTrainerRepository.inTransaction(async (tx) => {
-                await this.vocabTrainerReminderAfterExam.cancelSchedulesForTrainerTx(tx, trainer.id, user.id, 'trainer_completed_max_passes');
-                await this.vocabTrainerRepository.deleteVocabTrainerRow(trainer.id, tx);
-            });
-            return this.vocabTrainerMapper.toResponse(trainer as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+        // An AI job of this trainer that is still running owns the attempt, so this submit waits for it (#42, D-mc).
+        const activeAiJob = await this.aiService.getActiveJobForTrainer(user.id, trainer.id);
+        if (activeAiJob) {
+            throw new AiConflictException('An AI job for this trainer is still running. Please wait for it to finish and try again.');
         }
 
-        const result = await this.vocabTrainerRepository.inTransaction(async (tx) => {
-            await this.vocabTrainerReminderAfterExam.syncRemindersAfterExamSubmission(tx, {
-                trainerId: trainer.id,
-                userId: user.id,
-                userEmail: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                trainerName: trainer.name,
-                scorePercentage,
-                examUrl,
-                reminderDisabled: trainer.reminderDisabled,
-            });
+        const submittedAt = new Date();
+        // Count, results and the Pass run in one transaction on the locked trainer row. Two parallel submits count once.
+        const applied = await this.vocabTrainerRepository.inTransaction(async (tx) => {
+            const locked = await this.vocabTrainerRepository.lockAndFindForUpdate(tx, trainer.id);
+            if (!locked) {
+                throw new VocabTrainerNotFoundException(id);
+            }
 
-            return this.vocabTrainerRepository.updateVocabTrainerWithIncludes(
-                trainer.id,
-                {
-                    name: trainer.name,
-                    status: overallStatus,
-                    countTime,
-                    setCountTime: trainer.setCountTime,
-                    reminderRepeat: passCount,
-                    reminderLastRemind: new Date(),
-                    reminderDisabled: false,
-                    lastExamSubmittedAt: new Date(),
-                    updatedAt: new Date(),
-                },
-                tx,
-            );
+            const counts = await this.vocabTrainerAttempt.resolveCountsAsAttempt(trainer.id, tx, submittedAt);
+            await this.vocabTrainerRepository.deleteVocabTrainerResults(trainer.id, tx);
+            await this.vocabTrainerRepository.createVocabTrainerResultsMany(createResults, tx);
+
+            return this.vocabTrainerAttempt.applyAttemptTx(tx, { trainer: locked, user, overallStatus, counts, submittedAt, countTime, examUrl });
         });
 
-        return this.vocabTrainerMapper.toResponse(result as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+        // After the commit, and best effort: a failure here never fails the submit.
+        await this.recordMasteryAfterCommit(createResults, user.id);
+        await this.vocabTrainerAttempt.afterCommit(applied);
+
+        const snapshot = applied.completed ? { ...trainer, status: applied.trainer.status, reminderRepeat: applied.trainer.reminderRepeat } : applied.trainer;
+
+        return this.vocabTrainerMapper.toResponse(snapshot as unknown as ConstructorParameters<typeof VocabTrainerDto>[0]);
+    }
+
+    private async recordMasteryAfterCommit(results: Prisma.VocabTrainerResultCreateManyInput[], userId: string): Promise<void> {
+        for (const result of results) {
+            if (!result.vocabId) {
+                continue;
+            }
+            try {
+                await this.vocabMasteryService.updateMastery(result.vocabId, userId, result.status === TrainerStatus.PASSED);
+            } catch (error: unknown) {
+                this.logger.error(`Mastery update failed after exam for vocab ${result.vocabId}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
     }
 
     /** The trainer and its cards are created together, so an FSRS trainer never exists without the cards of its words. */

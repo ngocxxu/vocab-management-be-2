@@ -41,7 +41,14 @@ function reminderRow(overrides: Partial<ReminderRow> = {}): ReminderRow {
 }
 
 function createFakes(
-    options: { row?: Partial<ReminderRow>; markedSent?: number; sendError?: Error; acted?: boolean; fsrs?: { send: boolean; data?: Record<string, string> } } = {},
+    options: {
+        row?: Partial<ReminderRow>;
+        markedSent?: number;
+        sendError?: Error;
+        acted?: boolean;
+        fsrs?: { send: boolean; data?: Record<string, string> };
+        guard?: { send: true } | { send: false; reason: string };
+    } = {},
 ) {
     const row = reminderRow(options.row);
     const reminders = {
@@ -61,10 +68,19 @@ function createFakes(
     const fsrsReminderService = { prepareSend: jest.fn().mockResolvedValue(options.fsrs ?? { send: true, data: {} }), sync: jest.fn() };
     const inApp = { notifyReminderSent: jest.fn().mockResolvedValue(undefined) };
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const sendGuard = { check: jest.fn().mockResolvedValue(options.guard ?? { send: true }) };
 
-    const processor = new EmailProcessor(emailService as never, logger as never, reminders as never, actedCheckRegistry as never, fsrsReminderService as never, inApp as never);
+    const processor = new EmailProcessor(
+        emailService as never,
+        logger as never,
+        reminders as never,
+        actedCheckRegistry as never,
+        fsrsReminderService as never,
+        inApp as never,
+        sendGuard as never,
+    );
 
-    return { processor, reminders, emailService, inApp };
+    return { processor, reminders, emailService, inApp, sendGuard };
 }
 
 const jobFor = (scheduleId: string) => ({ data: { scheduleId } }) as never;
@@ -125,6 +141,37 @@ describe('EmailProcessor.handleReminderScheduleEmail: bell row', () => {
         // Assert
         expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
         expect(inApp.notifyReminderSent).not.toHaveBeenCalled();
+    });
+});
+
+describe('EmailProcessor.handleReminderScheduleEmail: send guard', () => {
+    it('cancels a reminder whose trainer or user no longer matches, and sends nothing', async () => {
+        // Arrange
+        const { processor, emailService, reminders, inApp } = createFakes({ guard: { send: false, reason: 'trainer_gone' } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(inApp.notifyReminderSent).not.toHaveBeenCalled();
+        expect(reminders.transitionStatus).toHaveBeenCalledWith(
+            's1',
+            ReminderScheduleStatus.SENDING,
+            ReminderScheduleStatus.CANCELLED,
+            expect.objectContaining({ cancelReason: 'trainer_gone' }),
+        );
+    });
+
+    it('sends a reminder that still matches', async () => {
+        // Arrange
+        const { processor, emailService } = createFakes({ guard: { send: true } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).toHaveBeenCalledTimes(1);
     });
 });
 

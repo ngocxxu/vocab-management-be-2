@@ -2,7 +2,7 @@ import { BaseRepository } from '@/database';
 import { PrismaService } from '@/shared';
 import { chunk } from '@/shared/utils';
 import { Injectable } from '@nestjs/common';
-import { Notification, NotificationRecipient, NotificationType, Prisma, UserRole } from '@prisma/client';
+import { Notification, NotificationAction, NotificationRecipient, NotificationType, Prisma, UserRole } from '@prisma/client';
 import { NotificationInput, TBroadcastHistoryRow } from '../dto';
 
 /** Recipient rows per insert. Keeps one statement well under the Postgres bind-parameter limit. */
@@ -216,6 +216,21 @@ export class NotificationRepository extends BaseRepository {
             },
             { timeout: BROADCAST_TRANSACTION_TIMEOUT_MS },
         );
+    }
+
+    /** Hides the Bells of Reminders (action REMIND) of one trainer. Matches on data.trainerId, which every reminder Bell writes. */
+    public async hideReminderBells(trainerId: string): Promise<number> {
+        const result = await this.prisma.notification.updateMany({
+            where: {
+                type: NotificationType.VOCAB_TRAINER,
+                action: NotificationAction.REMIND,
+                isActive: true,
+                data: { path: ['trainerId'], equals: trainerId },
+            },
+            data: { isActive: false },
+        });
+
+        return result.count;
     }
 
     public async deleteManyExpired(): Promise<number> {

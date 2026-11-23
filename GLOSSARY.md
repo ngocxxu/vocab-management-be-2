@@ -93,8 +93,28 @@ A Classic trainer exam submission that scores at least 70%. A Pass is only worth
 _Avoid_: Success, Correct run
 
 **Pass count**:
-How many Passes of a Classic trainer have been counted toward its completion. The trainer is completed and removed when it reaches 6. At most one Pass is counted per Reminder cycle, so opening the same trainer from several Reminders cannot count twice.
-_Avoid_: Repeat count, Reminder repeat (that is the old column name)
+How many Passes of a Classic trainer have been counted toward its completion. The trainer is completed and removed when it reaches its Max passes (T). At most one Pass is counted per Reminder cycle, so repeating the exam cannot count twice.
+_Avoid_: Repeat count, Reminder repeat (that is the old column name, `reminder_repeat`)
+
+**Max passes (T)**:
+The Pass count at which a Classic trainer is completed. Set per trainer, from 3 to 20, default 6. It cannot go below the Passes already earned.
+_Avoid_: Repeat limit, Max repeat (in code the column is `reminder_max_repeat`)
+
+**Spacing (X)**:
+The days from a counted attempt to the next Reminder of a Classic trainer. Set per trainer, from 2 to 30, default 2.
+_Avoid_: Interval, Repeat days
+
+**Counted attempt**:
+An exam submission that starts a new Reminder cycle. Only a counted attempt can add a Pass or move the fail streak. A submission is not counted while a Classic INITIAL Reminder is pending, claimed, queued or sending. With reminders off, it is counted at most once per 24 hours.
+_Avoid_: Valid attempt, Submit (a submit is any attempt, counted or not)
+
+**Fail streak**:
+How many counted attempts in a row ended below 70%. A Pass resets it. At 3, the User is asked whether to keep reminders on.
+_Avoid_: Failure count, Strike
+
+**Reminder prompt**:
+The Yes/No question shown when the fail streak reaches 3 and reminders are on. Yes keeps reminders on and resets the streak. No turns reminders off.
+_Avoid_: Alert, Confirm dialog
 
 **Reminder cycle**:
 One initial Reminder and the escalations that follow it, for one Classic trainer. It is the unit that decides what "the same Reminder" means: a Pass is counted at most once per Reminder cycle, whichever Reminder of the cycle the User opened.
@@ -113,7 +133,7 @@ One planned Reminder for one trainer, due at a set time. It decides whether the 
 _Avoid_: Reminder job, Email job (queue jobs are not part of this language)
 
 **Bell notification**:
-The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent.
+The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent. A Bell is hidden when the User passes, turns reminders off, deletes the trainer or completes it. A Classic Bell lasts 90 days, an FSRS Bell 30 days.
 _Avoid_: In-app reminder, Push (that means a phone push message)
 
 **MCP access**:

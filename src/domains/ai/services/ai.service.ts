@@ -1,3 +1,4 @@
+import type { ActiveVocabTrainerJob } from '../dto/active-vocab-trainer-job.dto';
 import type { AppLocale } from '@/shared/utils/locale.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { ExamJobStatusDto } from '../../vocab-trainer/dto/exam-job-status.dto';
@@ -95,6 +96,10 @@ export class AiService {
 
     public async queueFillInBlankEvaluation(params: QueueFillInBlankEvaluationParams): Promise<QueueJobResult> {
         return this.queueService.queueFillInBlankEvaluation(params);
+    }
+
+    public async getActiveJobForTrainer(userId: string, vocabTrainerId: string): Promise<ActiveVocabTrainerJob | null> {
+        return this.queueService.getActiveJobForTrainer(userId, vocabTrainerId);
     }
 
     public async downloadAudioFromCloudinary(fileId: string): Promise<Buffer> {

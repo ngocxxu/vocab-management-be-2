@@ -22,9 +22,10 @@ function reminderRow(overrides: Record<string, unknown> = {}) {
     };
 }
 
-function createFakes(options: { trainer?: { name: string; questionType: string } | null; createError?: Error; pushError?: Error } = {}) {
+function createFakes(options: { trainer?: { name: string; questionType: string } | null; createError?: Error; pushError?: Error; hideError?: Error } = {}) {
     const notificationService = {
         create: options.createError ? jest.fn().mockRejectedValue(options.createError) : jest.fn().mockResolvedValue({ id: 'n1' }),
+        hideReminderBells: options.hideError ? jest.fn().mockRejectedValue(options.hideError) : jest.fn().mockResolvedValue(2),
     };
     const gateway = {
         sendToUser: jest.fn(() => {
@@ -186,5 +187,66 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
 
         // Assert
         expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('socket closed'));
+    });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe('ReminderInAppNotificationService bell lifetime', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('keeps a classic reminder bell for 90 days', async () => {
+        // Arrange
+        const { service, notificationService } = createFakes();
+        const before = Date.now();
+
+        // Act
+        await service.notifyReminderSent(reminderRow() as never, { testName: 'Exam words' });
+
+        // Assert
+        const { expiresAt } = notificationService.create.mock.calls[0][0] as { expiresAt: Date };
+        expect(expiresAt.getTime() - before).toBeGreaterThanOrEqual(90 * DAY_MS - 1000);
+        expect(expiresAt.getTime() - before).toBeLessThanOrEqual(90 * DAY_MS + 1000);
+    });
+
+    it('keeps an FSRS due bell for 30 days', async () => {
+        // Arrange
+        const { service, notificationService } = createFakes();
+        const before = Date.now();
+
+        // Act
+        await service.notifyReminderSent(reminderRow({ template: FSRS_TEMPLATE, reminderType: ReminderScheduleKind.INITIAL }) as never, {});
+
+        // Assert
+        const { expiresAt } = notificationService.create.mock.calls[0][0] as { expiresAt: Date };
+        expect(expiresAt.getTime() - before).toBeGreaterThanOrEqual(30 * DAY_MS - 1000);
+        expect(expiresAt.getTime() - before).toBeLessThanOrEqual(30 * DAY_MS + 1000);
+    });
+});
+
+describe('ReminderInAppNotificationService.hideTrainerBells', () => {
+    it('hides the reminder bells of the trainer', async () => {
+        // Arrange
+        const { service, notificationService } = createFakes();
+
+        // Act
+        await service.hideTrainerBells('t1');
+
+        // Assert
+        expect(notificationService.hideReminderBells).toHaveBeenCalledWith('t1');
+    });
+
+    it('logs a failure and never throws', async () => {
+        // Arrange
+        const { service, logger } = createFakes({ hideError: new Error('db down') });
+
+        // Act
+        const attempt = service.hideTrainerBells('t1');
+
+        // Assert
+        await expect(attempt).resolves.toBeUndefined();
+        expect(logger.error).toHaveBeenCalled();
     });
 });
