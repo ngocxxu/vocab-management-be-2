@@ -107,7 +107,8 @@ export class FillInBlankEvaluationProcessor {
                 throw new Error(`User ${userId} not found`);
             }
 
-            const outcome = await this.vocabTrainerRepository.inTransaction(async (tx): Promise<ApplyOutcome> => {
+            // Serializable with retry: a write conflict (P2034) runs this callback again. The AI call stays outside it, so it never repeats.
+            const outcome = await this.vocabTrainerRepository.runSerializableWithRetry(async (tx): Promise<ApplyOutcome> => {
                 const trainer = await this.vocabTrainerRepository.lockAndFindForUpdate(tx, vocabTrainerId);
                 if (!trainer) {
                     return { kind: 'deleted' };

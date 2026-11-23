@@ -45,7 +45,7 @@ function createFakes(options: { notificationError?: Error; hideError?: Error } =
         create: options.notificationError ? jest.fn().mockRejectedValue(options.notificationError) : jest.fn().mockResolvedValue({ id: 'n1' }),
     };
     const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn() };
-    const reminderSchedules = { hasInFlightInitial: jest.fn().mockResolvedValue(false) };
+    const reminderSchedules = { hasInFlightInitial: jest.fn().mockResolvedValue(false), findLatestFinalInitialAt: jest.fn().mockResolvedValue(null) };
     const service = new VocabTrainerAttemptService(
         repo as never,
         reminderAfterExam as never,
@@ -86,6 +86,17 @@ describe('VocabTrainerAttemptService.applyAttemptTx', () => {
             {},
         );
         expect(reminderAfterExam.syncRemindersAfterExamSubmission).toHaveBeenCalledWith({}, expect.objectContaining({ trainerId: 't1', spacingDays: 5, reminderDisabled: false }));
+    });
+
+    test('a counted attempt stamps the reminders it cancels with the attempt time', async () => {
+        // Arrange
+        const { service, reminderAfterExam } = createFakes();
+
+        // Act
+        await service.applyAttemptTx({} as never, applyInput(trainerRow()));
+
+        // Assert: a cancel at the same instant as the count must not open the next Pass
+        expect(reminderAfterExam.syncRemindersAfterExamSubmission).toHaveBeenCalledWith({}, expect.objectContaining({ submittedAt: SUBMITTED_AT }));
     });
 
     test('a repeated attempt that does not count never adds a Pass and leaves the reminders alone', async () => {
@@ -203,11 +214,11 @@ describe('VocabTrainerAttemptService.afterCommit', () => {
 });
 
 describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
-    test('a classic trainer with an in-flight reminder does not count the attempt', async () => {
+    test('a repeat while a reminder is pending does not count', async () => {
         // Arrange
         const { service, reminderSchedules, repo } = createFakes();
-        reminderSchedules.hasInFlightInitial.mockResolvedValue(true);
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow());
+        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+        reminderSchedules.findLatestFinalInitialAt.mockResolvedValue(null);
 
         // Act
         const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
@@ -216,10 +227,76 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
         expect(counts).toBe(false);
     });
 
+    test('a Pass counts once a reminder reached a final state after the last count', async () => {
+        // Arrange
+        const { service, reminderSchedules, repo } = createFakes();
+        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 3_600_000) }));
+        reminderSchedules.findLatestFinalInitialAt.mockResolvedValue(new Date(SUBMITTED_AT.getTime() - 60_000));
+
+        // Act
+        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+
+        // Assert
+        expect(counts).toBe(true);
+    });
+
+    test('the final-state lookup runs under the caller transaction', async () => {
+        // Arrange
+        const { service, reminderSchedules, repo } = createFakes();
+        const tx = { tag: 'tx' } as never;
+        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+
+        // Act
+        await service.resolveCountsAsAttempt('t1', tx, SUBMITTED_AT);
+
+        // Assert
+        expect(reminderSchedules.findLatestFinalInitialAt).toHaveBeenCalledWith('t1', tx);
+    });
+
     test('with reminders off, the second attempt within 24 hours does not count', async () => {
         // Arrange
         const { service, repo } = createFakes();
         repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderDisabled: true, reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+
+        // Act
+        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+
+        // Assert
+        expect(counts).toBe(false);
+    });
+
+    test('the in-flight lookup runs under the caller transaction, with reminders on too', async () => {
+        // Arrange
+        const { service, repo, reminderSchedules } = createFakes();
+        const tx = { tag: 'tx' } as never;
+        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+
+        // Act
+        await service.resolveCountsAsAttempt('t1', tx, SUBMITTED_AT);
+
+        // Assert
+        expect(reminderSchedules.hasInFlightInitial).toHaveBeenCalledWith('t1', tx);
+    });
+
+    test('the first Pass is blocked while a classic reminder is in flight', async () => {
+        // Arrange
+        const { service, repo, reminderSchedules } = createFakes();
+        reminderSchedules.hasInFlightInitial.mockResolvedValue(true);
+        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: null }));
+
+        // Act
+        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+
+        // Assert
+        expect(counts).toBe(false);
+    });
+
+    test('a Pass is blocked while a reminder is SENDING, even after a final state came after the last count', async () => {
+        // Arrange
+        const { service, repo, reminderSchedules } = createFakes();
+        reminderSchedules.hasInFlightInitial.mockResolvedValue(true);
+        reminderSchedules.findLatestFinalInitialAt.mockResolvedValue(new Date(SUBMITTED_AT.getTime() - 60_000));
+        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 3_600_000) }));
 
         // Act
         const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);

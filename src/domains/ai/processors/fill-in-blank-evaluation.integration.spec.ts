@@ -1,6 +1,7 @@
 import redisConfig from '@/config/redis.config';
 import { RedisKeyManager, RedisPrefix } from '@/shared';
 import { PrismaService } from '@/shared/services/prisma.service';
+import { Prisma, TrainerStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 import { ReminderScheduleRepository } from '../../reminder/repositories/reminder-schedule.repository';
@@ -20,11 +21,14 @@ const { url: redisUrl } = redisConfig();
 const SPEC_EMAIL = 'ai-count-spec';
 const SUBMITTED_AT = '2026-11-23T10:00:00.000Z';
 
+const writeConflict = () => new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock.', { code: 'P2034', clientVersion: '6.11.1' });
+
 describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redis)', () => {
     let prisma: PrismaService;
     let redis: Redis;
     let lock: VocabTrainerJobLockService;
     let processor: FillInBlankEvaluationProcessor;
+    let attempt: VocabTrainerAttemptService;
     let aiService: { evaluateAllFillInBlankAnswers: jest.Mock };
     let gateway: { emitFillInBlankEvaluationProgress: jest.Mock };
     let user: { id: string; email: string; firstName: string; lastName: string };
@@ -66,7 +70,7 @@ describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redi
         const trainerRepository = new VocabTrainerRepository(prisma);
         const reminderSchedules = new ReminderScheduleRepository(prisma);
         const reminderAfterExam = new VocabTrainerReminderAfterExamService();
-        const attempt = new VocabTrainerAttemptService(
+        attempt = new VocabTrainerAttemptService(
             trainerRepository,
             reminderAfterExam,
             { hideTrainerBells: jest.fn().mockResolvedValue(undefined) } as never,
@@ -183,6 +187,35 @@ describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redi
         expect(result).toEqual({ results: [], trainerDeleted: true });
         expect(aiService.evaluateAllFillInBlankAnswers).not.toHaveBeenCalled();
         expect(await lock.getActiveJob(user.id)).toBeNull();
+    });
+
+    test('a write conflict thrown after the attempt is written rolls it back, and the retry applies it once', async () => {
+        // Arrange: results exist, so the attempt's writes replace them
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue(correctAnswers());
+        await prisma.vocabTrainerResult.createMany({
+            data: words.map((vocabId) => ({ vocabTrainerId: trainerId, vocabId, status: TrainerStatus.FAILED, userSelected: 'seed', systemSelected: 'seed' })),
+        });
+        const original = attempt.applyAttemptTx.bind(attempt) as typeof attempt.applyAttemptTx;
+        const spy = jest.spyOn(attempt, 'applyAttemptTx').mockImplementationOnce(async (tx, input) => {
+            await original(tx, input);
+            // The conflict surfaces after every write of the attempt. The callback fails, so Prisma rolls the attempt back.
+            throw writeConflict();
+        });
+
+        try {
+            // Act
+            await processor.processFillInBlankEvaluation(jobFor() as never);
+
+            // Assert
+            expect(spy).toHaveBeenCalledTimes(2);
+            expect(aiService.evaluateAllFillInBlankAnswers).toHaveBeenCalledTimes(1);
+            expect((await trainerRow()).reminderRepeat).toBe(1);
+            expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId } })).toBe(words.length);
+            expect(await prisma.vocabTrainerResult.count({ where: { vocabTrainerId: trainerId, userSelected: 'seed' } })).toBe(0);
+            expect(await prisma.reminderSchedule.count({ where: { entityId: trainerId, status: 'PENDING' } })).toBe(1);
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('applies the counting decision stored in the job, even when the trainer would count it differently now', async () => {

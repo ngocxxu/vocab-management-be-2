@@ -1,4 +1,5 @@
-import { TrainerMode, TrainerStatus, VocabTrainer } from '@prisma/client';
+import { BaseRepository } from '@/database/base.repository';
+import { Prisma, TrainerMode, TrainerStatus, VocabTrainer } from '@prisma/client';
 import { VocabTrainerBadRequestException, VocabTrainerNotFoundException } from '../exceptions';
 import { VocabTrainerReminderService } from './vocab-trainer-reminder.service';
 
@@ -6,6 +7,27 @@ jest.mock('@/shared/utils/sentry.util', () => ({ captureSentryException: jest.fn
 
 const USER_ID = 'u1';
 const TRAINER_ID = 't1';
+
+// The real retry loop of BaseRepository, run on top of the mocked inTransaction in createFakes.
+type MockTransactions = { inTransaction: (work: (tx: object) => Promise<unknown>) => Promise<unknown> };
+
+/** BaseRepository with its own retry loop. Its transaction is the mocked inTransaction of the caller. */
+class RetryHarness extends BaseRepository {
+    public constructor(private readonly transactions: MockTransactions) {
+        super({} as never);
+    }
+
+    public override async inTransaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+        const result = await this.transactions.inTransaction(work as (tx: object) => Promise<unknown>);
+        return result as T;
+    }
+}
+
+const retryOn = async (transactions: MockTransactions, work: (tx: object) => Promise<unknown>): Promise<unknown> => {
+    const result = await new RetryHarness(transactions).runSerializableWithRetry(work);
+    return result;
+};
+const writeConflict = () => new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock.', { code: 'P2034', clientVersion: '6.11.1' });
 
 function trainerRow(overrides: Partial<VocabTrainer> = {}): VocabTrainer {
     return {
@@ -28,6 +50,10 @@ function createFakes(options: { current?: VocabTrainer; inFlight?: boolean; cont
     const current = options.current ?? trainerRow();
     const repo = {
         inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => fn({})),
+        runSerializableWithRetry: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
+            const result = await retryOn(repo, fn);
+            return result;
+        }),
         lockAndFindForUpdate: jest.fn().mockResolvedValue(current),
         updateVocabTrainerFields: jest.fn((_id: string, data: Record<string, unknown>) => ({ ...current, ...data })),
         findById: jest.fn().mockResolvedValue(current),
@@ -85,6 +111,20 @@ describe('VocabTrainerReminderService.setRemindersEnabled', () => {
             expect.objectContaining({ trainerId: TRAINER_ID, userId: USER_ID, spacingDays: 4, reminderDisabled: false, userEmail: 'learner@example.com' }),
         );
         expect(reminderSchedules.hasInFlightInitial).toHaveBeenCalled();
+    });
+
+    test('a write conflict in the toggle transaction is retried, and the next reminder is planned', async () => {
+        // Arrange
+        const { service, repo, reminderAfterExam } = createFakes({ current: trainerRow({ reminderDisabled: true }) });
+        reminderAfterExam.scheduleInitialTx.mockRejectedValueOnce(writeConflict());
+
+        // Act
+        const updated = await service.setRemindersEnabled(TRAINER_ID, USER_ID, true);
+
+        // Assert
+        expect(repo.runSerializableWithRetry).toHaveBeenCalledTimes(1);
+        expect(reminderAfterExam.scheduleInitialTx).toHaveBeenCalledTimes(2);
+        expect(updated.reminderDisabled).toBe(false);
     });
 
     test('turning reminders on schedules nothing when the trainer has no completed attempt yet', async () => {
