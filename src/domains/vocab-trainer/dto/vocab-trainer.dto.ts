@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { FsrsDirection, TrainerMode, TrainerStatus, VocabTrainer, VocabTrainerWord, VocabTrainerResult, QuestionType } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { shuffleArray } from '../utils';
-import { isReminderPromptPending } from '../utils/pass-rules.util';
+import { isReminderPromptPending, PASS_RULES } from '../utils/pass-rules.util';
 import { FillInBlankQuestionDto } from './fill-in-blank-question.dto';
 import { FlipCardQuestionDto } from './flip-card-question.dto';
 import { MultipleChoiceQuestionDto } from './multiple-choice-question.dto';
@@ -46,8 +46,11 @@ export class VocabTrainerDto {
     @ApiProperty({ description: 'Classic: Passes that complete the trainer (T)' })
     public reminderMaxRepeat: number;
 
-    @ApiProperty({ description: 'Classic: the user must answer whether to keep reminders on (3 failures in a row)' })
+    @ApiProperty({ description: 'Classic: the user must answer whether to keep reminders on (the fail streak reached the prompt limit)' })
     public reminderPromptPending: boolean;
+
+    @ApiProperty({ description: 'Classic: counted failed attempts in a row that ask the reminder question' })
+    public reminderFailStreakForPrompt: number;
 
     @ApiProperty({ description: 'Learning mode', enum: TrainerMode })
     public mode: TrainerMode;
@@ -131,6 +134,7 @@ export class VocabTrainerDto {
         this.reminderSpacingDays = entity.reminderSpacingDays;
         this.reminderMaxRepeat = entity.reminderMaxRepeat;
         this.reminderPromptPending = isReminderPromptPending(entity);
+        this.reminderFailStreakForPrompt = PASS_RULES.failStreakForPrompt;
         this.mode = entity.mode;
         this.fsrsDesiredRetention = entity.fsrsDesiredRetention;
         this.fsrsMaximumInterval = entity.fsrsMaximumInterval;
