@@ -13,6 +13,8 @@ import { decideReminderRetry } from '../utils/reminder-retry.util';
 // Bull states in which the job will still run, so its row is not orphaned.
 // 'stuck' counts as live: Bull's stalled-job check decides what happens to it.
 const LIVE_JOB_STATES = new Set<string>(['waiting', 'delayed', 'active', 'paused', 'stuck']);
+// Rows read per page by the stuck FSRS scan. The scan reads pages until one comes back short.
+const STUCK_FSRS_PAGE_SIZE = 50;
 
 @Injectable()
 export class ReminderReconciliationService implements OnModuleDestroy {
@@ -137,29 +139,43 @@ export class ReminderReconciliationService implements OnModuleDestroy {
         return count;
     }
 
-    /** An FSRS row stuck in SENDING is reported to Sentry once and left as it is. FSRS rows are never re-sent. */
+    /**
+     * An FSRS row stuck in SENDING is reported to Sentry once and left as it is. FSRS rows are never re-sent.
+     * Reads every page in this tick, so a backlog larger than one page is reported too.
+     */
     private async reportStuckFsrs(now: Date): Promise<void> {
         const olderThan = new Date(now.getTime() - REMINDER_CONFIG.reconciliation.stalledSendingAfterMs);
-        const rows = await this.reminderScheduleRepository.findStalledFsrsSending(olderThan, 50);
+        const stillStuck = new Set<string>();
+        let after: { updatedAt: Date; id: string } | undefined;
+        let page: Array<{ id: string; template: string; updatedAt: Date }>;
 
-        for (const row of rows) {
-            if (this.reportedStuckFsrs.has(row.id)) {
-                continue;
+        do {
+            page = await this.reminderScheduleRepository.findStalledFsrsSending(olderThan, STUCK_FSRS_PAGE_SIZE, after);
+
+            for (const row of page) {
+                stillStuck.add(row.id);
+                if (this.reportedStuckFsrs.has(row.id)) {
+                    continue;
+                }
+                this.reportedStuckFsrs.add(row.id);
+                this.logger.error(`Reconciliation: FSRS reminder ${row.id} stuck in SENDING; left unchanged`);
+                captureSentryException(new Error(`FSRS reminder ${row.id} stuck in SENDING`), {
+                    tags: {
+                        'queue.name': EReminderType.EMAIL_REMINDER,
+                        'reminder.schedule_id': row.id,
+                    },
+                    contexts: {
+                        reminder_stuck_sending: { scheduleId: row.id, template: row.template },
+                    },
+                });
             }
-            this.reportedStuckFsrs.add(row.id);
-            this.logger.error(`Reconciliation: FSRS reminder ${row.id} stuck in SENDING; left unchanged`);
-            captureSentryException(new Error(`FSRS reminder ${row.id} stuck in SENDING`), {
-                tags: {
-                    'queue.name': EReminderType.EMAIL_REMINDER,
-                    'reminder.schedule_id': row.id,
-                },
-                contexts: {
-                    reminder_stuck_sending: { scheduleId: row.id, template: row.template },
-                },
-            });
-        }
 
-        const stillStuck = new Set(rows.map((row) => row.id));
+            const last = page[page.length - 1];
+            if (last) {
+                after = { updatedAt: last.updatedAt, id: last.id };
+            }
+        } while (page.length === STUCK_FSRS_PAGE_SIZE);
+
         for (const id of this.reportedStuckFsrs) {
             if (!stillStuck.has(id)) {
                 this.reportedStuckFsrs.delete(id);

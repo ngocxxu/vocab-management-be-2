@@ -105,9 +105,32 @@ describe('ReminderScheduleRepository: first-N queries are ordered', () => {
         // Assert
         expect(prisma.reminderSchedule.findMany).toHaveBeenCalledWith({
             where: { status: ReminderScheduleStatus.SENDING, updatedAt: { lt: olderThan }, template: EEmailTemplate.FSRS_DUE_REMINDER },
-            orderBy: { updatedAt: 'asc' },
+            orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
             take: 50,
-            select: { id: true, template: true },
+            select: { id: true, template: true, updatedAt: true },
+        });
+    });
+
+    it('reads the page after a cursor: rows after its updatedAt, or with the same updatedAt and a larger id', async () => {
+        // Arrange
+        const { repository, prisma } = createRepository();
+        const olderThan = new Date('2026-11-16T09:55:00.000Z');
+        const after = { updatedAt: new Date('2026-11-16T09:50:00.000Z'), id: 'row-7' };
+
+        // Act
+        await repository.findStalledFsrsSending(olderThan, 50, after);
+
+        // Assert
+        expect(prisma.reminderSchedule.findMany).toHaveBeenCalledWith({
+            where: {
+                status: ReminderScheduleStatus.SENDING,
+                updatedAt: { lt: olderThan },
+                template: EEmailTemplate.FSRS_DUE_REMINDER,
+                OR: [{ updatedAt: { gt: after.updatedAt } }, { updatedAt: after.updatedAt, id: { gt: after.id } }],
+            },
+            orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+            take: 50,
+            select: { id: true, template: true, updatedAt: true },
         });
     });
 

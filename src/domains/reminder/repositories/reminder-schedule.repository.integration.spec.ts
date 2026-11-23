@@ -91,7 +91,31 @@ describeWithDb('ReminderScheduleRepository (real Postgres)', () => {
             const found = await repository.findStalledFsrsSending(STUCK_SENDING_CUTOFF, 500);
 
             // Assert
-            expect(found.filter((row) => ourIds.includes(row.id))).toEqual([{ id: stuckFsrs.id, template: EEmailTemplate.FSRS_DUE_REMINDER }]);
+            expect(found.filter((row) => ourIds.includes(row.id))).toEqual([{ id: stuckFsrs.id, template: EEmailTemplate.FSRS_DUE_REMINDER, updatedAt: stuckFsrs.updatedAt }]);
+        });
+
+        test('pages through every stuck FSRS row, oldest first, with no repeats', async () => {
+            // Arrange
+            const oldest = await createRow({ status: ReminderScheduleStatus.SENDING, updatedAt: minutesAgo(30) });
+            const middle = await createRow({ status: ReminderScheduleStatus.SENDING, updatedAt: minutesAgo(20) });
+            const newest = await createRow({ status: ReminderScheduleStatus.SENDING, updatedAt: minutesAgo(10) });
+            const ourIds = [oldest.id, middle.id, newest.id];
+
+            // Act: read pages of 2 the way the reconciliation does, until a short page.
+            const seen: string[] = [];
+            let after: { updatedAt: Date; id: string } | undefined;
+            let page: Array<{ id: string; template: string; updatedAt: Date }>;
+            do {
+                page = await repository.findStalledFsrsSending(STUCK_SENDING_CUTOFF, 2, after);
+                seen.push(...page.map((row) => row.id).filter((id) => ourIds.includes(id)));
+                const last = page[page.length - 1];
+                if (last) {
+                    after = { updatedAt: last.updatedAt, id: last.id };
+                }
+            } while (page.length === 2);
+
+            // Assert: the shared test DB may hold other rows, so only our three ids count.
+            expect(seen).toEqual(ourIds);
         });
     });
 

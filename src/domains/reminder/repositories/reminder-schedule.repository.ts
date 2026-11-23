@@ -248,13 +248,21 @@ export class ReminderScheduleRepository extends BaseRepository {
         });
     }
 
-    /** FSRS rows stuck in SENDING since `olderThan`, oldest first. They are reported, never re-sent. */
-    public async findStalledFsrsSending(olderThan: Date, take: number): Promise<Array<{ id: string; template: string }>> {
+    /**
+     * FSRS rows stuck in SENDING since `olderThan`, oldest first. They are reported, never re-sent.
+     * Pass `after`, the last row of the previous page, to read the next page. The position is (updatedAt, id).
+     */
+    public async findStalledFsrsSending(olderThan: Date, take: number, after?: { updatedAt: Date; id: string }): Promise<Array<{ id: string; template: string; updatedAt: Date }>> {
         return this.prisma.reminderSchedule.findMany({
-            where: { status: ReminderScheduleStatus.SENDING, updatedAt: { lt: olderThan }, template: EEmailTemplate.FSRS_DUE_REMINDER },
-            orderBy: { updatedAt: 'asc' },
+            where: {
+                status: ReminderScheduleStatus.SENDING,
+                updatedAt: { lt: olderThan },
+                template: EEmailTemplate.FSRS_DUE_REMINDER,
+                ...(after && { OR: [{ updatedAt: { gt: after.updatedAt } }, { updatedAt: after.updatedAt, id: { gt: after.id } }] }),
+            },
+            orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
             take,
-            select: { id: true, template: true },
+            select: { id: true, template: true, updatedAt: true },
         });
     }
 

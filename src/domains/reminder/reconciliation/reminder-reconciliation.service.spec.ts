@@ -14,11 +14,24 @@ function fakeJob(state: string): FakeJob {
     return { getState: jest.fn().mockResolvedValue(state) };
 }
 
+type StalledFsrsRow = { id: string; template: string; updatedAt: Date };
+type FsrsCursor = { updatedAt: Date; id: string };
+
+// Serves pages like the real query: rows after the cursor, oldest first, at most `take`.
+function pageStalledFsrs(rows: StalledFsrsRow[], take: number, after?: FsrsCursor): StalledFsrsRow[] {
+    const isAfter = (row: StalledFsrsRow): boolean =>
+        !after || row.updatedAt.getTime() > after.updatedAt.getTime() || (row.updatedAt.getTime() === after.updatedAt.getTime() && row.id > after.id);
+    return rows
+        .filter(isAfter)
+        .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime() || (a.id < b.id ? -1 : 1))
+        .slice(0, take);
+}
+
 function createReconciliation(
     options: {
         queued?: Array<{ id: string; attempt: number }>;
         job?: FakeJob;
-        stalledFsrs?: Array<{ id: string; template: string }>;
+        stalledFsrs?: StalledFsrsRow[];
         stalledClassic?: Array<{ id: string; attempt: number }>;
     } = {},
 ) {
@@ -27,7 +40,7 @@ function createReconciliation(
         releaseStaleClaims: jest.fn().mockResolvedValue(0),
         findQueuedOlderThan: jest.fn().mockResolvedValue(options.queued ?? []),
         recordFailedAttempt: jest.fn().mockResolvedValue(true),
-        findStalledFsrsSending: jest.fn().mockResolvedValue(options.stalledFsrs ?? []),
+        findStalledFsrsSending: jest.fn((_olderThan: Date, take: number, after?: FsrsCursor) => pageStalledFsrs(options.stalledFsrs ?? [], take, after)),
         findStalledClassicSending: jest.fn().mockResolvedValue(options.stalledClassic ?? []),
         collapseOverdueEscalations: jest.fn().mockResolvedValue(0),
         findInitialSentRemindersBefore: jest.fn().mockResolvedValue([]),
@@ -139,7 +152,9 @@ describe('ReminderReconciliationService: stuck FSRS rows in SENDING', () => {
 
     it('reports a stuck FSRS row to Sentry and changes nothing', async () => {
         // Arrange
-        const { service, repository } = createReconciliation({ stalledFsrs: [{ id: 'f1', template: EEmailTemplate.FSRS_DUE_REMINDER }] });
+        const { service, repository } = createReconciliation({
+            stalledFsrs: [{ id: 'f1', template: EEmailTemplate.FSRS_DUE_REMINDER, updatedAt: new Date('2026-11-16T09:00:00.000Z') }],
+        });
 
         // Act
         await service.tick();
@@ -151,7 +166,9 @@ describe('ReminderReconciliationService: stuck FSRS rows in SENDING', () => {
 
     it('reports the same stuck row only once while it stays stuck', async () => {
         // Arrange
-        const { service } = createReconciliation({ stalledFsrs: [{ id: 'f1', template: EEmailTemplate.FSRS_DUE_REMINDER }] });
+        const { service } = createReconciliation({
+            stalledFsrs: [{ id: 'f1', template: EEmailTemplate.FSRS_DUE_REMINDER, updatedAt: new Date('2026-11-16T09:00:00.000Z') }],
+        });
 
         // Act
         await service.tick();
@@ -159,6 +176,24 @@ describe('ReminderReconciliationService: stuck FSRS rows in SENDING', () => {
 
         // Assert
         expect(captureSentryException).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports every stuck FSRS row when the backlog is larger than one page, and never twice', async () => {
+        // Arrange
+        const rows = Array.from({ length: 120 }, (_, index) => ({
+            id: `f${index}`,
+            template: EEmailTemplate.FSRS_DUE_REMINDER,
+            updatedAt: new Date(Date.UTC(2026, 10, 16, 9, 0, index)),
+        }));
+        const { service, repository } = createReconciliation({ stalledFsrs: rows });
+
+        // Act
+        await service.tick();
+        await service.tick();
+
+        // Assert: 50 + 50 + 20 reads per tick, and the second tick reports nothing new.
+        expect(captureSentryException).toHaveBeenCalledTimes(120);
+        expect(repository.findStalledFsrsSending).toHaveBeenCalledTimes(6);
     });
 });
 
