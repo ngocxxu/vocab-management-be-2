@@ -30,6 +30,10 @@ export const REMINDER_CONFIG = {
         intervalMs: 60_000,
         staleClaimedAfterMs: 180_000,
         missingEscalationAfterMs: 3_600_000,
+        // A QUEUED row this old with no live Bull job goes through the shared failure path.
+        orphanedQueuedAfterMs: 120_000,
+        // A SENDING row this old is stuck. FSRS rows are only reported to Sentry, never re-sent.
+        stalledSendingAfterMs: 300_000,
     },
 } as const;
 

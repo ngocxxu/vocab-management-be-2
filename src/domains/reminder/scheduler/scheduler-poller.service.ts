@@ -5,6 +5,11 @@ import { Interval } from '@nestjs/schedule';
 import { ReminderSchedule, ReminderScheduleStatus } from '@prisma/client';
 import { REMINDER_CONFIG } from '../config/reminder.config';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
+
+function errorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
 @Injectable()
 export class SchedulerPollerService implements OnModuleDestroy {
     private stopped = false;
@@ -36,8 +41,7 @@ export class SchedulerPollerService implements OnModuleDestroy {
             // @Interval does not await this method, so an uncaught rejection here
             // would be an unhandled rejection (fatal on Node >= 15) rather than a
             // log line. Same reasoning as the other two @Interval/@Cron methods.
-            const msg = err instanceof Error ? err.message : String(err);
-            this.logger.error(`SchedulerPoller tick failed: ${msg}`);
+            this.logger.error(`SchedulerPoller tick failed: ${errorMessage(err)}`);
         } finally {
             this.processing = false;
         }
@@ -51,10 +55,27 @@ export class SchedulerPollerService implements OnModuleDestroy {
         }
     }
 
+    /**
+     * The row is marked QUEUED before the Bull job is added. If the mark fails, no job is added.
+     * If adding the job fails, the row goes back to PENDING so the next tick can claim it again.
+     */
     private async enqueueOne(row: ReminderSchedule): Promise<void> {
-        let job: { remove: () => Promise<void> } | undefined;
         try {
-            job = await this.emailReminderProducer.enqueueScheduleJobWithReturnJob(
+            const marked = await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED, {
+                lockedBy: null,
+                lockedAt: null,
+            });
+            if (!marked) {
+                return;
+            }
+        } catch (err: unknown) {
+            this.logger.error(`Poller could not mark schedule ${row.id} QUEUED: ${errorMessage(err)}`);
+            return;
+        }
+
+        try {
+            await this.removeFinishedJob(row.id);
+            await this.emailReminderProducer.enqueueScheduleJobWithReturnJob(
                 { scheduleId: row.id },
                 {
                     jobId: `reminder-schedule-${row.id}`,
@@ -62,25 +83,33 @@ export class SchedulerPollerService implements OnModuleDestroy {
                     removeOnComplete: true,
                 },
             );
-            const migrated = await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.QUEUED, {
+        } catch (err: unknown) {
+            this.logger.error(`Poller enqueue failed for schedule ${row.id}: ${errorMessage(err)}`);
+            await this.revertToPending(row.id);
+        }
+    }
+
+    /** Bull will not add a job whose id is already taken, even by a finished job. The finished one is removed first. */
+    private async removeFinishedJob(scheduleId: string): Promise<void> {
+        const existing = await this.emailReminderProducer.getReminderScheduleJob(scheduleId);
+        if (!existing) {
+            return;
+        }
+
+        const state = await existing.getState();
+        if (state === 'failed' || state === 'completed') {
+            await existing.remove();
+        }
+    }
+
+    private async revertToPending(scheduleId: string): Promise<void> {
+        try {
+            await this.reminderScheduleRepository.transitionStatus(scheduleId, ReminderScheduleStatus.QUEUED, ReminderScheduleStatus.PENDING, {
                 lockedBy: null,
                 lockedAt: null,
             });
-            if (!migrated && job) {
-                await job.remove();
-                this.logger.warn(`Poller: stale claim for schedule ${row.id}, removed duplicate job`);
-            }
         } catch (err: unknown) {
-            if (job) {
-                try {
-                    await job.remove();
-                } catch {
-                    /* ignore */
-                }
-            }
-            await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.CLAIMED, ReminderScheduleStatus.PENDING, { lockedBy: null, lockedAt: null });
-            const msg = err instanceof Error ? err.message : String(err);
-            this.logger.error(`Poller enqueue failed for schedule ${row.id}: ${msg}`);
+            this.logger.error(`Poller could not revert schedule ${scheduleId} to PENDING: ${errorMessage(err)}`);
         }
     }
 }
