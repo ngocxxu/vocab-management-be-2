@@ -1,3 +1,4 @@
+import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { EEmailTemplate } from '../../../reminder/utils';
 import { EmailTemplates } from './email.templates';
 
@@ -50,6 +51,14 @@ describe('FSRS due reminder template', () => {
         expect(onlyNew).toContain('new questions ready');
         expect(onlyReview).not.toMatch(/new questions? ready/);
         expect(onlyReview).toContain('questions to review');
+    });
+
+    test('states the stop limit from the reminder config', () => {
+        // Act
+        const html = EmailTemplates.render(EEmailTemplate.FSRS_DUE_REMINDER, data);
+
+        // Assert
+        expect(html).toContain(`we stop after ${REMINDER_CONFIG.fsrs.maxIgnoredInRow} emails in a row`);
     });
 });
 

@@ -1,4 +1,5 @@
 import { escapeHtml, toSafeHttpUrl } from '@/shared/utils/html.util';
+import { REMINDER_CONFIG } from '../../../reminder/config/reminder.config';
 import { EEmailTemplate } from '../../../reminder/utils';
 import { TemplateData } from '../utils/type';
 
@@ -82,7 +83,10 @@ export class EmailTemplates {
               </table>
               ${EmailTemplates.ctaButton(data.reviewUrl, 'Review now')}
             `,
-            footerNote: "You get at most one email a day for a trainer, and we stop after 3 emails in a row that you didn't act on. Turn reminders off in the trainer settings.",
+            footerNote: [
+                `You get at most one email a day for a trainer, and we stop after ${REMINDER_CONFIG.fsrs.maxIgnoredInRow} emails in a row that you didn't act on.`,
+                'Turn reminders off in the trainer settings.',
+            ].join(' '),
         });
     }
 
