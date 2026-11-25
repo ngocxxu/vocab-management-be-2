@@ -1,17 +1,20 @@
 import { AiFillInBlankGradingService } from './ai-fill-in-blank-grading.service';
 
 describe('AiFillInBlankGradingService prompt', () => {
-    const generateContent = jest.fn().mockResolvedValue('{"items":[]}');
+    // One item for the one submitted answer, so the strict reply check passes.
+    const reply = JSON.stringify({ items: [{ answerIndex: 0, difference: 'none', isCorrect: true, explanation: 'Good.' }] });
+    const generateContent = jest.fn().mockResolvedValue(reply);
     const providerFactory = { getProvider: jest.fn().mockResolvedValue({ generateContent }) };
     const languageNameService = { getLanguageName: jest.fn().mockResolvedValue('Korean') };
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
 
     let service: AiFillInBlankGradingService;
 
     beforeEach(() => {
         jest.clearAllMocks();
         providerFactory.getProvider.mockResolvedValue({ generateContent });
-        generateContent.mockResolvedValue('{"items":[]}');
-        service = new AiFillInBlankGradingService(providerFactory as never, languageNameService as never);
+        generateContent.mockResolvedValue(reply);
+        service = new AiFillInBlankGradingService(logger as never, providerFactory as never, languageNameService as never);
     });
 
     // A sentence-length Korean answer: not an exact-match case, so it goes to the AI prompt.

@@ -16,7 +16,7 @@ import { isAttemptApplied, isSupersededAttempt } from '../../vocab-trainer/utils
 import { AiService } from '../services/ai.service';
 import { GradingNotificationService } from '../services/grading-notification.service';
 import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
-import { classifyAiJobFailure, mayRecordGradingFailure, recordGradingFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
+import { aiCallFailureKind, classifyAiJobFailure, mayRecordGradingFailure, recordGradingFailure, requireAllGraded, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
 
 type ResultData = { explanation?: string; content?: string | null };
 
@@ -48,6 +48,8 @@ export class FillInBlankEvaluationProcessor {
     public async processFillInBlankEvaluation(job: Job<FillInBlankEvaluationJobData>): Promise<object> {
         const { vocabTrainerId, evaluations, answerSubmissions, userId, lockToken } = job.data;
         const jobId = String(job.id ?? '');
+        // Bull counts the failed attempts so far, so this run is the next one.
+        const attemptNumber = job.attemptsMade + 1;
         // The decision and the submit time were stored when the job was queued. This run applies them, it never decides again.
         const countsAsAttempt = job.data.countsAsAttempt ?? true;
         const submittedAt = new Date(job.data.submittedAt ?? job.timestamp);
@@ -91,12 +93,15 @@ export class FillInBlankEvaluationProcessor {
                     })),
                     userId,
                     job.data.locale,
+                    { jobId, attempt: attemptNumber },
                 ),
                 'Fill-in-blank evaluation',
             );
+            // A submitted answer with no result fails this attempt (retryable). Nothing is written from a guessed grade.
+            const grades = requireAllGraded(evaluationResults, evaluations.length);
 
             const createResults = evaluations.map((evaluation, index) => {
-                const result = evaluationResults[index] || { isCorrect: false };
+                const result = grades[index];
                 return {
                     vocabTrainerId,
                     vocabId: evaluation.vocabId,
@@ -109,7 +114,7 @@ export class FillInBlankEvaluationProcessor {
             });
             const completedResults: CompletedPayload = { results: createResults.map((result) => this.toResultPayload(result)) };
 
-            const correctAnswers = evaluationResults.filter((r) => r.isCorrect).length;
+            const correctAnswers = grades.filter((r) => r.isCorrect).length;
             const scorePercentage = (correctAnswers / answerSubmissions.length) * 100;
             const overallStatus = scorePercentage >= 70 ? TrainerStatus.PASSED : TrainerStatus.FAILED;
 
@@ -172,9 +177,11 @@ export class FillInBlankEvaluationProcessor {
             return this.complete(userId, jobId, lockToken, completedResults);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Fill-in-blank evaluation job ${job.id} failed: ${errorMessage}`);
-
             const { permanent, finalAttempt } = classifyAiJobFailure(job, error);
+            // One line per failed attempt. The kind comes from the error class only: the message can quote the student's answer, so it is not logged.
+            const errorName = error instanceof Error ? error.name : typeof error;
+            this.logger.error(`Fill-in-blank evaluation job ${jobId} attempt ${attemptNumber} failed: kind=${aiCallFailureKind(error)} error=${errorName} final=${finalAttempt}`);
+
             if (finalAttempt) {
                 // Written before the event, so a client that asks next sees grading_failed. It never blocks the lock release.
                 // A stale job writes only when no other job holds the user's lock: that job owns the submit now (#17).

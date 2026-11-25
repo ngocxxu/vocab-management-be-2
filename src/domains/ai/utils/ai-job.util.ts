@@ -17,6 +17,57 @@ export class AiCallTimeoutError extends Error {
     }
 }
 
+/** The AI reply has no result for a submitted answer. The attempt fails and Bull retries it. Nothing is graded from a guess. */
+export class AiIncompleteResponseError extends Error {
+    public constructor(missingCount: number, expectedCount: number) {
+        super(`AI reply is incomplete: ${missingCount} of ${expectedCount} answers have no result`);
+        this.name = 'AiIncompleteResponseError';
+    }
+}
+
+/** Returns every result in order. Throws when a submitted answer has none: a missing result is never replaced by a default grade. */
+export function requireAllGraded<T>(results: ReadonlyArray<T | undefined>, expectedCount: number): T[] {
+    const graded: T[] = [];
+    let missingCount = 0;
+
+    for (let index = 0; index < expectedCount; index += 1) {
+        const result = results[index];
+        if (result === undefined) {
+            missingCount += 1;
+        } else {
+            graded.push(result);
+        }
+    }
+
+    if (missingCount > 0) {
+        throw new AiIncompleteResponseError(missingCount, expectedCount);
+    }
+
+    return graded;
+}
+
+export type AiCallFailureKind = 'timeout' | 'incomplete' | 'other';
+
+/**
+ * The kind shown in the failure log line. It comes from the error class only. Error text can quote the student's answer
+ * (a JSON parse error quotes part of the reply), so the text is never logged.
+ */
+export function aiCallFailureKind(error: unknown): AiCallFailureKind {
+    if (error instanceof AiCallTimeoutError) {
+        return 'timeout';
+    }
+    if (error instanceof AiIncompleteResponseError) {
+        return 'incomplete';
+    }
+    return 'other';
+}
+
+/** Who made an AI call, for the diagnostics line. It is never sent to the provider. */
+export interface AiCallTrace {
+    jobId: string;
+    attempt: number;
+}
+
 // ponytail: Promise.race cannot cancel the underlying request; it keeps running and its result is ignored.
 export async function withAiCallTimeout<T>(promise: Promise<T>, label: string, timeoutMs = VOCAB_TRAINER_AI_CONFIG.AI_CALL_TIMEOUT_SECONDS * 1000): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
