@@ -348,6 +348,7 @@ model VocabTrainer {
 
   vocabAssignments VocabTrainerWord[]
   results          VocabTrainerResult[]
+  attempt          VocabTrainerAttempt?
   fsrsReviewLogs   VocabFsrsReviewLog[]
 
   userId String @map("user_id")
@@ -406,6 +407,28 @@ model VocabTrainerResult {
   @@index([status])
   @@index([createdAt])
   @@map("vocab_trainer_result")
+}
+
+/// The latest AI-graded submit (fill-in-blank or audio) of one trainer. One row per trainer, replaced by the next submit.
+/// Holds the answers and the question snapshot, so a failed grading can be redone later.
+/// The CHECK constraints (kind, grading_status, regrade_count) are hand-written in the migration.
+model VocabTrainerAttempt {
+  id              String       @id @default(cuid()) @map("id")
+  trainerId       String       @unique @map("trainer_id")
+  trainer         VocabTrainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  userId          String       @map("user_id")
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind            String       @map("kind") // 'fill-in-blank' | 'audio'
+  submittedAt     DateTime     @map("submitted_at") @db.Timestamptz // The submit time; a job is stale when it differs from this
+  countsAsAttempt Boolean      @map("counts_as_attempt") // Decided at submit. A regrade reuses it and never re-checks the trainer
+  gradingStatus   String       @map("grading_status") // 'grading' | 'graded' | 'grading_failed'
+  regradeCount    Int          @default(0) @map("regrade_count") // Regrades used, 0 to 2
+  answersSnapshot Json         @map("answers_snapshot") // Question snapshot and the user's answers, enough to queue the job again
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("vocab_trainer_attempt")
 }
 
 model TextTarget {
@@ -554,6 +577,7 @@ model User {
   notificationRecipients NotificationRecipient[]
   vocabs                 Vocab[]
   vocabTrainers          VocabTrainer[]
+  vocabTrainerAttempts   VocabTrainerAttempt[]
   subjects               Subject[]
   userFcmTokens          UserFcmToken[]
   languageFolders        LanguageFolder[]

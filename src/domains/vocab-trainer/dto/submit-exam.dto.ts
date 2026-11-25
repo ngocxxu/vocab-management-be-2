@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { QuestionType } from '@prisma/client';
-import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateIf, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayNotEmpty, IsArray, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, MaxLength, ValidateIf, ValidateNested } from 'class-validator';
 
 export class WordTestSelectItem {
     @ApiProperty()
@@ -25,6 +25,17 @@ export class WordTestBlankItem {
     @IsString()
     @IsNotEmpty()
     public systemAnswer: string;
+
+    @ApiPropertyOptional({
+        description: 'Question text, for display on the result page only. Never graded. Trimmed, max 500 characters.',
+        maxLength: 500,
+        nullable: true,
+    })
+    @IsOptional()
+    @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+    @IsString()
+    @MaxLength(500)
+    public content?: string;
 }
 
 export class SubmitExamInput {

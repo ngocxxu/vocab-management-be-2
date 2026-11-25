@@ -8,6 +8,7 @@ describe('AiQueueService', () => {
         jobType: 'fill-in-blank',
         queueName: 'fill-in-blank-evaluation',
         decideAttempt: jest.fn().mockResolvedValue({ countsAsAttempt: true, submittedAt: '2026-11-23T10:00:00.000Z' }),
+        recordAttempt: jest.fn().mockResolvedValue(jest.fn().mockResolvedValue(undefined)),
     } as const;
 
     const activeJob = (overrides: Record<string, unknown> = {}) => ({
@@ -147,6 +148,128 @@ describe('AiQueueService', () => {
 
             // Assert
             expect(decideAttempt).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('queueFillInBlankEvaluation: recording the submit (#17)', () => {
+        const decision = { countsAsAttempt: true, submittedAt: '2026-11-23T10:00:00.000Z' };
+
+        test('records the submit after the lock is held and before the job is queued', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'new-job' }) });
+            const recordAttempt = jest.fn().mockResolvedValue(jest.fn().mockResolvedValue(undefined));
+            const order: string[] = [];
+            recordAttempt.mockImplementation(() => {
+                order.push('record');
+                return jest.fn().mockResolvedValue(undefined);
+            });
+            fillInBlankProducer.evaluateAnswers.mockImplementation(() => {
+                order.push('enqueue');
+                return { jobId: 'new-job' };
+            });
+
+            // Act
+            await service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [], recordAttempt } as never);
+
+            // Assert
+            expect(recordAttempt).toHaveBeenCalledWith(decision);
+            expect(order).toEqual(['record', 'enqueue']);
+        });
+
+        test('undoes the recorded submit and releases the lock when enqueueing fails', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'new-job' }) });
+            const undo = jest.fn().mockResolvedValue(undefined);
+            const recordAttempt = jest.fn().mockResolvedValue(undo);
+            fillInBlankProducer.evaluateAnswers.mockRejectedValue(new Error('redis down'));
+
+            // Act
+            await expect(service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [], recordAttempt } as never)).rejects.toThrow('redis down');
+
+            // Assert
+            expect(undo).toHaveBeenCalledTimes(1);
+            expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+        });
+
+        test('a failing record releases the lock and queues nothing', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'new-job' }) });
+            const recordAttempt = jest.fn().mockRejectedValue(new Error('db down'));
+
+            // Act
+            await expect(service.queueFillInBlankEvaluation({ ...fibParams, evaluations: [], answerSubmissions: [], recordAttempt } as never)).rejects.toThrow('db down');
+
+            // Assert
+            expect(fillInBlankProducer.evaluateAnswers).not.toHaveBeenCalled();
+            expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+        });
+    });
+
+    describe('queueRegrade (#17)', () => {
+        const regradeParams = (claim: jest.Mock) => ({
+            userId: 'u1',
+            vocabTrainerId: 't1',
+            jobType: 'fill-in-blank' as const,
+            queueName: 'fill-in-blank-evaluation' as const,
+            claim,
+        });
+        const payload = { vocabTrainerId: 't1', userId: 'u1', submittedAt: '2026-11-23T10:00:00.000Z', countsAsAttempt: true, evaluations: [], answerSubmissions: [] };
+
+        test('queues the claimed payload with the job id and lock token of this lock', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'regrade-job' }) });
+            const claim = jest.fn().mockResolvedValue({ payload, rollback: jest.fn() });
+
+            // Act
+            const result = await service.queueRegrade(regradeParams(claim) as never);
+
+            // Assert
+            expect(result).toEqual({ jobId: 'regrade-job' });
+            expect(fillInBlankProducer.evaluateAnswers).toHaveBeenCalledWith(
+                expect.objectContaining({ ...payload, jobType: 'fill-in-blank', queueName: 'fill-in-blank-evaluation', jobId: 'regrade-job', lockToken: 'tok' }),
+                { jobId: 'regrade-job' },
+            );
+        });
+
+        test('never re-attaches: a running job of the same trainer is a conflict', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: false, activeJob: activeJob() });
+            const claim = jest.fn();
+
+            // Act + Assert
+            await expect(service.queueRegrade(regradeParams(claim) as never)).rejects.toBeInstanceOf(AiConflictException);
+            expect(claim).not.toHaveBeenCalled();
+            expect(fillInBlankProducer.evaluateAnswers).not.toHaveBeenCalled();
+        });
+
+        test('a claim that fails releases the lock and queues nothing', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'regrade-job' }) });
+            const claim = jest.fn().mockRejectedValue(new Error('not regradable'));
+
+            // Act + Assert
+            await expect(service.queueRegrade(regradeParams(claim) as never)).rejects.toThrow('not regradable');
+            expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+            expect(fillInBlankProducer.evaluateAnswers).not.toHaveBeenCalled();
+        });
+
+        test('an enqueue that fails rolls the claim back and releases the lock', async () => {
+            // Arrange
+            const { service, lock, fillInBlankProducer } = build();
+            lock.acquireOrGetActive.mockResolvedValue({ acquired: true, job: activeJob({ jobId: 'regrade-job' }) });
+            const rollback = jest.fn().mockResolvedValue(undefined);
+            fillInBlankProducer.evaluateAnswers.mockRejectedValue(new Error('redis down'));
+
+            // Act + Assert
+            await expect(service.queueRegrade(regradeParams(jest.fn().mockResolvedValue({ payload, rollback })) as never)).rejects.toThrow('redis down');
+            expect(rollback).toHaveBeenCalledTimes(1);
+            expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
         });
     });
 

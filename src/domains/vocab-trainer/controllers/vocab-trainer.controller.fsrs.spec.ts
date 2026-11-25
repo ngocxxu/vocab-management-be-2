@@ -9,7 +9,7 @@ import { FsrsReminderService } from '../../reminder/services';
 import { FsrsSessionService } from '../../vocab/services/fsrs-session.service';
 import { FsrsStatsService } from '../../vocab/services/fsrs-stats.service';
 import { VocabTrainerWordNotFoundException } from '../exceptions';
-import { VocabTrainerService } from '../services';
+import { VocabTrainerRegradeService, VocabTrainerService } from '../services';
 import { VocabTrainerController } from './vocab-trainer.controller';
 
 describe('VocabTrainerController FSRS routes', () => {
@@ -27,6 +27,7 @@ describe('VocabTrainerController FSRS routes', () => {
             providers: [
                 { provide: LoggerService, useValue: { info: jest.fn() } },
                 { provide: VocabTrainerService, useValue: vocabTrainerService },
+                { provide: VocabTrainerRegradeService, useValue: {} },
                 { provide: FsrsSessionService, useValue: fsrsSessionService },
                 { provide: FsrsStatsService, useValue: fsrsStatsService },
                 { provide: FsrsReminderService, useValue: fsrsReminderService },

@@ -22,6 +22,8 @@ export interface AudioEvaluationJobData extends VocabTrainerJobMetadata {
     targetAudience?: string;
     userId: string;
     vocabTrainerId: string;
+    /** The submit time, ISO. The processor writes only while the stored submit still has this time (#17). Absent on older jobs: the job time. */
+    submittedAt?: string;
 }
 
 export interface MultipleChoiceGenerationJobData extends VocabTrainerJobMetadata {
@@ -49,10 +51,14 @@ export interface FillInBlankEvaluationJobData extends VocabTrainerJobMetadata {
         systemAnswer: string;
         questionType: 'textSource' | 'textTarget';
         vocabId: string;
+        /** Question text for display only. Copied to the stored result, never sent to the grader (#17). */
+        content?: string | null;
     }>;
     answerSubmissions: Array<{
         userAnswer: string;
         systemAnswer: string;
+        /** Question text for display only, null when the client sent none. Kept in the attempt snapshot (#17). */
+        content?: string | null;
     }>;
     userId: string;
 }

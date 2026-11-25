@@ -34,7 +34,7 @@ import { SubmitTranslationAudioInput } from '../dto/submit-translation-audio.dto
 import { UpdateVocabTrainerInput } from '../dto/update-vocab-trainer.input';
 import { VocabTrainerQueryParamsInput } from '../dto/vocab-trainer-query-params.input';
 import { VocabTrainerPipe } from '../pipes/vocab-trainer.pipe';
-import { VocabTrainerService } from '../services';
+import { VocabTrainerRegradeService, VocabTrainerService } from '../services';
 
 @Controller('vocab-trainers')
 @ApiTags('vocab-trainer')
@@ -43,6 +43,7 @@ export class VocabTrainerController {
     public constructor(
         private readonly logger: LoggerService,
         private readonly vocabTrainerService: VocabTrainerService,
+        private readonly vocabTrainerRegradeService: VocabTrainerRegradeService,
         private readonly fsrsSessionService: FsrsSessionService,
         private readonly fsrsStatsService: FsrsStatsService,
         private readonly fsrsReminderService: FsrsReminderService,
@@ -117,6 +118,18 @@ export class VocabTrainerController {
         } else {
             throw new BadRequestException('Question type is not suitable');
         }
+    }
+
+    @Post(':id/exam/regrade')
+    @Throttle({ default: { limit: 10, ttl: 60000 } })
+    @UseGuards(RolesGuard)
+    @Roles([UserRole.ADMIN, UserRole.MEMBER, UserRole.GUEST])
+    @ApiOperation({ summary: 'Regrade the latest AI-graded submit whose grading failed (the stored answers are used; at most 2 regrades per submit)' })
+    @ApiResponse({ status: HttpStatus.OK, type: VocabTrainerDto })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Vocab trainer not found' })
+    @ApiResponse({ status: HttpStatus.CONFLICT, description: 'The grading did not fail, no regrade is left, or another AI job is running' })
+    public async regradeExam(@Param('id') id: string, @CurrentUser() user: User): Promise<VocabTrainerDto> {
+        return this.vocabTrainerRegradeService.regrade(id, user);
     }
 
     @Post()

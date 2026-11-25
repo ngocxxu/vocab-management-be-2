@@ -1,4 +1,4 @@
-import { TrainerMode, VocabTrainer } from '@prisma/client';
+import { TrainerMode, VocabTrainer, VocabTrainerAttempt } from '@prisma/client';
 import { VocabTrainerBadRequestException } from '../exceptions';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -64,6 +64,14 @@ export function hasReachedMaxRepeat(passes: number, maxRepeat: number): boolean 
  */
 export function isAttemptApplied(trainer: Pick<VocabTrainer, 'lastExamSubmittedAt'>, submittedAt: Date): boolean {
     return trainer.lastExamSubmittedAt !== null && trainer.lastExamSubmittedAt.getTime() === submittedAt.getTime();
+}
+
+/**
+ * A job whose submit is no longer the trainer's latest one (a newer submit replaced it). Such a job writes nothing and counts no Pass (#17).
+ * No stored submit means the job was queued before the attempt table existed: it is not superseded, so it may write.
+ */
+export function isSupersededAttempt(attempt: Pick<VocabTrainerAttempt, 'submittedAt'> | null, submittedAt: Date): boolean {
+    return attempt !== null && attempt.submittedAt.getTime() !== submittedAt.getTime();
 }
 
 export interface ReminderSettingsInput {

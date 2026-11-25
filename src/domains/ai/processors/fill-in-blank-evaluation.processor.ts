@@ -12,16 +12,19 @@ import { VocabMasteryService } from '../../vocab/services/vocab-mastery.service'
 import { VocabTrainerRepository } from '../../vocab-trainer/repositories';
 import { AttemptOutcome, VocabTrainerAttemptService } from '../../vocab-trainer/services/vocab-trainer-attempt.service';
 import { EQuestionType } from '../../vocab-trainer/utils';
-import { isAttemptApplied } from '../../vocab-trainer/utils/pass-rules.util';
+import { isAttemptApplied, isSupersededAttempt } from '../../vocab-trainer/utils/pass-rules.util';
 import { AiService } from '../services/ai.service';
+import { GradingNotificationService } from '../services/grading-notification.service';
 import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
-import { classifyAiJobFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
+import { classifyAiJobFailure, mayRecordGradingFailure, recordGradingFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
 
-type ResultPayload = { status: TrainerStatus; userSelected: string; systemSelected: string; data?: { explanation?: string } };
+type ResultData = { explanation?: string; content?: string | null };
 
-type CompletedPayload = { results: ResultPayload[]; trainerDeleted?: boolean };
+type ResultPayload = { status: TrainerStatus; userSelected: string; systemSelected: string; data?: ResultData };
 
-type ApplyOutcome = { kind: 'deleted' } | { kind: 'already-applied' } | { kind: 'applied'; attempt: AttemptOutcome };
+type CompletedPayload = { results: ResultPayload[]; trainerDeleted?: boolean; superseded?: boolean };
+
+type ApplyOutcome = { kind: 'deleted' } | { kind: 'already-applied' } | { kind: 'superseded' } | { kind: 'applied'; attempt: AttemptOutcome };
 
 @Injectable()
 @Processor(EReminderType.FILL_IN_BLANK_EVALUATION)
@@ -35,6 +38,7 @@ export class FillInBlankEvaluationProcessor {
         private readonly userRepository: UserRepository,
         private readonly vocabMasteryService: VocabMasteryService,
         private readonly vocabTrainerAttempt: VocabTrainerAttemptService,
+        private readonly gradingNotifications: GradingNotificationService,
     ) {}
 
     @Process({
@@ -68,6 +72,12 @@ export class FillInBlankEvaluationProcessor {
                 const stored = await this.vocabTrainerRepository.findResultsByTrainerId(vocabTrainerId);
                 return this.complete(userId, jobId, lockToken, { results: stored.map((row) => this.toResultPayload(row)) });
             }
+            // A newer submit replaced this one: do not call the AI for it (the check under the row lock below is the guard).
+            const latest = await this.vocabTrainerRepository.findAttemptByTrainerId(vocabTrainerId, userId);
+            if (isSupersededAttempt(latest, submittedAt)) {
+                this.logger.warn(`Fill-in-blank job ${jobId} is superseded by a newer submit of trainer ${vocabTrainerId}: skipped`);
+                return this.complete(userId, jobId, lockToken, { results: [], superseded: true });
+            }
 
             this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'evaluating');
 
@@ -93,7 +103,8 @@ export class FillInBlankEvaluationProcessor {
                     status: result.isCorrect ? TrainerStatus.PASSED : TrainerStatus.FAILED,
                     userSelected: evaluation.userAnswer,
                     systemSelected: evaluation.systemAnswer,
-                    data: { explanation: result.explanation || undefined },
+                    // The question text is stored for display only. It is never used for the status above (#17).
+                    data: { explanation: result.explanation || undefined, content: evaluation.content ?? null },
                 };
             });
             const completedResults: CompletedPayload = { results: createResults.map((result) => this.toResultPayload(result)) };
@@ -116,6 +127,11 @@ export class FillInBlankEvaluationProcessor {
                 if (isAttemptApplied(trainer, submittedAt)) {
                     return { kind: 'already-applied' };
                 }
+                // Read under the trainer row lock, so a newer submit cannot land between this check and the write (#17).
+                const latestSubmit = await this.vocabTrainerRepository.findAttemptByTrainerId(vocabTrainerId, userId, tx);
+                if (isSupersededAttempt(latestSubmit, submittedAt)) {
+                    return { kind: 'superseded' };
+                }
 
                 await this.vocabTrainerRepository.deleteVocabTrainerResults(vocabTrainerId, tx);
                 await this.vocabTrainerRepository.createVocabTrainerResultsMany(createResults, tx);
@@ -128,6 +144,8 @@ export class FillInBlankEvaluationProcessor {
                     countTime: trainer.countTime,
                     examUrl: `${process.env.FRONTEND_URL}/${trainer.id}/exam/${EQuestionType.FILL_IN_THE_BLANK}`,
                 });
+                // Same transaction as the results: a graded submit always has its results (#17).
+                await this.vocabTrainerRepository.markAttemptGraded(vocabTrainerId, userId, submittedAt, tx);
 
                 return { kind: 'applied', attempt };
             });
@@ -139,9 +157,17 @@ export class FillInBlankEvaluationProcessor {
             if (outcome.kind === 'already-applied') {
                 return this.complete(userId, jobId, lockToken, completedResults);
             }
+            if (outcome.kind === 'superseded') {
+                this.logger.warn(`Fill-in-blank job ${jobId} was superseded while it ran: nothing written, no Pass counted`);
+                return this.complete(userId, jobId, lockToken, { results: [], superseded: true });
+            }
 
             await this.recordMastery(createResults, userId);
             await this.vocabTrainerAttempt.afterCommit(outcome.attempt);
+            // A completed trainer row is deleted and its completion bell already says so: no result bell for it.
+            if (!outcome.attempt.completed) {
+                await this.gradingNotifications.notifyGraded({ trainerId: vocabTrainerId, userId, trainerName: outcome.attempt.trainerName, examType: 'fill-in-blank' });
+            }
 
             return this.complete(userId, jobId, lockToken, completedResults);
         } catch (error) {
@@ -150,6 +176,18 @@ export class FillInBlankEvaluationProcessor {
 
             const { permanent, finalAttempt } = classifyAiJobFailure(job, error);
             if (finalAttempt) {
+                // Written before the event, so a client that asks next sees grading_failed. It never blocks the lock release.
+                // A stale job writes only when no other job holds the user's lock: that job owns the submit now (#17).
+                if (await mayRecordGradingFailure(error, async () => this.vocabTrainerJobLockService.getActiveJob(userId))) {
+                    const marked = await recordGradingFailure(
+                        async () => this.vocabTrainerRepository.markAttemptGradingFailed(vocabTrainerId, userId, submittedAt),
+                        this.logger,
+                        jobId,
+                    );
+                    if (marked) {
+                        await this.gradingNotifications.notifyFailed({ trainerId: vocabTrainerId, userId, examType: 'fill-in-blank' });
+                    }
+                }
                 this.notificationGateway.emitFillInBlankEvaluationProgress(userId, jobId, 'failed', { error: errorMessage });
                 await this.vocabTrainerJobLockService.releaseIfOwned(userId, lockToken);
             } else {
@@ -190,17 +228,22 @@ export class FillInBlankEvaluationProcessor {
             status: result.status,
             userSelected: result.userSelected,
             systemSelected: result.systemSelected,
-            data: this.toExplanation(result.data),
+            data: this.toResultData(result.data),
         };
     }
 
-    /** Stored results keep the explanation as JSON; only a string explanation is sent back. */
-    private toExplanation(data: unknown): { explanation?: string } | undefined {
+    /** Stored results keep the explanation and question text as JSON; only string or null values are sent back. */
+    private toResultData(data: unknown): ResultData | undefined {
         if (typeof data !== 'object' || data === null) {
             return undefined;
         }
-        const explanation = (data as { explanation?: unknown }).explanation;
+        const { explanation, content } = data as { explanation?: unknown; content?: unknown };
+        const explanationText = typeof explanation === 'string' ? explanation : undefined;
+        const contentText = typeof content === 'string' || content === null ? content : undefined;
+        if (explanationText === undefined && contentText === undefined) {
+            return undefined;
+        }
 
-        return typeof explanation === 'string' ? { explanation } : undefined;
+        return { explanation: explanationText, content: contentText };
     }
 }

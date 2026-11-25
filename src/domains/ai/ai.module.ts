@@ -31,6 +31,7 @@ import { AiQueueService } from './services/ai-queue.service';
 import { AiTranslationEvaluationService } from './services/ai-translation-evaluation.service';
 import { AiTranslationService } from './services/ai-translation.service';
 import { AiService } from './services/ai.service';
+import { GradingNotificationService } from './services/grading-notification.service';
 import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.service';
 
 @Module({
@@ -64,6 +65,7 @@ import { VocabTrainerJobLockService } from './services/vocab-trainer-job-lock.se
         AiAudioService,
         AiTranslationEvaluationService,
         VocabTrainerJobLockService,
+        GradingNotificationService,
         AiQueueService,
         AiService,
         AudioEvaluationProcessor,
