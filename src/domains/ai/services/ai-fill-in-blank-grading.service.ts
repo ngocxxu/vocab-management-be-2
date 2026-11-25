@@ -1,6 +1,9 @@
+import { IAiProvider } from '@/domains/ai/providers/ai-provider.interface';
+import { AiCallTrace, requireAllGraded } from '@/domains/ai/utils/ai-job.util';
+import { LoggerService } from '@/shared';
 import { appMessage } from '@/shared/utils/app-messages.util';
 import { AppLocale, DEFAULT_APP_LOCALE, LOCALE_LANGUAGE_NAMES } from '@/shared/utils/locale.util';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { VocabWithTextTargets } from '../../vocab-trainer/utils';
 import { AiProviderFactory } from '../providers/ai-provider.factory';
 import { unwrapItems } from '../utils/ai-items.util';
@@ -50,11 +53,10 @@ export function resolveIsCorrect(item: GradingItem, isLatinScript: boolean): boo
 
 @Injectable()
 export class AiFillInBlankGradingService {
-    private readonly logger = new Logger(AiFillInBlankGradingService.name);
-
     private readonly latinScriptLanguageCodes = new Set(['en', 'es', 'fr', 'de', 'it', 'pt', 'vi']);
 
     public constructor(
+        private readonly logger: LoggerService,
         private readonly providerFactory: AiProviderFactory,
         private readonly languageNameService: AiLanguageNameService,
     ) {}
@@ -68,6 +70,7 @@ export class AiFillInBlankGradingService {
         }>,
         userId?: string,
         locale: AppLocale = DEFAULT_APP_LOCALE,
+        trace?: AiCallTrace,
     ): Promise<Array<{ isCorrect: boolean; explanation?: string }>> {
         if (evaluations.length === 0) return [];
 
@@ -123,7 +126,7 @@ export class AiFillInBlankGradingService {
             llmIsLatinScript.push(useLowercase);
         }
 
-        if (llmEvaluations.length === 0) return results.map((r) => r ?? { isCorrect: false });
+        if (llmEvaluations.length === 0) return requireAllGraded(results, evaluations.length);
 
         const evaluationDetailsPromises = llmEvaluations.map(async (evaluationItem, idx) => {
             const vocab = evaluationItem.vocab as unknown as VocabForTextTargets;
@@ -208,23 +211,38 @@ Explanation must be in ${explanationLanguage}, short and encouraging. When the a
 }
 `;
 
+        // No try/catch here: the processor logs the one failure line and classifies the error. Errors pass through unchanged.
+        const startedAt = Date.now();
+        const provider = await this.providerFactory.getProvider(userId);
+        const text = await provider.generateContent(prompt, userId, { json: true });
+        const elapsedMs = Date.now() - startedAt;
+        const batchResponse = unwrapItems(parseJsonOrThrow<unknown>(text), isGradingItem);
+
+        llmEvaluations.forEach((_, llmIdx) => {
+            const originalIdx = llmIndexMap[llmIdx];
+            // The first item with this answerIndex wins. A missing item is caught by requireAllGraded below and is never filled in.
+            const responseItem = batchResponse.find((item) => item.answerIndex === llmIdx);
+            if (responseItem) {
+                results[originalIdx] = { isCorrect: resolveIsCorrect(responseItem, llmIsLatinScript[llmIdx]), explanation: responseItem.explanation ?? undefined };
+            }
+        });
+
+        const graded = requireAllGraded(results, evaluations.length);
+        const modelName = await this.readModelName(provider, userId);
+        this.logger.info(
+            `Fill-in-blank AI call ok: jobId=${trace?.jobId ?? 'n/a'} attempt=${trace?.attempt ?? 'n/a'} provider=${provider.constructor.name} ` +
+                `model=${modelName} blanks=${llmEvaluations.length} promptChars=${prompt.length} elapsedMs=${elapsedMs}`,
+        );
+
+        return graded;
+    }
+
+    /** Diagnostics only: a failed model lookup is logged as "unknown" and never fails a graded answer. */
+    private async readModelName(provider: IAiProvider, userId?: string): Promise<string> {
         try {
-            const provider = await this.providerFactory.getProvider(userId);
-            const text = await provider.generateContent(prompt, userId, { json: true });
-            const batchResponse = unwrapItems(parseJsonOrThrow<unknown>(text), isGradingItem);
-
-            llmEvaluations.forEach((_, llmIdx) => {
-                const originalIdx = llmIndexMap[llmIdx];
-                const responseItem = batchResponse.find((item) => item.answerIndex === llmIdx);
-                results[originalIdx] = responseItem
-                    ? { isCorrect: resolveIsCorrect(responseItem, llmIsLatinScript[llmIdx]), explanation: responseItem.explanation ?? undefined }
-                    : { isCorrect: false };
-            });
-
-            return results.map((r) => r ?? { isCorrect: false });
-        } catch (error) {
-            this.logger.error('Error evaluating fill-in-blank answers in batch:', error);
-            throw error;
+            return await provider.getModelName(userId);
+        } catch {
+            return 'unknown';
         }
     }
 }

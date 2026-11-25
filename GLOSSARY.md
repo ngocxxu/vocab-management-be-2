@@ -76,6 +76,14 @@ _Avoid_: Done, Finished, Error state
 What a client can ask for an Exam job after missing its live progress events: `evaluating` or `generating` while in flight, a Terminal status, or `unknown` when the job has expired or belongs to someone else.
 _Avoid_: Job state (Bull's own state names are not part of this language)
 
+**Grading status**:
+Where the grading of one exam submission stands: _grading_ (in progress), _graded_, or _grading failed_. Grading failed is a Terminal status for that submission, and it can be moved on by a Regrade.
+_Avoid_: Grade state, Result status
+
+**Regrade**:
+A User-started repeat of grading for the latest submission of an exam whose grading failed. A submission can be regraded at most twice.
+_Avoid_: Retry grading, Re-grade (say Regrade)
+
 **FSRS trainer**:
 A vocab trainer that schedules each word by how well it is remembered, instead of asking its words in one fixed pass. Not a Classic trainer.
 _Avoid_: Space repetition trainer, SRS trainer (in code and docs: say FSRS)

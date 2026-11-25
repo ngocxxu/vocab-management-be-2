@@ -4,13 +4,14 @@ describe('AiFillInBlankGradingService exact match (th/ko)', () => {
     const generateContent = jest.fn();
     const providerFactory = { getProvider: jest.fn().mockResolvedValue({ generateContent }) };
     const languageNameService = { getLanguageName: jest.fn().mockResolvedValue('Thai') };
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
 
     let service: AiFillInBlankGradingService;
 
     beforeEach(() => {
         jest.clearAllMocks();
         providerFactory.getProvider.mockResolvedValue({ generateContent });
-        service = new AiFillInBlankGradingService(providerFactory as never, languageNameService as never);
+        service = new AiFillInBlankGradingService(logger as never, providerFactory as never, languageNameService as never);
     });
 
     const thaiVocab = (textTarget: string) => ({

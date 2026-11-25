@@ -1,4 +1,5 @@
 import { BaseRepository } from '@/database/base.repository';
+import { VOCAB_TRAINER_AI_CONFIG } from '@/domains/ai/constants/vocab-trainer-job.constants';
 import { Prisma } from '@prisma/client';
 import { StaleAiJobError } from '../utils/ai-job.util';
 import { FillInBlankEvaluationProcessor } from './fill-in-blank-evaluation.processor';
@@ -391,6 +392,197 @@ describe('FillInBlankEvaluationProcessor counting', () => {
     });
 });
 
+describe('FillInBlankEvaluationProcessor AI timeout and incomplete replies (#18)', () => {
+    const AI_CALL_TIMEOUT_MS = VOCAB_TRAINER_AI_CONFIG.AI_CALL_TIMEOUT_SECONDS * 1000;
+    type Grade = { isCorrect: boolean; explanation?: string };
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    const jobAt = (attemptsMade: number, data: Record<string, unknown> = {}) => ({
+        id: 'j1',
+        data: { ...jobData, ...data },
+        attemptsMade,
+        opts: { attempts: 3 },
+        discard: jest.fn(),
+        timestamp: 0,
+    });
+
+    /** One attempt whose AI call never answers. Moves the fake clock past the AI call timeout and resolves with the error the attempt threw. */
+    const runAttemptWithHangingAi = async (processor: FillInBlankEvaluationProcessor, job: object): Promise<unknown> => {
+        const outcome = processor.processFillInBlankEvaluation(job as never).then(
+            () => undefined,
+            (error: unknown) => error,
+        );
+        await jest.advanceTimersByTimeAsync(0);
+        await jest.advanceTimersByTimeAsync(AI_CALL_TIMEOUT_MS);
+        return outcome;
+    };
+
+    test('a hanging AI call on attempt 1 is retried quietly: no failed event, no discard, lock kept', async () => {
+        // Arrange
+        const { processor, gateway, lock, aiService } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockReturnValue(new Promise<Grade[]>(() => undefined));
+        const job = jobAt(0);
+
+        // Act
+        const error = await runAttemptWithHangingAi(processor, job);
+
+        // Assert
+        expect(error).toHaveProperty('name', 'AiCallTimeoutError');
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'evaluating');
+        expect(gateway.emitFillInBlankEvaluationProgress).not.toHaveBeenCalledWith('u1', 'j1', 'failed', expect.anything());
+        expect(lock.releaseIfOwned).not.toHaveBeenCalled();
+        expect(job.discard).not.toHaveBeenCalled();
+    });
+
+    test('a hanging AI call on attempt 2 is retried quietly too', async () => {
+        // Arrange
+        const { processor, gateway, lock, aiService } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockReturnValue(new Promise<Grade[]>(() => undefined));
+        const job = jobAt(1);
+
+        // Act
+        const error = await runAttemptWithHangingAi(processor, job);
+
+        // Assert
+        expect(error).toHaveProperty('name', 'AiCallTimeoutError');
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'evaluating');
+        expect(gateway.emitFillInBlankEvaluationProgress).not.toHaveBeenCalledWith('u1', 'j1', 'failed', expect.anything());
+        expect(lock.releaseIfOwned).not.toHaveBeenCalled();
+        expect(job.discard).not.toHaveBeenCalled();
+    });
+
+    test('a hanging AI call on attempt 3 fails: grading_failed and a failed event, no result rows, no Pass', async () => {
+        // Arrange
+        const { processor, gateway, lock, aiService, trainerRepository, attempt } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockReturnValue(new Promise<Grade[]>(() => undefined));
+
+        // Act
+        const error = await runAttemptWithHangingAi(processor, jobAt(2));
+
+        // Assert
+        expect(error).toHaveProperty('name', 'AiCallTimeoutError');
+        expect(trainerRepository.markAttemptGradingFailed).toHaveBeenCalledWith('t1', 'u1', new Date(SUBMITTED_AT));
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'failed', { error: 'Fill-in-blank evaluation timed out after 30000ms' });
+        expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
+        expect(trainerRepository.runSerializableWithRetry).not.toHaveBeenCalled();
+        expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
+        expect(attempt.applyAttemptTx).not.toHaveBeenCalled();
+        expect(attempt.afterCommit).not.toHaveBeenCalled();
+    });
+
+    test('a late reply to an abandoned AI call is ignored: the final attempt still fails and writes nothing', async () => {
+        // Arrange
+        const { processor, gateway, aiService, trainerRepository, attempt } = buildProcessorFor({});
+        let replyLate: (grades: Grade[]) => void = () => undefined;
+        aiService.evaluateAllFillInBlankAnswers.mockReturnValue(
+            new Promise<Grade[]>((resolve) => {
+                replyLate = resolve;
+            }),
+        );
+
+        // Act
+        const error = await runAttemptWithHangingAi(processor, jobAt(2));
+        replyLate([{ isCorrect: true, explanation: 'late' }]);
+        await jest.advanceTimersByTimeAsync(0);
+
+        // Assert
+        expect(error).toHaveProperty('name', 'AiCallTimeoutError');
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'failed', expect.anything());
+        expect(gateway.emitFillInBlankEvaluationProgress).not.toHaveBeenCalledWith('u1', 'j1', 'completed', expect.anything());
+        expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
+        expect(trainerRepository.runSerializableWithRetry).not.toHaveBeenCalled();
+        expect(attempt.applyAttemptTx).not.toHaveBeenCalled();
+    });
+
+    test('a partial AI reply fails the attempt as retryable: no failed event, no discard, nothing written', async () => {
+        // Arrange: one answer was sent, the reply has no result for it
+        const { processor, gateway, lock, aiService, trainerRepository, attempt } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([]);
+        const job = jobAt(0);
+
+        // Act & Assert
+        await expect(processor.processFillInBlankEvaluation(job as never)).rejects.toHaveProperty('name', 'AiIncompleteResponseError');
+        expect(job.discard).not.toHaveBeenCalled();
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'evaluating');
+        expect(gateway.emitFillInBlankEvaluationProgress).not.toHaveBeenCalledWith('u1', 'j1', 'failed', expect.anything());
+        expect(lock.releaseIfOwned).not.toHaveBeenCalled();
+        expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
+        expect(trainerRepository.runSerializableWithRetry).not.toHaveBeenCalled();
+        expect(attempt.applyAttemptTx).not.toHaveBeenCalled();
+    });
+
+    test('a partial AI reply on the final attempt marks grading_failed and writes no result rows', async () => {
+        // Arrange
+        const { processor, gateway, aiService, trainerRepository, attempt } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([]);
+
+        // Act & Assert
+        await expect(processor.processFillInBlankEvaluation(jobAt(2) as never)).rejects.toHaveProperty('name', 'AiIncompleteResponseError');
+        expect(trainerRepository.markAttemptGradingFailed).toHaveBeenCalledWith('t1', 'u1', new Date(SUBMITTED_AT));
+        expect(gateway.emitFillInBlankEvaluationProgress).toHaveBeenLastCalledWith('u1', 'j1', 'failed', expect.anything());
+        expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
+        expect(attempt.applyAttemptTx).not.toHaveBeenCalled();
+    });
+
+    test('passes the job id and the attempt number to the AI call, for the diagnostics line', async () => {
+        // Arrange
+        const { processor, aiService } = buildProcessorFor({});
+
+        // Act
+        await processor.processFillInBlankEvaluation(jobAt(1) as never);
+
+        // Assert: attemptsMade 1 means this run is attempt 2
+        expect(aiService.evaluateAllFillInBlankAnswers).toHaveBeenCalledWith(expect.any(Array), 'u1', undefined, { jobId: 'j1', attempt: 2 });
+    });
+
+    test('a timeout logs one failure line with kind=timeout, the attempt and the job id', async () => {
+        // Arrange
+        const { processor, aiService, logger } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockReturnValue(new Promise<Grade[]>(() => undefined));
+
+        // Act
+        await runAttemptWithHangingAi(processor, jobAt(0));
+
+        // Assert
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(logger.error).toHaveBeenCalledWith('Fill-in-blank evaluation job j1 attempt 1 failed: kind=timeout error=AiCallTimeoutError final=false');
+    });
+
+    test('an incomplete reply on the final attempt logs kind=incomplete', async () => {
+        // Arrange
+        const { processor, aiService, logger } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([]);
+
+        // Act
+        await expect(processor.processFillInBlankEvaluation(jobAt(2) as never)).rejects.toThrow();
+
+        // Assert
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(logger.error).toHaveBeenCalledWith('Fill-in-blank evaluation job j1 attempt 3 failed: kind=incomplete error=AiIncompleteResponseError final=true');
+    });
+
+    test('a provider error logs kind=other and never its text, which can echo the student answer', async () => {
+        // Arrange
+        const { processor, aiService, logger } = buildProcessorFor({});
+        aiService.evaluateAllFillInBlankAnswers.mockRejectedValue(new SyntaxError('Unexpected token S in JSON: SECRET-ANSWER-TEXT'));
+        const job = jobAt(0, { evaluations: [{ ...jobData.evaluations[0], userAnswer: 'SECRET-ANSWER-TEXT' }] });
+
+        // Act
+        await expect(processor.processFillInBlankEvaluation(job as never)).rejects.toThrow(SyntaxError);
+
+        // Assert
+        expect(logger.error).toHaveBeenCalledWith('Fill-in-blank evaluation job j1 attempt 1 failed: kind=other error=SyntaxError final=false');
+        expect(JSON.stringify(logger.error.mock.calls)).not.toContain('SECRET-ANSWER-TEXT');
+    });
+});
+
 function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; lockedTrainer?: Record<string, unknown> | null; aiError?: Error }) {
     const gateway = { emitFillInBlankEvaluationProgress: jest.fn() };
     const lock = { isOwner: jest.fn().mockResolvedValue(true), refreshLock: jest.fn(), releaseIfOwned: jest.fn(), getActiveJob: jest.fn().mockResolvedValue(null) };
@@ -446,5 +638,5 @@ function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; loc
         notifications as never,
     );
 
-    return { processor, gateway, lock, aiService, trainerRepository, attempt, notifications };
+    return { processor, gateway, lock, aiService, trainerRepository, attempt, notifications, logger };
 }

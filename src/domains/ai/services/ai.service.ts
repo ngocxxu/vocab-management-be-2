@@ -1,4 +1,5 @@
 import type { ActiveVocabTrainerJob } from '../dto/active-vocab-trainer-job.dto';
+import type { AiCallTrace } from '@/domains/ai/utils/ai-job.util';
 import type { AppLocale } from '@/shared/utils/locale.util';
 import { Injectable, Logger } from '@nestjs/common';
 import { ExamJobStatusDto } from '../../vocab-trainer/dto/exam-job-status.dto';
@@ -75,8 +76,9 @@ export class AiService {
         }>,
         userId?: string,
         locale?: AppLocale,
+        trace?: AiCallTrace,
     ): Promise<Array<{ isCorrect: boolean; explanation?: string }>> {
-        return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId, locale);
+        return this.fillInBlankGradingService.evaluateAllFillInBlankAnswers(evaluations, userId, locale, trace);
     }
 
     public async getExamJobStatus(userId: string, vocabTrainerId: string, jobId: string): Promise<ExamJobStatusDto> {
