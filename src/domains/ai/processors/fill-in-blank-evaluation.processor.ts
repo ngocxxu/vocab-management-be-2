@@ -18,7 +18,9 @@ import { GradingNotificationService } from '../services/grading-notification.ser
 import { VocabTrainerJobLockService } from '../services/vocab-trainer-job-lock.service';
 import { classifyAiJobFailure, mayRecordGradingFailure, recordGradingFailure, StaleAiJobError, withAiCallTimeout } from '../utils/ai-job.util';
 
-type ResultPayload = { status: TrainerStatus; userSelected: string; systemSelected: string; data?: { explanation?: string } };
+type ResultData = { explanation?: string; content?: string | null };
+
+type ResultPayload = { status: TrainerStatus; userSelected: string; systemSelected: string; data?: ResultData };
 
 type CompletedPayload = { results: ResultPayload[]; trainerDeleted?: boolean; superseded?: boolean };
 
@@ -226,17 +228,22 @@ export class FillInBlankEvaluationProcessor {
             status: result.status,
             userSelected: result.userSelected,
             systemSelected: result.systemSelected,
-            data: this.toExplanation(result.data),
+            data: this.toResultData(result.data),
         };
     }
 
-    /** Stored results keep the explanation as JSON; only a string explanation is sent back. */
-    private toExplanation(data: unknown): { explanation?: string } | undefined {
+    /** Stored results keep the explanation and question text as JSON; only string or null values are sent back. */
+    private toResultData(data: unknown): ResultData | undefined {
         if (typeof data !== 'object' || data === null) {
             return undefined;
         }
-        const explanation = (data as { explanation?: unknown }).explanation;
+        const { explanation, content } = data as { explanation?: unknown; content?: unknown };
+        const explanationText = typeof explanation === 'string' ? explanation : undefined;
+        const contentText = typeof content === 'string' || content === null ? content : undefined;
+        if (explanationText === undefined && contentText === undefined) {
+            return undefined;
+        }
 
-        return typeof explanation === 'string' ? { explanation } : undefined;
+        return { explanation: explanationText, content: contentText };
     }
 }

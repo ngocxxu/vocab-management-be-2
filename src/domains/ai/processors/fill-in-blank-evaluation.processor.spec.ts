@@ -374,6 +374,21 @@ describe('FillInBlankEvaluationProcessor counting', () => {
         expect(attempt.afterCommit).toHaveBeenCalledTimes(1);
         expect(result).toEqual(expect.objectContaining({ results: expect.any(Array) }));
     });
+
+    test('the completed payload carries each question text, so a socket client can show the prompt without a refetch', async () => {
+        // Arrange
+        const { processor, aiService } = build({});
+        aiService.evaluateAllFillInBlankAnswers.mockResolvedValue([{ isCorrect: true, explanation: 'ok' }]);
+        const evaluation = { ...jobData.evaluations[0], content: 'Please turn off the light' };
+
+        // Act
+        const result = await processor.processFillInBlankEvaluation(jobWith({ evaluations: [evaluation] }) as never);
+
+        // Assert
+        expect(result).toEqual({
+            results: [expect.objectContaining({ data: { explanation: 'ok', content: 'Please turn off the light' } })],
+        });
+    });
 });
 
 function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; lockedTrainer?: Record<string, unknown> | null; aiError?: Error }) {
