@@ -67,7 +67,7 @@ function createFakes(options: { current?: VocabTrainer; inFlight?: boolean; cont
         findUserContact: jest.fn().mockResolvedValue(options.contact === false ? null : { email: 'learner@example.com', firstName: 'Ada', lastName: 'Lovelace' }),
         cancelByEntity: options.cancelError ? jest.fn().mockRejectedValue(options.cancelError) : jest.fn().mockResolvedValue(0),
     };
-    const reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined) };
+    const reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined), hideAllTrainerBells: jest.fn().mockResolvedValue(undefined) };
     const fsrsReminder = { sync: jest.fn().mockResolvedValue(undefined) };
     const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn() };
     const service = new VocabTrainerReminderService(
@@ -253,7 +253,7 @@ describe('VocabTrainerReminderService.answerReminderPrompt', () => {
 });
 
 describe('VocabTrainerReminderService.onTrainerRemoved', () => {
-    test('a deleted trainer cancels every open reminder and hides its bells', async () => {
+    test('a deleted trainer cancels every open reminder and hides all its bells, grading bells too', async () => {
         // Arrange
         const { service, reminderSchedules, reminderInApp } = createFakes();
 
@@ -262,7 +262,8 @@ describe('VocabTrainerReminderService.onTrainerRemoved', () => {
 
         // Assert
         expect(reminderSchedules.cancelByEntity).toHaveBeenCalledWith('vocab_trainer', TRAINER_ID, 'trainer_deleted', USER_ID);
-        expect(reminderInApp.hideTrainerBells).toHaveBeenCalledWith(TRAINER_ID);
+        expect(reminderInApp.hideAllTrainerBells).toHaveBeenCalledWith(TRAINER_ID);
+        expect(reminderInApp.hideTrainerBells).not.toHaveBeenCalled();
     });
 
     test('a failed cancel is logged, not thrown, because the trainer is already gone', async () => {

@@ -56,7 +56,7 @@ export class GradingNotificationService {
             if (!attempt || attempt.regradeCount > 0) {
                 return;
             }
-            const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdMinimal(notice.trainerId);
+            const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdForUserMinimal(notice.trainerId, notice.userId);
             if (!trainer) {
                 return;
             }
@@ -64,6 +64,7 @@ export class GradingNotificationService {
         });
     }
 
+    /** Writes the bell, then checks the trainer. A trainer deleted during the insert gets its bells hidden, and no push (as the Reminder bell does). */
     private async createBell(userId: string, kind: string, trainerId: string, trainerName: string, examType: GradedExamType): Promise<void> {
         const data = { kind, trainerId, trainerName, examType };
         await this.notificationService.create({
@@ -75,6 +76,14 @@ export class GradingNotificationService {
             isActive: true,
             recipientUserIds: [userId],
         });
+
+        const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdForUserMinimal(trainerId, userId);
+        if (!trainer) {
+            this.logger.info(`Grading bell of trainer ${trainerId} hidden: the trainer was deleted during the insert`);
+            await this.notificationService.hideAllTrainerBells(trainerId);
+            return;
+        }
+
         this.notificationGateway.sendToUser(userId, kind, data);
     }
 

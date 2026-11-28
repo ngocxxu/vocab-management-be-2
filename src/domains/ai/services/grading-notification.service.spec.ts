@@ -10,6 +10,7 @@ interface SetupOptions {
     attempt?: { regradeCount: number } | null;
     trainer?: { name: string } | null;
     createError?: Error;
+    hideError?: Error;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -17,10 +18,11 @@ function setup(options: SetupOptions = {}) {
     const trainer = options.trainer === undefined ? { name: 'Animals' } : options.trainer;
     const repository = {
         findAttemptByTrainerId: jest.fn().mockResolvedValue(attempt),
-        findVocabTrainerByIdMinimal: jest.fn().mockResolvedValue(trainer),
+        findVocabTrainerByIdForUserMinimal: jest.fn().mockResolvedValue(trainer),
     };
     const notificationService = {
         create: options.createError ? jest.fn().mockRejectedValue(options.createError) : jest.fn().mockResolvedValue({}),
+        hideAllTrainerBells: options.hideError ? jest.fn().mockRejectedValue(options.hideError) : jest.fn().mockResolvedValue(1),
     };
     const gateway = { sendToUser: jest.fn() };
     const logger = { error: jest.fn(), info: jest.fn(), warn: jest.fn() };
@@ -54,6 +56,32 @@ describe('GradingNotificationService.notifyGraded', () => {
             }),
         );
         expect(gateway.sendToUser).toHaveBeenCalledWith(userId, 'EXAM_GRADED', data);
+        expect(notificationService.hideAllTrainerBells).not.toHaveBeenCalled();
+    });
+
+    it('hides the bell and does not push when the trainer is deleted during the insert', async () => {
+        // Arrange: the trainer is gone when the bell step checks it after the insert.
+        const { service, notificationService, gateway, repository } = setup({ trainer: null });
+
+        // Act
+        await service.notifyGraded({ trainerId, userId, trainerName: 'Animals', examType: 'translation-audio' });
+
+        // Assert
+        expect(notificationService.create).toHaveBeenCalledTimes(1);
+        expect(repository.findVocabTrainerByIdForUserMinimal).toHaveBeenCalledWith(trainerId, userId);
+        expect(notificationService.hideAllTrainerBells).toHaveBeenCalledWith(trainerId);
+        expect(gateway.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('logs a failed hide and never throws into the grading job', async () => {
+        // Arrange
+        const { service, logger } = setup({ trainer: null, hideError: new Error('hide down') });
+
+        // Act
+        await expect(service.notifyGraded({ trainerId, userId, trainerName: 'Animals', examType: 'fill-in-blank' })).resolves.toBeUndefined();
+
+        // Assert
+        expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('hide down'));
     });
 
     it('swallows a failed create: logs it, reports to Sentry, never throws', async () => {
@@ -85,6 +113,7 @@ describe('GradingNotificationService.notifyFailed', () => {
 
         // Assert
         expect(repository.findAttemptByTrainerId).toHaveBeenCalledWith(trainerId, userId);
+        expect(repository.findVocabTrainerByIdForUserMinimal).toHaveBeenCalledWith(trainerId, userId);
         expect(notificationService.create).toHaveBeenCalledWith(
             expect.objectContaining({
                 data: { kind: 'EXAM_GRADING_FAILED', trainerId, trainerName: 'Colors', examType: 'fill-in-blank' },
@@ -125,6 +154,20 @@ describe('GradingNotificationService.notifyFailed', () => {
 
         // Assert
         expect(notificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('hides the bell and does not push when the trainer is deleted during the insert of a failure bell', async () => {
+        // Arrange: the pre-check finds the trainer, and the check after the insert does not.
+        const { service, notificationService, gateway, repository } = setup({ attempt: { regradeCount: 0 } });
+        repository.findVocabTrainerByIdForUserMinimal.mockResolvedValueOnce({ name: 'Colors' }).mockResolvedValueOnce(null);
+
+        // Act
+        await service.notifyFailed({ trainerId, userId, examType: 'fill-in-blank' });
+
+        // Assert
+        expect(notificationService.create).toHaveBeenCalledTimes(1);
+        expect(notificationService.hideAllTrainerBells).toHaveBeenCalledWith(trainerId);
+        expect(gateway.sendToUser).not.toHaveBeenCalled();
     });
 
     it('swallows a failed lookup: never throws into the job', async () => {

@@ -233,6 +233,20 @@ export class NotificationRepository extends BaseRepository {
         return result.count;
     }
 
+    /** Hides every active Bell of one trainer: Reminder and grading Bells. Matches on data.trainerId. The completion Bell has none, so it stays. */
+    public async hideAllTrainerBells(trainerId: string): Promise<number> {
+        const result = await this.prisma.notification.updateMany({
+            where: {
+                type: NotificationType.VOCAB_TRAINER,
+                isActive: true,
+                data: { path: ['trainerId'], equals: trainerId },
+            },
+            data: { isActive: false },
+        });
+
+        return result.count;
+    }
+
     public async deleteManyExpired(): Promise<number> {
         const result = await this.prisma.notification.deleteMany({
             where: { expiresAt: { lt: new Date() } },

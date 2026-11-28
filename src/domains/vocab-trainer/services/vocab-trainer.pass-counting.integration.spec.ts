@@ -34,7 +34,7 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
     let attemptService: VocabTrainerAttemptService;
     let lock: VocabTrainerJobLockService;
     let aiQueue: AiQueueService;
-    let reminderInApp: { hideTrainerBells: jest.Mock };
+    let reminderInApp: { hideTrainerBells: jest.Mock; hideAllTrainerBells: jest.Mock };
     let notifications: { create: jest.Mock };
     let user: User;
     let words: string[];
@@ -126,7 +126,7 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
         const reminderSchedules = new ReminderScheduleRepository(prisma);
         const reminderAfterExam = new VocabTrainerReminderAfterExamService();
         const trainerRepository = new VocabTrainerRepository(prisma);
-        reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined) };
+        reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined), hideAllTrainerBells: jest.fn().mockResolvedValue(undefined) };
         notifications = { create: jest.fn().mockResolvedValue({ id: 'n1' }) };
         const fsrsReminder = { sync: jest.fn().mockResolvedValue(undefined), cancelForTrainer: jest.fn() };
         attemptService = new VocabTrainerAttemptService(trainerRepository, reminderAfterExam, reminderInApp as never, notifications as never, logger as never, reminderSchedules);
@@ -242,7 +242,7 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
             expect(notifications.create).toHaveBeenCalledWith(
                 expect.objectContaining({ data: expect.objectContaining({ message: 'Your test has been completed after 3 passes' }) }),
             );
-            expect(reminderInApp.hideTrainerBells).toHaveBeenCalledWith(trainerId);
+            expect(reminderInApp.hideAllTrainerBells).toHaveBeenCalledWith(trainerId);
         });
 
         test('the next reminder is due after the trainer spacing, and says so in its payload', async () => {
@@ -591,7 +591,7 @@ describeWithDb('Pass counting (real Postgres and Redis)', () => {
             const rows = await reminderRows(trainerId);
             expect(rows.length).toBeGreaterThan(0);
             expect(rows.every((row) => row.status === ReminderScheduleStatus.CANCELLED)).toBe(true);
-            expect(reminderInApp.hideTrainerBells).toHaveBeenCalledWith(trainerId);
+            expect(reminderInApp.hideAllTrainerBells).toHaveBeenCalledWith(trainerId);
         });
     });
 

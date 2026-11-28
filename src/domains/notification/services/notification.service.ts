@@ -189,6 +189,11 @@ export class NotificationService {
         return this.notificationRepository.hideReminderBells(trainerId);
     }
 
+    /** Hides every Bell of one trainer: Reminder and grading Bells. The completion Bell has no trainerId, so it stays. Returns how many were hidden. */
+    public async hideAllTrainerBells(trainerId: string): Promise<number> {
+        return this.notificationRepository.hideAllTrainerBells(trainerId);
+    }
+
     public async cleanupExpired(): Promise<number> {
         return this.notificationRepository.deleteManyExpired();
     }

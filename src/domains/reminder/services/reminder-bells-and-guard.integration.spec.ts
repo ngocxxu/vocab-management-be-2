@@ -80,7 +80,7 @@ describeWithDb('Reminder bells and the send guard (real Postgres)', () => {
             const row = await scheduleRow(trainerId, { status: ReminderScheduleStatus.SENT, sentAt: new Date() });
 
             // Act
-            await bells.notifyReminderSent(row, { testName: 'Classic' });
+            await bells.notifyReminderSent(row);
 
             // Assert
             const bell = await bellOf(row.id);
@@ -88,7 +88,7 @@ describeWithDb('Reminder bells and the send guard (real Postgres)', () => {
             expect(bell.expiresAt.getTime() - bell.createdAt.getTime()).toBeLessThan(90 * DAY_MS + 60_000);
         });
 
-        test('an FSRS due bell stays 30 days', async () => {
+        test('an FSRS due bell stays 90 days', async () => {
             // Arrange
             const trainer = await prisma.vocabTrainer.create({
                 data: { name: 'FSRS', status: TrainerStatus.PENDING, questionType: 'FLIP_CARD', mode: TrainerMode.FSRS, reminderRepeat: 0, userId: user.id },
@@ -96,12 +96,12 @@ describeWithDb('Reminder bells and the send guard (real Postgres)', () => {
             const row = await scheduleRow(trainer.id, { template: EEmailTemplate.FSRS_DUE_REMINDER, status: ReminderScheduleStatus.SENT, sentAt: new Date() });
 
             // Act
-            await bells.notifyReminderSent(row, { trainerName: 'FSRS', reviewCount: 2, newCount: 0 });
+            await bells.notifyReminderSent(row);
 
             // Assert
             const bell = await bellOf(row.id);
-            expect(bell.expiresAt.getTime() - bell.createdAt.getTime()).toBeGreaterThan(30 * DAY_MS - 60_000);
-            expect(bell.expiresAt.getTime() - bell.createdAt.getTime()).toBeLessThan(30 * DAY_MS + 60_000);
+            expect(bell.expiresAt.getTime() - bell.createdAt.getTime()).toBeGreaterThan(90 * DAY_MS - 60_000);
+            expect(bell.expiresAt.getTime() - bell.createdAt.getTime()).toBeLessThan(90 * DAY_MS + 60_000);
         });
     });
 
@@ -112,8 +112,8 @@ describeWithDb('Reminder bells and the send guard (real Postgres)', () => {
             const trainerB = await classicTrainer('B');
             const bellA = await scheduleRow(trainerA, { status: ReminderScheduleStatus.SENT, sentAt: new Date() });
             const bellB = await scheduleRow(trainerB, { status: ReminderScheduleStatus.SENT, sentAt: new Date() });
-            await bells.notifyReminderSent(bellA, { testName: 'A' });
-            await bells.notifyReminderSent(bellB, { testName: 'B' });
+            await bells.notifyReminderSent(bellA);
+            await bells.notifyReminderSent(bellB);
             // The completion bell carries no trainerId (as the attempt service writes it), so it is found by its message.
             const marker = randomUUID();
             await notificationService.create({
@@ -134,6 +134,68 @@ describeWithDb('Reminder bells and the send guard (real Postgres)', () => {
             expect((await bellOf(bellB.id)).isActive).toBe(true);
             const completion = await prisma.notification.findFirstOrThrow({ where: { action: NotificationAction.CREATE, data: { path: ['message'], string_contains: marker } } });
             expect(completion.isActive).toBe(true);
+        });
+
+        test("deleting a trainer hides its grading bell too, but not another trainer's bells or the completion bell", async () => {
+            // Arrange
+            const trainerA = await classicTrainer('A');
+            const trainerB = await classicTrainer('B');
+            const reminderA = await scheduleRow(trainerA, { status: ReminderScheduleStatus.SENT, sentAt: new Date() });
+            const reminderB = await scheduleRow(trainerB, { status: ReminderScheduleStatus.SENT, sentAt: new Date() });
+            await bells.notifyReminderSent(reminderA);
+            await bells.notifyReminderSent(reminderB);
+            // A grading bell carries data.trainerId and action CREATE, as GradingNotificationService writes it.
+            const gradingBell = (trainerId: string) => ({
+                type: NotificationType.VOCAB_TRAINER,
+                action: NotificationAction.CREATE,
+                priority: 'MEDIUM',
+                data: { kind: 'EXAM_GRADED', trainerId, trainerName: 'Graded', examType: 'fill-in-blank' },
+                expiresAt: new Date(Date.now() + DAY_MS),
+                isActive: true,
+                recipientUserIds: [user.id],
+            });
+            await notificationService.create(gradingBell(trainerA) as never);
+            await notificationService.create(gradingBell(trainerB) as never);
+            // The completion bell carries no trainerId, so it is found by its message.
+            const marker = randomUUID();
+            await notificationService.create({
+                type: NotificationType.VOCAB_TRAINER,
+                action: NotificationAction.CREATE,
+                priority: 'LOW',
+                data: { trainerName: 'A', message: `Your test has been completed after 6 passes ${marker}`, completedAt: new Date().toISOString() },
+                expiresAt: new Date(Date.now() + DAY_MS),
+                isActive: true,
+                recipientUserIds: [user.id],
+            } as never);
+
+            // Act
+            await bells.hideAllTrainerBells(trainerA);
+
+            // Assert
+            const gradingOf = async (trainerId: string) =>
+                prisma.notification.findFirstOrThrow({ where: { action: NotificationAction.CREATE, data: { path: ['trainerId'], equals: trainerId } } });
+            expect((await bellOf(reminderA.id)).isActive).toBe(false);
+            expect((await gradingOf(trainerA)).isActive).toBe(false);
+            expect((await gradingOf(trainerB)).isActive).toBe(true);
+            expect((await bellOf(reminderB.id)).isActive).toBe(true);
+            const completion = await prisma.notification.findFirstOrThrow({ where: { action: NotificationAction.CREATE, data: { path: ['message'], string_contains: marker } } });
+            expect(completion.isActive).toBe(true);
+        });
+    });
+
+    describe('bells for a trainer that is gone', () => {
+        test('no bell is written, and nothing is pushed, when the trainer was deleted before the bell step', async () => {
+            // Arrange
+            const trainerId = await classicTrainer();
+            const row = await scheduleRow(trainerId, { status: ReminderScheduleStatus.SENT, sentAt: new Date() });
+            await prisma.vocabTrainer.delete({ where: { id: trainerId } });
+
+            // Act
+            await bells.notifyReminderSent(row);
+
+            // Assert
+            expect(await prisma.notification.findMany({ where: { data: { path: ['scheduleId'], equals: row.id } } })).toHaveLength(0);
+            expect(gateway.sendToUser).not.toHaveBeenCalled();
         });
     });
 

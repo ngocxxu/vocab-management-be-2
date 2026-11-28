@@ -65,7 +65,7 @@ export class FillInBlankEvaluationProcessor {
             this.logger.info(`Processing fill-in-blank evaluation job ${job.id} for user ${userId}`);
 
             // A retry after the attempt was applied must not call the AI or count again: it only re-sends the stored result.
-            const current = await this.vocabTrainerRepository.findVocabTrainerByIdMinimal(vocabTrainerId);
+            const current = await this.vocabTrainerRepository.findVocabTrainerByIdForUserMinimal(vocabTrainerId, userId);
             if (!current) {
                 this.logger.warn(`Trainer ${vocabTrainerId} was deleted before fill-in-blank job ${jobId} ran`);
                 return this.complete(userId, jobId, lockToken, { results: [], trainerDeleted: true });

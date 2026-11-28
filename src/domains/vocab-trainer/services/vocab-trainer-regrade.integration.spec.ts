@@ -131,7 +131,7 @@ describeWithDb('Regrade and grading state (real Postgres and Redis)', () => {
         attemptService = new VocabTrainerAttemptService(
             repository,
             new VocabTrainerReminderAfterExamService(),
-            { hideTrainerBells: jest.fn().mockResolvedValue(undefined) } as never,
+            { hideTrainerBells: jest.fn().mockResolvedValue(undefined), hideAllTrainerBells: jest.fn().mockResolvedValue(undefined) } as never,
             { create: jest.fn().mockResolvedValue({ id: 'n1' }) } as never,
             logger as never,
             new ReminderScheduleRepository(prisma),

@@ -108,6 +108,6 @@ export class VocabTrainerReminderService {
             this.logger.error(`Cancelling reminders of deleted trainer ${trainerId} failed: ${message}`);
             captureSentryException(error, { tags: { 'vocab_trainer.id': trainerId } });
         }
-        await this.reminderInApp.hideTrainerBells(trainerId);
+        await this.reminderInApp.hideAllTrainerBells(trainerId);
     }
 }

@@ -732,7 +732,7 @@ export class VocabTrainerService {
                 throw new VocabTrainerNotFoundException(id);
             }
 
-            const counts = await this.vocabTrainerAttempt.resolveCountsAsAttempt(trainer.id, tx, submittedAt);
+            const counts = await this.vocabTrainerAttempt.resolveCountsAsAttempt(trainer.id, user.id, tx, submittedAt);
             await this.vocabTrainerRepository.deleteVocabTrainerResults(trainer.id, tx);
             await this.vocabTrainerRepository.createVocabTrainerResultsMany(createResults, tx);
 

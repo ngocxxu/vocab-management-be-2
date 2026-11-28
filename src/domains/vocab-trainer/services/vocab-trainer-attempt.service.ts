@@ -68,8 +68,8 @@ export class VocabTrainerAttemptService {
      * Whether a new attempt counts. Read-only. Call it under the trainer row lock (multiple choice) or under the user's job lock
      * (AI), so the answer cannot change before the attempt is applied.
      */
-    public async resolveCountsAsAttempt(trainerId: string, tx?: Prisma.TransactionClient, now: Date = new Date()): Promise<boolean> {
-        const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdMinimal(trainerId, tx);
+    public async resolveCountsAsAttempt(trainerId: string, userId: string, tx?: Prisma.TransactionClient, now: Date = new Date()): Promise<boolean> {
+        const trainer = await this.vocabTrainerRepository.findVocabTrainerByIdForUserMinimal(trainerId, userId, tx);
         if (!trainer) {
             return false;
         }
@@ -88,7 +88,7 @@ export class VocabTrainerAttemptService {
     public fillInBlankHooks(trainerId: string, userId: string, snapshot: object) {
         return {
             decideAttempt: async (): Promise<FillInBlankAttemptDecision> => ({
-                countsAsAttempt: await this.resolveCountsAsAttempt(trainerId),
+                countsAsAttempt: await this.resolveCountsAsAttempt(trainerId, userId),
                 submittedAt: new Date().toISOString(),
             }),
             recordAttempt: async (decision: FillInBlankAttemptDecision): Promise<AttemptUndo> =>
@@ -166,9 +166,14 @@ export class VocabTrainerAttemptService {
         return { ...bell, counts, trainer: updated };
     }
 
-    /** Runs after the commit. A failure is logged and reported to Sentry, never thrown to the user. */
+    /**
+     * Runs after the commit. A completed trainer hides all its bells, because its row is gone; a pass hides its reminder bells only.
+     * The completion bell is written last and has no trainerId, so it stays. A failure is logged and reported to Sentry, never thrown to the user.
+     */
     public async afterCommit(outcome: AttemptBellInput): Promise<void> {
-        if (outcome.passed || outcome.completed) {
+        if (outcome.completed) {
+            await this.runBestEffort(outcome.trainerId, async () => this.reminderInApp.hideAllTrainerBells(outcome.trainerId));
+        } else if (outcome.passed) {
             await this.runBestEffort(outcome.trainerId, async () => this.reminderInApp.hideTrainerBells(outcome.trainerId));
         }
         if (outcome.completed) {

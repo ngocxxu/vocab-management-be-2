@@ -141,7 +141,7 @@ One planned Reminder for one trainer, due at a set time. It decides whether the 
 _Avoid_: Reminder job, Email job (queue jobs are not part of this language)
 
 **Bell notification**:
-The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent. A Bell is hidden when the User passes, turns reminders off, deletes the trainer or completes it. A Classic Bell lasts 90 days, an FSRS Bell 30 days.
+The in-app message in the notification bell. A Reminder creates its Bell notification only after the email went out, so the bell never shows a Reminder that was not sent. A Reminder bell is hidden when the User passes, turns reminders off, deletes the trainer or completes it. When a trainer is deleted or completed, its grading bells are hidden too. The completion bell stays. A Bell of a Reminder lasts 90 days, classic and FSRS alike.
 _Avoid_: In-app reminder, Push (that means a phone push message)
 
 **MCP access**:
