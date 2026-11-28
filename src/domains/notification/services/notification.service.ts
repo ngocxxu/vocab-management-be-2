@@ -194,6 +194,11 @@ export class NotificationService {
         return this.notificationRepository.hideAllTrainerBells(trainerId);
     }
 
+    /** Trainer ids that have an open Reminder Bell for the user. The dashboard counts the Classic exams among them. */
+    public async getOpenReminderBellTrainerIds(userId: string): Promise<string[]> {
+        return this.notificationRepository.findOpenReminderBellTrainerIds(userId);
+    }
+
     public async cleanupExpired(): Promise<number> {
         return this.notificationRepository.deleteManyExpired();
     }

@@ -2,7 +2,7 @@ import { BaseRepository } from '@/database';
 import { VOCAB_STATUS_THRESHOLDS } from '@/domains/vocab/constants';
 import { PrismaService } from '@/shared';
 import { Injectable } from '@nestjs/common';
-import { Prisma, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
+import { Prisma, QuestionType, TrainerMode, VocabMastery, Vocab, Language, TextTarget } from '@prisma/client';
 
 export type VocabMasteryWithVocab = VocabMastery & {
     vocab: Vocab & {
@@ -24,6 +24,18 @@ export type MasterySummarySnapshot = {
 export class VocabMasteryRepository extends BaseRepository {
     public constructor(prismaService: PrismaService) {
         super(prismaService);
+    }
+
+    /** The Classic trainers of the user among these ids, with their question type. A trainer that is gone, is FSRS, has reminders turned off or is not the user's is left out. */
+    public async findClassicTrainersByIds(userId: string, trainerIds: string[]): Promise<Array<{ id: string; questionType: QuestionType }>> {
+        if (trainerIds.length === 0) {
+            return [];
+        }
+
+        return this.prisma.vocabTrainer.findMany({
+            where: { id: { in: trainerIds }, userId, mode: TrainerMode.CLASSIC, reminderDisabled: false },
+            select: { id: true, questionType: true },
+        });
     }
 
     public async findByVocabIdAndUserId(vocabId: string, userId: string): Promise<VocabMastery | null> {

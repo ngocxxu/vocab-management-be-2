@@ -274,7 +274,15 @@ describeWithDb('FSRS statistics (real Postgres)', () => {
         test('shows up in the dashboard summary', async () => {
             // Arrange
             await reviewCard(await addWord('due'), S2T, 10, daysFromNow(-1));
-            const masteryService = new VocabMasteryService(masteryRepository, { countByUserId: jest.fn().mockResolvedValue(0) } as never, stats);
+            const masteryService = new VocabMasteryService(
+                masteryRepository,
+                { countByUserId: jest.fn().mockResolvedValue(0) } as never,
+                stats,
+                {
+                    getOpenReminderBellTrainerIds: jest.fn().mockResolvedValue([]),
+                } as never,
+                { error: jest.fn() } as never,
+            );
 
             // Act
             const summary = await masteryService.getSummary(userId);

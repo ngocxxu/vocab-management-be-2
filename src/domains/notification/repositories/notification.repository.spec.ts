@@ -1,3 +1,4 @@
+import { EReminderNotificationKind } from '@/domains/reminder/utils';
 import type { PrismaService } from '@/shared';
 import { NotificationAction, NotificationType, Prisma, PriorityLevel } from '@prisma/client';
 import { NotificationRepository } from './notification.repository';
@@ -65,5 +66,67 @@ describe('NotificationRepository.createBroadcast', () => {
 
         expect(inTransaction).toHaveBeenCalledTimes(1);
         expect(notification).toEqual({ id: 'n1' });
+    });
+});
+
+describe('NotificationRepository.findOpenReminderBellTrainerIds', () => {
+    // The query starts from the user's recipient rows, so each Bell is wrapped as the notification of one recipient row.
+    const createRepositoryWithBells = (bells: Array<{ data: unknown }>) => {
+        const prisma = { notificationRecipient: { findMany: jest.fn().mockResolvedValue(bells.map((bell) => ({ notification: bell }))) } };
+        const repository = new NotificationRepository(prisma as unknown as PrismaService);
+
+        return { repository, prisma };
+    };
+
+    it('returns the trainer once when it has an initial and an escalation Bell', async () => {
+        const { repository } = createRepositoryWithBells([
+            { data: { trainerId: 'trainer-1', kind: EReminderNotificationKind.INITIAL } },
+            { data: { trainerId: 'trainer-1', kind: EReminderNotificationKind.ESCALATION } },
+        ]);
+
+        await expect(repository.findOpenReminderBellTrainerIds('user-1')).resolves.toEqual(['trainer-1']);
+    });
+
+    it('keeps the trainer of an escalation Bell', async () => {
+        const { repository } = createRepositoryWithBells([{ data: { trainerId: 'trainer-2', kind: EReminderNotificationKind.ESCALATION } }]);
+
+        await expect(repository.findOpenReminderBellTrainerIds('user-1')).resolves.toEqual(['trainer-2']);
+    });
+
+    it('leaves out the FSRS due Bells', async () => {
+        const { repository } = createRepositoryWithBells([{ data: { trainerId: 'trainer-3', kind: EReminderNotificationKind.FSRS_DUE } }]);
+
+        await expect(repository.findOpenReminderBellTrainerIds('user-1')).resolves.toEqual([]);
+    });
+
+    it('ignores a Bell whose data has no trainer id', async () => {
+        const { repository } = createRepositoryWithBells([{ data: { kind: EReminderNotificationKind.INITIAL } }, { data: null }, { data: 'not an object' }]);
+
+        await expect(repository.findOpenReminderBellTrainerIds('user-1')).resolves.toEqual([]);
+    });
+
+    it('leaves out a Bell that has a trainer id but no kind', async () => {
+        const { repository } = createRepositoryWithBells([{ data: { trainerId: 'trainer-4' } }]);
+
+        await expect(repository.findOpenReminderBellTrainerIds('user-1')).resolves.toEqual([]);
+    });
+
+    it('reads only active Reminder Bells of the user that have not expired', async () => {
+        const { repository, prisma } = createRepositoryWithBells([]);
+
+        await repository.findOpenReminderBellTrainerIds('user-1');
+
+        expect(prisma.notificationRecipient.findMany).toHaveBeenCalledWith({
+            where: {
+                userId: 'user-1',
+                notification: {
+                    type: NotificationType.VOCAB_TRAINER,
+                    action: NotificationAction.REMIND,
+                    isActive: true,
+                    expiresAt: { gt: expect.any(Date) },
+                },
+            },
+            select: { notification: { select: { data: true } } },
+        });
     });
 });
