@@ -5,6 +5,7 @@ import { LanguageFolderModule } from '../catalog/language-folder';
 import { PlanModule } from '../catalog/plan';
 import { SubjectModule } from '../catalog/subject';
 import { ApiKeyModule } from '../identity/api-key';
+import { NotificationModule } from '../notification/notification.module';
 import { ConfigModule } from '../platform/config/config.module';
 import { EventsModule } from '../platform/events/events.module';
 import { EReminderType } from '../reminder/utils';
@@ -25,6 +26,7 @@ import { VocabTextTargetService } from './services/vocab-text-target.service';
         forwardRef(() => AiModule),
         forwardRef(() => LanguageFolderModule),
         ApiKeyModule,
+        NotificationModule,
         EventsModule,
         ConfigModule,
         BullModule.registerQueue({ name: EReminderType.VOCAB_GENERATE_TEXT_TARGET }),

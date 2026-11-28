@@ -1,3 +1,6 @@
+import { NotificationService } from '@/domains/notification/services';
+import { LoggerService } from '@/shared/services/logger.service';
+import { captureSentryException } from '@/shared/utils/sentry.util';
 import { Injectable } from '@nestjs/common';
 import { VocabDto } from '../dto';
 import { VocabBadRequestException } from '../exceptions';
@@ -18,6 +21,8 @@ export class VocabMasteryService {
         private readonly vocabMasteryRepository: VocabMasteryRepository,
         private readonly vocabRepository: VocabRepository,
         private readonly fsrsStatsService: FsrsStatsService,
+        private readonly notificationService: NotificationService,
+        private readonly logger: LoggerService,
     ) {}
 
     public async getOrCreateMastery(vocabId: string, userId: string) {
@@ -89,13 +94,14 @@ export class VocabMasteryService {
         }
 
         const trendCutoff = new Date(Date.now() - TREND_WINDOW_DAYS * MILLISECONDS_PER_DAY);
-        const [result, lastPractice, healthCounts, totalVocabs, previousSummary, fsrsSummary] = await Promise.all([
+        const [result, lastPractice, healthCounts, totalVocabs, previousSummary, fsrsSummary, classicDueTrainers] = await Promise.all([
             this.vocabMasteryRepository.aggregateByUserId(userId),
             this.vocabMasteryRepository.findLastPracticeAtByUserId(userId),
             this.vocabMasteryRepository.countHealthByUserId(userId),
             this.vocabRepository.countByUserId(userId),
             this.vocabMasteryRepository.getSummarySnapshotAt(userId, trendCutoff),
             this.fsrsStatsService.getUserSummary(userId),
+            this.getClassicDueTrainers(userId),
         ]);
 
         // eslint-disable-next-line no-underscore-dangle
@@ -121,6 +127,8 @@ export class VocabMasteryService {
             warningCount: healthCounts.warningCount,
             fsrsDueToday: fsrsSummary.fsrsDueToday,
             fsrsMastered: fsrsSummary.fsrsMastered,
+            classicDueCount: classicDueTrainers.length,
+            classicDueTrainer: classicDueTrainers.length === 1 ? { trainerId: classicDueTrainers[0].id, questionType: classicDueTrainers[0].questionType } : null,
             trends: {
                 totalVocabsPercentDelta: previousSummary.totalVocabs > 0 ? Math.round(((totalVocabs - previousSummary.totalVocabs) / previousSummary.totalVocabs) * 100) : null,
                 averageMasteryDelta: previousAverageMastery !== null ? roundToOneDecimal(averageMastery - previousAverageMastery) : null,
@@ -241,5 +249,23 @@ export class VocabMasteryService {
         ]);
 
         return { summary, subjects, problematic, distribution, progress };
+    }
+
+    /**
+     * Classic trainers with an open Reminder Bell, each once. The Bells come from the notification domain; mode and question type from the trainer rows.
+     * A failed lookup is logged and reads as none, so the rest of the summary still loads.
+     */
+    private async getClassicDueTrainers(userId: string) {
+        try {
+            const trainerIds = await this.notificationService.getOpenReminderBellTrainerIds(userId);
+
+            return await this.vocabMasteryRepository.findClassicTrainersByIds(userId, trainerIds);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Classic exam due lookup failed for user ${userId}: ${errorMessage}`);
+            captureSentryException(error, { tags: { area: 'classic-exam-due' }, contexts: { classicExamDue: { userId } } });
+
+            return [];
+        }
     }
 }

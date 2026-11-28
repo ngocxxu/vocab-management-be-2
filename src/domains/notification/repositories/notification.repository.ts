@@ -1,4 +1,5 @@
 import { BaseRepository } from '@/database';
+import { EReminderNotificationKind } from '@/domains/reminder/utils';
 import { PrismaService } from '@/shared';
 import { chunk } from '@/shared/utils';
 import { Injectable } from '@nestjs/common';
@@ -22,6 +23,19 @@ const notificationInclude = {
 export type NotificationWithRecipients = Prisma.NotificationGetPayload<{
     include: typeof notificationInclude;
 }>;
+
+/** The trainer of a Classic exam Bell (kind INITIAL or ESCALATION). Null for other kinds, a missing kind, and data without a trainer id. */
+function reminderBellTrainerId(data: Prisma.JsonValue): string | null {
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+        return null;
+    }
+    const isClassicKind = data.kind === EReminderNotificationKind.INITIAL || data.kind === EReminderNotificationKind.ESCALATION;
+    if (!isClassicKind) {
+        return null;
+    }
+
+    return typeof data.trainerId === 'string' ? data.trainerId : null;
+}
 
 @Injectable()
 export class NotificationRepository extends BaseRepository {
@@ -154,6 +168,33 @@ export class NotificationRepository extends BaseRepository {
                 },
             },
         });
+    }
+
+    /**
+     * Trainer ids of the Reminder Bells that are active and not expired. Read and deleted Bells count, since the exam is still due.
+     * Two Bells of one trainer give one id. Only INITIAL and ESCALATION Bells count: FSRS due and kindless Bells are left out.
+     */
+    public async findOpenReminderBellTrainerIds(userId: string): Promise<string[]> {
+        const rows = await this.prisma.notification.findMany({
+            where: {
+                type: NotificationType.VOCAB_TRAINER,
+                action: NotificationAction.REMIND,
+                isActive: true,
+                expiresAt: { gt: new Date() },
+                notificationRecipients: { some: { userId } },
+            },
+            select: { data: true },
+        });
+
+        const trainerIds = new Set<string>();
+        for (const row of rows) {
+            const trainerId = reminderBellTrainerId(row.data);
+            if (trainerId !== null) {
+                trainerIds.add(trainerId);
+            }
+        }
+
+        return [...trainerIds];
     }
 
     public async deleteById(id: string): Promise<NotificationWithRecipients> {

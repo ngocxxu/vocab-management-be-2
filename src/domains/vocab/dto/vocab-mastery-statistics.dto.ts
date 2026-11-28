@@ -1,8 +1,22 @@
 /* eslint-disable max-classes-per-file */
 import { ApiProperty } from '@nestjs/swagger';
+import { QuestionType } from '@prisma/client';
 import { VocabMasteryHealthStatus } from '../utils/vocab-mastery-status.util';
 import { MasterySummaryTrendsDto } from './mastery-summary-trends.dto';
 import { VocabDto } from './vocab.dto';
+
+export class MasteryClassicDueTrainerDto {
+    @ApiProperty({ description: 'Classic trainer to open', example: 'trainer-123' })
+    public trainerId: string;
+
+    @ApiProperty({ description: 'Question type of that trainer', enum: QuestionType, example: QuestionType.FLIP_CARD })
+    public questionType: QuestionType;
+
+    public constructor(data: { trainerId: string; questionType: QuestionType }) {
+        this.trainerId = data.trainerId;
+        this.questionType = data.questionType;
+    }
+}
 
 export class MasterySummaryDto {
     @ApiProperty({ description: "Total number of vocabs in the user's library", example: 120 })
@@ -32,6 +46,12 @@ export class MasterySummaryDto {
     @ApiProperty({ description: 'Spaced repetition cards the user has mastered across all FSRS trainers', example: 31 })
     public fsrsMastered: number;
 
+    @ApiProperty({ description: 'Classic trainers with an open exam reminder; a trainer counts once', example: 2 })
+    public classicDueCount: number;
+
+    @ApiProperty({ description: 'The Classic trainer to open when classicDueCount is 1; null otherwise', type: MasteryClassicDueTrainerDto, nullable: true })
+    public classicDueTrainer: MasteryClassicDueTrainerDto | null;
+
     @ApiProperty({ description: 'Rolling 7-day dashboard trend deltas', type: MasterySummaryTrendsDto })
     public trends: MasterySummaryTrendsDto;
 
@@ -45,6 +65,8 @@ export class MasterySummaryDto {
         warningCount: number;
         fsrsDueToday: number;
         fsrsMastered: number;
+        classicDueCount: number;
+        classicDueTrainer: { trainerId: string; questionType: QuestionType } | null;
         trends: ConstructorParameters<typeof MasterySummaryTrendsDto>[0];
     }) {
         this.totalVocabs = data.totalVocabs;
@@ -56,6 +78,8 @@ export class MasterySummaryDto {
         this.warningCount = data.warningCount;
         this.fsrsDueToday = data.fsrsDueToday;
         this.fsrsMastered = data.fsrsMastered;
+        this.classicDueCount = data.classicDueCount;
+        this.classicDueTrainer = data.classicDueTrainer ? new MasteryClassicDueTrainerDto(data.classicDueTrainer) : null;
         this.trends = new MasterySummaryTrendsDto(data.trends);
     }
 }
