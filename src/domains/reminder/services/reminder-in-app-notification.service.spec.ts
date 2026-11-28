@@ -22,10 +22,20 @@ function reminderRow(overrides: Record<string, unknown> = {}) {
     };
 }
 
-function createFakes(options: { trainer?: { name: string; questionType: string } | null; createError?: Error; pushError?: Error; hideError?: Error } = {}) {
+interface FakeOptions {
+    trainer?: { name: string; questionType: string } | null;
+    createError?: Error;
+    pushError?: Error;
+    hideError?: Error;
+    hideAllError?: Error;
+    goneAfterInsert?: boolean;
+}
+
+function createFakes(options: FakeOptions = {}) {
     const notificationService = {
         create: options.createError ? jest.fn().mockRejectedValue(options.createError) : jest.fn().mockResolvedValue({ id: 'n1' }),
         hideReminderBells: options.hideError ? jest.fn().mockRejectedValue(options.hideError) : jest.fn().mockResolvedValue(2),
+        hideAllTrainerBells: options.hideAllError ? jest.fn().mockRejectedValue(options.hideAllError) : jest.fn().mockResolvedValue(3),
     };
     const gateway = {
         sendToUser: jest.fn(() => {
@@ -34,8 +44,10 @@ function createFakes(options: { trainer?: { name: string; questionType: string }
             }
         }),
     };
+    const trainer = options.trainer === undefined ? { name: 'Vocab A', questionType: 'FLIP_CARD' } : options.trainer;
+    // goneAfterInsert: the trainer is found by the first lookup and deleted before the second one, which runs after the bell insert.
     const reminders = {
-        findTrainerBrief: jest.fn().mockResolvedValue(options.trainer === undefined ? { name: 'Vocab A', questionType: 'FLIP_CARD' } : options.trainer),
+        findTrainerBrief: options.goneAfterInsert ? jest.fn().mockResolvedValueOnce(trainer).mockResolvedValueOnce(null) : jest.fn().mockResolvedValue(trainer),
     };
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
@@ -54,7 +66,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, notificationService } = createFakes();
 
         // Act
-        await service.notifyReminderSent(reminderRow() as never, { testName: 'Exam words' });
+        await service.notifyReminderSent(reminderRow() as never);
 
         // Assert
         expect(notificationService.create).toHaveBeenCalledWith(
@@ -80,7 +92,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, notificationService } = createFakes();
 
         // Act
-        await service.notifyReminderSent(reminderRow({ reminderType: ReminderScheduleKind.ESCALATION }) as never, {});
+        await service.notifyReminderSent(reminderRow({ reminderType: ReminderScheduleKind.ESCALATION }) as never);
 
         // Assert
         expect(notificationService.create).toHaveBeenCalledWith(
@@ -96,7 +108,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, notificationService } = createFakes();
 
         // Act
-        await service.notifyReminderSent(reminderRow({ template: FSRS_TEMPLATE }) as never, { trainerName: 'Vocab A' });
+        await service.notifyReminderSent(reminderRow({ template: FSRS_TEMPLATE }) as never);
 
         // Assert
         expect(notificationService.create).toHaveBeenCalledWith(
@@ -109,17 +121,42 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         );
     });
 
-    it('falls back to the name in the email data and leaves out questionType when the trainer is gone', async () => {
+    it('creates no bell when the trainer is gone, and logs why', async () => {
         // Arrange
-        const { service, notificationService } = createFakes({ trainer: null });
+        const { service, notificationService, gateway, logger } = createFakes({ trainer: null });
 
         // Act
-        await service.notifyReminderSent(reminderRow() as never, { testName: 'Old name' });
+        await service.notifyReminderSent(reminderRow() as never);
+
+        // Assert
+        expect(notificationService.create).not.toHaveBeenCalled();
+        expect(gateway.sendToUser).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith('No reminder bell for schedule s1: trainer t1 is gone');
+    });
+
+    it('hides the bell and does not push when the trainer is deleted during the insert', async () => {
+        // Arrange
+        const { service, notificationService, gateway } = createFakes({ goneAfterInsert: true });
+
+        // Act
+        await service.notifyReminderSent(reminderRow() as never);
+
+        // Assert
+        expect(notificationService.create).toHaveBeenCalledTimes(1);
+        expect(notificationService.hideAllTrainerBells).toHaveBeenCalledWith('t1');
+        expect(gateway.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('names the bell after the trainer in the database', async () => {
+        // Arrange
+        const { service, notificationService } = createFakes();
+
+        // Act
+        await service.notifyReminderSent(reminderRow() as never);
 
         // Assert
         const [input] = notificationService.create.mock.calls[0] as unknown as [{ data: Record<string, unknown> }];
-        expect(input.data.trainerName).toBe('Old name');
-        expect(input.data).not.toHaveProperty('questionType');
+        expect(input.data.trainerName).toBe('Vocab A');
     });
 
     it('looks the trainer up under the owner of the reminder', async () => {
@@ -127,7 +164,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, reminders } = createFakes();
 
         // Act
-        await service.notifyReminderSent(reminderRow() as never, {});
+        await service.notifyReminderSent(reminderRow() as never);
 
         // Assert
         expect(reminders.findTrainerBrief).toHaveBeenCalledWith('u1', 't1');
@@ -138,7 +175,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, gateway } = createFakes();
 
         // Act
-        await service.notifyReminderSent(reminderRow() as never, {});
+        await service.notifyReminderSent(reminderRow() as never);
 
         // Assert
         expect(gateway.sendToUser).toHaveBeenCalledWith(
@@ -158,7 +195,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, notificationService, gateway } = createFakes();
 
         // Act
-        await service.notifyReminderSent(reminderRow({ userId: null }) as never, {});
+        await service.notifyReminderSent(reminderRow({ userId: null }) as never);
 
         // Assert
         expect(notificationService.create).not.toHaveBeenCalled();
@@ -171,7 +208,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, logger } = createFakes({ createError: failure });
 
         // Act
-        await expect(service.notifyReminderSent(reminderRow() as never, {})).resolves.toBeUndefined();
+        await expect(service.notifyReminderSent(reminderRow() as never)).resolves.toBeUndefined();
 
         // Assert
         expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('database down'));
@@ -183,7 +220,7 @@ describe('ReminderInAppNotificationService.notifyReminderSent', () => {
         const { service, logger } = createFakes({ pushError: new Error('socket closed') });
 
         // Act
-        await expect(service.notifyReminderSent(reminderRow() as never, {})).resolves.toBeUndefined();
+        await expect(service.notifyReminderSent(reminderRow() as never)).resolves.toBeUndefined();
 
         // Assert
         expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('socket closed'));
@@ -203,7 +240,7 @@ describe('ReminderInAppNotificationService bell lifetime', () => {
         const before = Date.now();
 
         // Act
-        await service.notifyReminderSent(reminderRow() as never, { testName: 'Exam words' });
+        await service.notifyReminderSent(reminderRow() as never);
 
         // Assert
         const { expiresAt } = notificationService.create.mock.calls[0][0] as { expiresAt: Date };
@@ -211,18 +248,18 @@ describe('ReminderInAppNotificationService bell lifetime', () => {
         expect(expiresAt.getTime() - before).toBeLessThanOrEqual(90 * DAY_MS + 1000);
     });
 
-    it('keeps an FSRS due bell for 30 days', async () => {
+    it('keeps an FSRS due bell for 90 days', async () => {
         // Arrange
         const { service, notificationService } = createFakes();
         const before = Date.now();
 
         // Act
-        await service.notifyReminderSent(reminderRow({ template: FSRS_TEMPLATE, reminderType: ReminderScheduleKind.INITIAL }) as never, {});
+        await service.notifyReminderSent(reminderRow({ template: FSRS_TEMPLATE, reminderType: ReminderScheduleKind.INITIAL }) as never);
 
         // Assert
         const { expiresAt } = notificationService.create.mock.calls[0][0] as { expiresAt: Date };
-        expect(expiresAt.getTime() - before).toBeGreaterThanOrEqual(30 * DAY_MS - 1000);
-        expect(expiresAt.getTime() - before).toBeLessThanOrEqual(30 * DAY_MS + 1000);
+        expect(expiresAt.getTime() - before).toBeGreaterThanOrEqual(90 * DAY_MS - 1000);
+        expect(expiresAt.getTime() - before).toBeLessThanOrEqual(90 * DAY_MS + 1000);
     });
 });
 
@@ -248,5 +285,37 @@ describe('ReminderInAppNotificationService.hideTrainerBells', () => {
         // Assert
         await expect(attempt).resolves.toBeUndefined();
         expect(logger.error).toHaveBeenCalled();
+    });
+});
+
+describe('ReminderInAppNotificationService.hideAllTrainerBells', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('hides every bell of the trainer, grading bells too, and does not use the reminder-only path', async () => {
+        // Arrange
+        const { service, notificationService } = createFakes();
+
+        // Act
+        await service.hideAllTrainerBells('t1');
+
+        // Assert
+        expect(notificationService.hideAllTrainerBells).toHaveBeenCalledWith('t1');
+        expect(notificationService.hideReminderBells).not.toHaveBeenCalled();
+    });
+
+    it('logs and reports a failure, and never throws', async () => {
+        // Arrange
+        const failure = new Error('db down');
+        const { service, logger } = createFakes({ hideAllError: failure });
+
+        // Act
+        const attempt = service.hideAllTrainerBells('t1');
+
+        // Assert
+        await expect(attempt).resolves.toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('db down'));
+        expect(captureSentryException).toHaveBeenCalledWith(failure, expect.anything());
     });
 });

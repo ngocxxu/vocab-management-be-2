@@ -208,6 +208,11 @@ export class VocabTrainerRepository extends BaseRepository {
         return this.client(tx).vocabTrainer.findUnique({ where: { id } });
     }
 
+    /** The trainer only when this user owns it. Null for a missing trainer or another user's trainer. */
+    public async findVocabTrainerByIdForUserMinimal(id: string, userId: string, tx?: Prisma.TransactionClient): Promise<VocabTrainer | null> {
+        return this.client(tx).vocabTrainer.findFirst({ where: { id, userId } });
+    }
+
     public async findLastExamSubmittedAt(id: string): Promise<{ lastExamSubmittedAt: Date | null; mode: TrainerMode } | null> {
         return this.prisma.vocabTrainer.findUnique({
             where: { id },

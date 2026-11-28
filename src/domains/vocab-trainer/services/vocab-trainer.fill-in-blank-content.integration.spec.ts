@@ -66,7 +66,7 @@ describeWithDb('Fill-in-blank question text is stored for display only (#17, rea
         trainerRepository = new VocabTrainerRepository(prisma);
         const reminderSchedules = new ReminderScheduleRepository(prisma);
         const reminderAfterExam = new VocabTrainerReminderAfterExamService();
-        const reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined) };
+        const reminderInApp = { hideTrainerBells: jest.fn().mockResolvedValue(undefined), hideAllTrainerBells: jest.fn().mockResolvedValue(undefined) };
         const notifications = { create: jest.fn().mockResolvedValue({ id: 'n1' }) };
         const fsrsReminder = { sync: jest.fn().mockResolvedValue(undefined), cancelForTrainer: jest.fn() };
         const attempt = new VocabTrainerAttemptService(trainerRepository, reminderAfterExam, reminderInApp as never, notifications as never, logger as never, reminderSchedules);

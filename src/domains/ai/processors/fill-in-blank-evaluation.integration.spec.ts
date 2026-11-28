@@ -78,7 +78,7 @@ describeWithDb('Fill-in-blank evaluation counts one Pass (real Postgres and Redi
         attempt = new VocabTrainerAttemptService(
             trainerRepository,
             reminderAfterExam,
-            { hideTrainerBells: jest.fn().mockResolvedValue(undefined) } as never,
+            { hideTrainerBells: jest.fn().mockResolvedValue(undefined), hideAllTrainerBells: jest.fn().mockResolvedValue(undefined) } as never,
             { create: jest.fn().mockResolvedValue({ id: 'n1' }) } as never,
             logger as never,
             reminderSchedules,

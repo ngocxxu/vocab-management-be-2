@@ -1,11 +1,10 @@
 import { NotificationService } from '@/domains/notification/services';
 import { NotificationGateway } from '@/domains/platform/events/gateway';
 import { captureSentryException, LoggerService } from '@/shared';
-import type { TemplateData } from '@/shared/utils/type.util';
 import { Injectable } from '@nestjs/common';
 import { NotificationAction, NotificationType, PriorityLevel, ReminderSchedule, ReminderScheduleKind } from '@prisma/client';
 import { ReminderScheduleRepository } from '../repositories/reminder-schedule.repository';
-import { EEmailTemplate, EReminderNotificationKind, EXPIRES_AT_30_DAYS, EXPIRES_AT_90_DAYS } from '../utils';
+import { EEmailTemplate, EReminderNotificationKind, EXPIRES_AT_90_DAYS } from '../utils';
 
 const REMINDER_NOTIFICATION = { type: NotificationType.VOCAB_TRAINER, action: NotificationAction.REMIND } as const;
 
@@ -23,32 +22,46 @@ export class ReminderInAppNotificationService {
         private readonly logger: LoggerService,
     ) {}
 
-    /** Never throws: the email is already sent and marked SENT, so a bell failure must not fail or retry the job. */
-    public async notifyReminderSent(row: ReminderSchedule, emailData: TemplateData): Promise<void> {
+    /**
+     * Never throws: the email is already sent and marked SENT, so a bell failure must not fail or retry the job.
+     * No bell for a trainer that is gone. A trainer deleted during the insert gets its bells hidden, and no push.
+     */
+    public async notifyReminderSent(row: ReminderSchedule): Promise<void> {
         if (!row.userId || !row.entityId) {
             return;
         }
 
         try {
-            const kind = this.resolveKind(row);
             const trainer = await this.reminderScheduleRepository.findTrainerBrief(row.userId, row.entityId);
-            const trainerName = trainer?.name ?? this.readText(emailData.trainerName) ?? this.readText(emailData.testName) ?? '';
+            if (!trainer) {
+                this.logger.info(`No reminder bell for schedule ${row.id}: trainer ${row.entityId} is gone`);
+                return;
+            }
 
+            const kind = this.resolveKind(row);
             const notification = await this.notificationService.create({
                 ...REMINDER_NOTIFICATION,
                 priority: kind === EReminderNotificationKind.ESCALATION ? PriorityLevel.MEDIUM : PriorityLevel.LOW,
-                expiresAt: new Date(Date.now() + this.bellLifetimeMs(kind)),
+                expiresAt: new Date(Date.now() + EXPIRES_AT_90_DAYS),
                 isActive: true,
                 recipientUserIds: [row.userId],
                 data: {
                     trainerId: row.entityId,
-                    trainerName,
-                    ...(trainer?.questionType ? { questionType: trainer.questionType } : {}),
-                    message: this.buildMessage(kind, trainerName),
+                    trainerName: trainer.name,
+                    questionType: trainer.questionType,
+                    message: this.buildMessage(kind, trainer.name),
                     kind,
                     scheduleId: row.id,
                 },
             });
+
+            // The trainer can be deleted while the bell is written. Then the new bell is hidden, and nothing is pushed.
+            const stillThere = await this.reminderScheduleRepository.findTrainerBrief(row.userId, row.entityId);
+            if (!stillThere) {
+                this.logger.info(`Reminder bell of schedule ${row.id} hidden: trainer ${row.entityId} was deleted during the insert`);
+                await this.hideAllTrainerBells(row.entityId);
+                return;
+            }
 
             this.pushToUser(row.userId, row.id, notification.id, kind);
         } catch (error: unknown) {
@@ -57,7 +70,7 @@ export class ReminderInAppNotificationService {
         }
     }
 
-    /** Hides every reminder Bell of the trainer. Called when the user passes, turns reminders off, deletes or completes it. Never throws. */
+    /** Hides the reminder Bells of the trainer. Called when the user passes or turns reminders off. Never throws. */
     public async hideTrainerBells(trainerId: string): Promise<void> {
         try {
             await this.notificationService.hideReminderBells(trainerId);
@@ -67,9 +80,14 @@ export class ReminderInAppNotificationService {
         }
     }
 
-    /** Classic bells stay 90 days; FSRS bells stay 30 days. */
-    private bellLifetimeMs(kind: EReminderNotificationKind): number {
-        return kind === EReminderNotificationKind.FSRS_DUE ? EXPIRES_AT_30_DAYS : EXPIRES_AT_90_DAYS;
+    /** Hides every Bell of the trainer, grading Bells too. Called when the trainer is deleted or completed. Never throws. */
+    public async hideAllTrainerBells(trainerId: string): Promise<void> {
+        try {
+            await this.notificationService.hideAllTrainerBells(trainerId);
+        } catch (error: unknown) {
+            this.logger.error(`Hiding all bells failed for trainer ${trainerId}: ${errorMessage(error)}`);
+            captureSentryException(error, { tags: { 'reminder.trainer_id': trainerId } });
+        }
     }
 
     /** Best effort: the row is saved already, so a missed push only means the bell shows it on its next refresh. */
@@ -96,9 +114,5 @@ export class ReminderInAppNotificationService {
         }
 
         return `Time to retake your test "${trainerName}"`;
-    }
-
-    private readText(value: string | number | undefined): string | undefined {
-        return typeof value === 'string' && value.length > 0 ? value : undefined;
     }
 }

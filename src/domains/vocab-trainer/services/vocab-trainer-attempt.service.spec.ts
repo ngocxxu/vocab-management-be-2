@@ -30,7 +30,7 @@ function trainerRow(overrides: Partial<VocabTrainer> = {}): VocabTrainer {
 
 function createFakes(options: { notificationError?: Error; hideError?: Error } = {}) {
     const repo = {
-        findVocabTrainerByIdMinimal: jest.fn(),
+        findVocabTrainerByIdForUserMinimal: jest.fn(),
         deleteVocabTrainerRow: jest.fn().mockResolvedValue(undefined),
         updateVocabTrainerWithIncludes: jest.fn((_id: string, data: Record<string, unknown>) => trainerRow({ ...(data as Partial<VocabTrainer>) })),
     };
@@ -40,6 +40,7 @@ function createFakes(options: { notificationError?: Error; hideError?: Error } =
     };
     const reminderInApp = {
         hideTrainerBells: options.hideError ? jest.fn().mockRejectedValue(options.hideError) : jest.fn().mockResolvedValue(undefined),
+        hideAllTrainerBells: options.hideError ? jest.fn().mockRejectedValue(options.hideError) : jest.fn().mockResolvedValue(undefined),
     };
     const notificationService = {
         create: options.notificationError ? jest.fn().mockRejectedValue(options.notificationError) : jest.fn().mockResolvedValue({ id: 'n1' }),
@@ -173,7 +174,7 @@ describe('VocabTrainerAttemptService.applyAttemptTx', () => {
 });
 
 describe('VocabTrainerAttemptService.afterCommit', () => {
-    test('a completed trainer gets a completion bell that shows the real T and hides its reminder bells', async () => {
+    test('a completed trainer hides all its bells, grading bells too, and gets a completion bell that shows the real T', async () => {
         // Arrange
         const { service, notificationService, reminderInApp } = createFakes();
         const outcome = { completed: true, passed: true, trainerId: 't1', trainerName: 'Week 1', userId: 'u1', maxRepeat: 9, passes: 9 };
@@ -182,10 +183,14 @@ describe('VocabTrainerAttemptService.afterCommit', () => {
         await service.afterCommit(outcome);
 
         // Assert
-        expect(reminderInApp.hideTrainerBells).toHaveBeenCalledWith('t1');
+        expect(reminderInApp.hideAllTrainerBells).toHaveBeenCalledWith('t1');
+        expect(reminderInApp.hideTrainerBells).not.toHaveBeenCalled();
         expect(notificationService.create).toHaveBeenCalledWith(
             expect.objectContaining({ data: expect.objectContaining({ message: 'Your test has been completed after 9 passes' }), recipientUserIds: ['u1'] }),
         );
+        // The completion bell has no trainerId, so hideAllTrainerBells (which matches on trainerId) never hides it.
+        const [completionBell] = notificationService.create.mock.calls[0];
+        expect(completionBell.data).not.toHaveProperty('trainerId');
     });
 
     test('a passed attempt hides the reminder bells of the trainer and creates no completion bell', async () => {
@@ -197,6 +202,7 @@ describe('VocabTrainerAttemptService.afterCommit', () => {
 
         // Assert
         expect(reminderInApp.hideTrainerBells).toHaveBeenCalledWith('t1');
+        expect(reminderInApp.hideAllTrainerBells).not.toHaveBeenCalled();
         expect(notificationService.create).not.toHaveBeenCalled();
     });
 
@@ -217,24 +223,25 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
     test('a repeat while a reminder is pending does not count', async () => {
         // Arrange
         const { service, reminderSchedules, repo } = createFakes();
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+        repo.findVocabTrainerByIdForUserMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
         reminderSchedules.findLatestFinalInitialAt.mockResolvedValue(null);
 
         // Act
-        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+        const counts = await service.resolveCountsAsAttempt('t1', 'u1', undefined, SUBMITTED_AT);
 
         // Assert
         expect(counts).toBe(false);
+        expect(repo.findVocabTrainerByIdForUserMinimal).toHaveBeenCalledWith('t1', 'u1', undefined);
     });
 
     test('a Pass counts once a reminder reached a final state after the last count', async () => {
         // Arrange
         const { service, reminderSchedules, repo } = createFakes();
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 3_600_000) }));
+        repo.findVocabTrainerByIdForUserMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 3_600_000) }));
         reminderSchedules.findLatestFinalInitialAt.mockResolvedValue(new Date(SUBMITTED_AT.getTime() - 60_000));
 
         // Act
-        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+        const counts = await service.resolveCountsAsAttempt('t1', 'u1', undefined, SUBMITTED_AT);
 
         // Assert
         expect(counts).toBe(true);
@@ -244,10 +251,10 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
         // Arrange
         const { service, reminderSchedules, repo } = createFakes();
         const tx = { tag: 'tx' } as never;
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+        repo.findVocabTrainerByIdForUserMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
 
         // Act
-        await service.resolveCountsAsAttempt('t1', tx, SUBMITTED_AT);
+        await service.resolveCountsAsAttempt('t1', 'u1', tx, SUBMITTED_AT);
 
         // Assert
         expect(reminderSchedules.findLatestFinalInitialAt).toHaveBeenCalledWith('t1', tx);
@@ -256,10 +263,12 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
     test('with reminders off, the second attempt within 24 hours does not count', async () => {
         // Arrange
         const { service, repo } = createFakes();
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderDisabled: true, reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+        repo.findVocabTrainerByIdForUserMinimal = jest
+            .fn()
+            .mockResolvedValue(trainerRow({ reminderDisabled: true, reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
 
         // Act
-        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+        const counts = await service.resolveCountsAsAttempt('t1', 'u1', undefined, SUBMITTED_AT);
 
         // Assert
         expect(counts).toBe(false);
@@ -269,10 +278,10 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
         // Arrange
         const { service, repo, reminderSchedules } = createFakes();
         const tx = { tag: 'tx' } as never;
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
+        repo.findVocabTrainerByIdForUserMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 60_000) }));
 
         // Act
-        await service.resolveCountsAsAttempt('t1', tx, SUBMITTED_AT);
+        await service.resolveCountsAsAttempt('t1', 'u1', tx, SUBMITTED_AT);
 
         // Assert
         expect(reminderSchedules.hasInFlightInitial).toHaveBeenCalledWith('t1', tx);
@@ -282,10 +291,10 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
         // Arrange
         const { service, repo, reminderSchedules } = createFakes();
         reminderSchedules.hasInFlightInitial.mockResolvedValue(true);
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: null }));
+        repo.findVocabTrainerByIdForUserMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: null }));
 
         // Act
-        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+        const counts = await service.resolveCountsAsAttempt('t1', 'u1', undefined, SUBMITTED_AT);
 
         // Assert
         expect(counts).toBe(false);
@@ -296,10 +305,10 @@ describe('VocabTrainerAttemptService.resolveCountsAsAttempt', () => {
         const { service, repo, reminderSchedules } = createFakes();
         reminderSchedules.hasInFlightInitial.mockResolvedValue(true);
         reminderSchedules.findLatestFinalInitialAt.mockResolvedValue(new Date(SUBMITTED_AT.getTime() - 60_000));
-        repo.findVocabTrainerByIdMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 3_600_000) }));
+        repo.findVocabTrainerByIdForUserMinimal = jest.fn().mockResolvedValue(trainerRow({ reminderLastCountedAt: new Date(SUBMITTED_AT.getTime() - 3_600_000) }));
 
         // Act
-        const counts = await service.resolveCountsAsAttempt('t1', undefined, SUBMITTED_AT);
+        const counts = await service.resolveCountsAsAttempt('t1', 'u1', undefined, SUBMITTED_AT);
 
         // Assert
         expect(counts).toBe(false);

@@ -1,31 +1,31 @@
-# Reminder mail & Escalation (thiết kế v3)
+# Reminder mail & Escalation (design v3)
 
-> **Update (#42):** the rules for counting a Pass, the per-trainer spacing (X) and max passes (T), the fail-streak prompt, the send guard and the bell lifetimes (classic 90 days, FSRS 30 days) changed. See `docs/features/pass-counting.md`. The email now says "Next reminder: in N days after your attempt." The sections below describe the v3 design and are not all updated.
+> **Update (#42):** the rules for counting a Pass, the per-trainer spacing (X) and max passes (T), the fail-streak prompt, the send guard and the bell lifetimes (90 days for Reminder bells, both kinds) changed. See `docs/features/pass-counting.md`. The email now says "Next reminder: in N days after your attempt." The sections below describe the v3 design and are not all updated.
 
-Tài liệu mô tả luồng **DB-first**: `reminder_schedule` là nguồn sự thật, **SchedulerPoller** claim đến hạn, **Bull** chỉ vận chuyển thực thi (`attempts: 1`, retry do DB), **EmailWorker** gửi mail và (với initial) tạo escalation trong **cùng transaction** với `sent`.
+This document describes the **DB-first** flow: `reminder_schedule` is the source of truth, **SchedulerPoller** claims due rows, **Bull** only carries execution (`attempts: 1`, retries are handled by the DB), and **EmailWorker** sends the email and (for initial reminders) creates escalations **in the same transaction** as `sent`.
 
-**Nguyên tắc v3**
+**Principles of v3**
 
-| #   | Nguyên tắc                                                                                   |
-| --- | -------------------------------------------------------------------------------------------- |
-| 1   | **DB là source of truth** — mất queue thì poller enqueue lại từ DB.                          |
-| 2   | **Gửi idempotent** — duplicate rate mục tiêu dưới 0.01%.                                     |
-| 3   | **Defense in depth** — bulk cancel trong transaction exam + pre-send act-check + reconciler. |
-| 4   | **Fail-safe** — crash ở bước nào cũng có đường phục hồi.                                     |
-| 5   | **Explicit** — act-check dùng **`lastExamSubmittedAt`**, **không** dùng `updatedAt`.         |
+| #   | Principle                                                                                     |
+| --- | --------------------------------------------------------------------------------------------- |
+| 1   | **The DB is the source of truth** — if the queue is lost, the poller re-enqueues from the DB. |
+| 2   | **Idempotent sending** — target duplicate rate below 0.01%.                                   |
+| 3   | **Defense in depth** — bulk cancel in the exam transaction + pre-send act-check + reconciler. |
+| 4   | **Fail-safe** — a crash at any step has a recovery path.                                      |
+| 5   | **Explicit** — the act-check uses **`lastExamSubmittedAt`**, **not** `updatedAt`.             |
 
-**Trong scope v1:** initial (+2 ngày), escalation (tối đa 3), state machine, retry DB, pre-send act-check, chain limit (~30 cycle/trainer), reconciliation, cancel khi user act / disable / xóa trainer.
+**In scope for v1:** initial (+2 days), escalation (max 3), state machine, DB retry, pre-send act-check, chain limit (~30 cycles per trainer), reconciliation, cancel when the user acts, disables reminders or deletes the trainer.
 
-**Ngoài scope v1:** RRULE/cron; SMS/push (schema có thể mở); timezone-aware scheduling; webhook bounce.
+**Out of scope for v1:** RRULE/cron; SMS/push (the schema may allow them later); timezone-aware scheduling; bounce webhooks.
 
-Kế hoạch triển khai chi tiết (todos, dependency, rollout): xem plan repo `.cursor/plans/reminder-mail-workflow-plan_dfde5e9d.plan.md`.
+Detailed implementation plan (todos, dependencies, rollout): see the repo plan `.cursor/plans/reminder-mail-workflow-plan_dfde5e9d.plan.md`.
 
 ---
 
-## Mục lục
+## Table of contents
 
-1. [Kiến trúc hệ thống](#1-kiến-trúc-hệ-thống)
-2. [Phân tích yêu cầu & timeline](#2-phân-tích-yêu-cầu--timeline)
+1. [System architecture](#1-system-architecture)
+2. [Requirements analysis & timeline](#2-requirements-analysis--timeline)
 3. [Schema](#3-schema)
 4. [State machine](#4-state-machine)
 5. [Act-check & `lastExamSubmittedAt`](#5-act-check--lastexamsubmittedat)
@@ -33,16 +33,16 @@ Kế hoạch triển khai chi tiết (todos, dependency, rollout): xem plan repo
 7. [Implementation](#7-implementation)
 8. [Poller & collapse overdue](#8-poller--collapse-overdue)
 9. [Reconciliation](#9-reconciliation)
-10. [Rollout (từ queue trực tiếp → DB-first)](#10-rollout-từ-queue-trực-tiếp--db-first)
+10. [Rollout (from direct queue → DB-first)](#10-rollout-from-direct-queue--db-first)
 11. [Edge cases & race](#11-edge-cases--race)
 12. [Config, SLO & metrics](#12-config-slo--metrics)
 13. [Test checklist](#13-test-checklist)
-14. [Ví dụ trạng thái DB](#14-ví-dụ-trạng-thái-db)
+14. [Example DB states](#14-example-db-states)
 15. [Diagram: race bulk cancel vs `sending`](#15-diagram-race-bulk-cancel-vs-sending)
 
 ---
 
-## 1. Kiến trúc hệ thống
+## 1. System architecture
 
 ```mermaid
 flowchart TD
@@ -83,36 +83,36 @@ flowchart TD
     reconciler -->|"stuck missing esc"| db
 ```
 
-**Luồng một cycle (tóm tắt)**
+**Flow of one cycle (summary)**
 
-- **Day 0:** Transaction — cập nhật `vocab_trainer` (kết quả, **`lastExamSubmittedAt`**), insert `reminder_schedule` initial `dueAt = +2 ngày`.
-- **Day 2:** Poller `SKIP LOCKED` → `claimed` → `Bull.add` → `queued`. Worker `queued` → `sending` (CAS), initial **không** act-check. Gửi OK → **một transaction** `sent` + `createMany` 3 escalation (`dueAt = sentAt + 1/2/3 ngày`, `actedCheckAfter = sentAt`).
-- **Day 3+:** Escalation: CAS → act-check (`lastExamSubmittedAt > actedCheckAfter`) → hủy sibling hoặc gửi → `sent`.
+- **Day 0:** Transaction — update `vocab_trainer` (result, **`lastExamSubmittedAt`**), insert the `reminder_schedule` initial with `dueAt = +2 days`.
+- **Day 2:** Poller `SKIP LOCKED` → `claimed` → `Bull.add` → `queued`. Worker `queued` → `sending` (CAS); the initial reminder does **not** run the act-check. Email sent OK → **one transaction**: `sent` + `createMany` of 3 escalations (`dueAt = sentAt + 1/2/3 days`, `actedCheckAfter = sentAt`).
+- **Day 3+:** Escalation: CAS → act-check (`lastExamSubmittedAt > actedCheckAfter`) → cancel siblings or send → `sent`.
 
 ---
 
-## 2. Phân tích yêu cầu & timeline
+## 2. Requirements analysis & timeline
 
-- **Day 0:** User nộp bài exam
-- **Day 2:** Gửi initial reminder
-- **Day 3–5:** Tối đa 3 escalation (mỗi ngày một lần sau khi initial đã gửi), dừng sau esc #3 hoặc khi user pass đủ 6 lần / chain limit
+- **Day 0:** User submits the exam
+- **Day 2:** Send the initial reminder
+- **Day 3–5:** Up to 3 escalations (one per day after the initial was sent). Stop after escalation #3, or when the user has passed 6 times or reached the chain limit
 
 ```mermaid
 flowchart TD
-    exam[User nộp bài exam]
+    exam[User submits the exam]
     eval{Pass >= 70%?}
     pass_count{passCount >= 6?}
-    done[Xóa trainer - Dừng mọi reminder]
+    done[Delete trainer - stop all reminders]
     schedule_initial[Schedule Initial dueAt = now + 2 days]
-    send_initial[Gửi Initial Reminder]
-    schedule_esc[Schedule 3 Escalations +1d +2d +3d sau sent]
+    send_initial[Send initial reminder]
+    schedule_esc[Schedule 3 Escalations +1d +2d +3d after sent]
 
     esc_due{Escalation due}
-    check_acted{User đã nộp bài sau mốc actedCheckAfter?}
-    cancel_esc[Cancel escalation - không gửi]
-    send_esc[Gửi Escalation Email]
+    check_acted{User submitted after actedCheckAfter?}
+    cancel_esc[Cancel escalation - do not send]
+    send_esc[Send escalation email]
     esc_count{Escalation #3?}
-    stop_esc[Dừng escalation]
+    stop_esc[Stop escalations]
 
     exam --> eval
     eval -->|Fail| schedule_initial
@@ -143,14 +143,14 @@ ALTER TABLE vocab_trainer
   ADD COLUMN last_exam_submitted_at TIMESTAMPTZ NULL;
 ```
 
-Chỉ cập nhật khi user **thực sự nộp bài** (không dùng `updatedAt` cho act-check — vì mọi UPDATE khác cũng bump `updatedAt`).
+Only update this when the user **actually submits** an exam. Do not use `updatedAt` for the act-check, because every other UPDATE also bumps `updatedAt`.
 
-### 3.2 `reminder_schedule` (các nhóm field chính)
+### 3.2 `reminder_schedule` (main field groups)
 
-- **Identity:** `id`, `dedupe_key` (unique partial khi không cancelled/expired)
+- **Identity:** `id`, `dedupe_key` (unique partial index when not cancelled/expired)
 - **Delivery:** `channel` (v1: `CHECK (channel IN ('email'))`), `recipient`
 - **Content:** `template`, `template_version`, `payload`, `subject`
-- **Scheduling:** `due_at`, `priority`, `next_attempt_at` (retry DB)
+- **Scheduling:** `due_at`, `priority`, `next_attempt_at` (DB retry)
 - **State:** `status`, `attempt`, `max_attempts`
 - **Lock poller:** `locked_by`, `locked_at`
 - **Escalation:** `reminder_type` (`initial` | `escalation`), `escalation_level`, `escalation_max`, `initial_reminder_id`, `acted_check_after`
@@ -160,10 +160,10 @@ Chỉ cập nhật khi user **thực sự nộp bài** (không dùng `updatedAt`
 
 **Index (Postgres):**
 
-- **Không** dùng `now()` trong predicate của **partial index** (không immutable). Điều kiện `due_at <= now()` chạy ở query.
-- Index gợi ý: poller `(status, due_at)`, entity pending, escalation, user, stuck `claimed`.
+- **Do not** use `now()` in the predicate of a **partial index** (it is not immutable). The condition `due_at <= now()` runs in the query.
+- Suggested indexes: poller `(status, due_at)`, pending entity, escalation, user, stuck `claimed`.
 
-### 3.3 Prisma (gợi ý)
+### 3.3 Prisma (suggestion)
 
 ```prisma
 model ReminderSchedule {
@@ -184,10 +184,10 @@ model ReminderSchedule {
 
 ## 4. State machine
 
-Trạng thái: `pending` → `claimed` → `queued` → `sending` → `sent` | `failed_retryable` | `failed_terminal` | `cancelled` | `expired`.
+States: `pending` → `claimed` → `queued` → `sending` → `sent` | `failed_retryable` | `failed_terminal` | `cancelled` | `expired`.
 
-- **`sending` → `cancelled`:** chỉ escalation, khi act-check báo user đã **nộp bài sau** `actedCheckAfter`, **trước** khi gọi provider.
-- **`failed_retryable` → `pending`:** sau backoff (retry do DB, không phụ thuộc Bull retry mạnh).
+- **`sending` → `cancelled`:** only for escalations, when the act-check shows the user **submitted after** `actedCheckAfter`, **before** the provider is called.
+- **`failed_retryable` → `pending`:** after backoff (retry is handled by the DB, not by Bull's retries).
 
 ```mermaid
 stateDiagram-v2
@@ -222,30 +222,30 @@ stateDiagram-v2
 
 ## 5. Act-check & `lastExamSubmittedAt`
 
-### 5.1 Hai lớp bảo vệ
+### 5.1 Two layers of protection
 
-1. **Transaction nộp bài:** `updateMany` hủy `pending | claimed | queued` theo `entity_type` + `entity_id`. **Không** hủy `sending` (đang xử lý worker).
-2. **Worker (escalation):** so sánh `trainer.lastExamSubmittedAt > actedCheckAfter` (mốc = `sentAt` của initial). Đúng → hủy escalation hiện tại + sibling pending, **không gửi mail**.
+1. **Exam submit transaction:** `updateMany` cancels `pending | claimed | queued` rows by `entity_type` + `entity_id`. It does **not** cancel `sending` (a worker is already processing it).
+2. **Worker (escalation):** compare `trainer.lastExamSubmittedAt > actedCheckAfter` (the mark is the `sentAt` of the initial). If true → cancel the current escalation and the pending siblings, and **do not send the email**.
 
-### 5.2 Tại sao không dùng `updatedAt`
+### 5.2 Why not `updatedAt`
 
-`updatedAt` bị bump bởi migration, admin sửa, batch job — gây **false positive** (tưởng user đã act khi chưa).
+`updatedAt` is bumped by migrations, admin edits and batch jobs. That causes **false positives** (we think the user acted when they did not).
 
-### 5.3 Strategy pattern (mở rộng entity)
+### 5.3 Strategy pattern (extending entities)
 
-- `ActedCheckRegistry` + `VocabTrainerActedCheck`: đọc `lastExamSubmittedAt`.
-- Trainer **đã xóa** → coi như đã “act” (không gửi escalation vô nghĩa).
-- **TOCTOU:** giữa act-check và `provider.send` vẫn có cửa sổ nhỏ — chấp nhận hiếm khi một email thừa; không lock user.
+- `ActedCheckRegistry` + `VocabTrainerActedCheck`: reads `lastExamSubmittedAt`.
+- Trainer **deleted** → treat it as already acted (do not send a pointless escalation).
+- **TOCTOU:** a small window still exists between the act-check and `provider.send`. We accept that an extra email rarely happens; there is no user lock.
 
 ---
 
 ## 6. Escalation lifecycle
 
-### 6.1 Chiến lược: Pre-schedule + pre-send check
+### 6.1 Strategy: pre-schedule + pre-send check
 
-Sau khi **initial** chuyển `sent`, **một transaction** tạo đủ 3 row escalation (`createMany`, nên dùng `skipDuplicates` hoặc xử lý unique để reconciler idempotent). Mỗi row có `dueAt` lần lượt +1/+2/+3 ngày từ `sentAt`, cùng `actedCheckAfter = sentAt`.
+After the **initial** moves to `sent`, **one transaction** creates all 3 escalation rows (`createMany`; use `skipDuplicates` or handle the unique key so the reconciler is idempotent). Each row has `dueAt` at +1/+2/+3 days from `sentAt`, all with `actedCheckAfter = sentAt`.
 
-### 6.2 Sequence (happy path) — chỉnh theo v3
+### 6.2 Sequence (happy path) — updated for v3
 
 ```mermaid
 sequenceDiagram
@@ -289,30 +289,30 @@ sequenceDiagram
 
 ### 7.1 Exam flow (multiple-choice & fill-in-blank)
 
-- **Cùng một luồng nghiệp vụ:** một **shared service** (ví dụ `VocabTrainerReminderAfterExam`) nhận `Prisma.TransactionClient`, cập nhật trainer + `lastExamSubmittedAt`, hủy schedule pending, tạo initial mới / xóa trainer nếu pass đủ 6.
-- `vocab-trainer.service.ts` (MC) và `fill-in-blank-evaluation.processor.ts` **gọi service này**, không copy-paste hai logic.
+- **Same business flow:** one **shared service** (for example `VocabTrainerReminderAfterExam`) takes a `Prisma.TransactionClient`, updates the trainer and `lastExamSubmittedAt`, cancels pending schedules, creates a new initial, or deletes the trainer if it passed 6 times.
+- `vocab-trainer.service.ts` (multiple-choice) and `fill-in-blank-evaluation.processor.ts` **call this service**. They do not copy-paste two versions of the logic.
 
 ### 7.2 Worker
 
-- **Payload queue tối thiểu:** `{ scheduleId }` — luôn đọc lại DB (giảm PII trên Redis, tránh stale).
-- Thứ tự: pre-flight `queued` → CAS `sending` → (escalation) act-check → render template (lỗi render → terminal) → send → **transaction** `sent` + `createEscalationsInTx` nếu initial.
-- Bull: **`attempts: 1`** — retry do **DB** (`next_attempt_at`, `failed_retryable`).
+- **Minimal queue payload:** `{ scheduleId }` — always re-read the DB (less PII in Redis, avoids stale data).
+- Order: pre-flight `queued` → CAS `sending` → (escalation) act-check → render template (render error → terminal) → send → **transaction** `sent` + `createEscalationsInTx` if initial.
+- Bull: **`attempts: 1`** — retries are handled by the **DB** (`next_attempt_at`, `failed_retryable`).
 
 ### 7.3 Dedupe key
 
-Chuẩn hóa qua util (ví dụ `buildReminderDedupeKey.initial(trainerId, chainCount)`, `.escalation(initialKey, level)`) — tránh hardcode string rải rác.
+Build keys through a util (for example `buildReminderDedupeKey.initial(trainerId, chainCount)`, `.escalation(initialKey, level)`). Avoid hard-coded strings scattered around the code.
 
-### 7.4 `createMany` escalation + unique `dedupe_key`
+### 7.4 `createMany` for escalations + unique `dedupe_key`
 
-Dùng `skipDuplicates: true` (Prisma) hoặc `ON CONFLICT DO NOTHING` khi reconciler tạo lại sau crash giữa chừng.
+Use `skipDuplicates: true` (Prisma) or `ON CONFLICT DO NOTHING` when the reconciler re-creates rows after a crash in the middle.
 
 ---
 
 ## 8. Poller & collapse overdue
 
-- Interval ~5s, batch ~50, `enqueueWithRollback`: Redis fail → rollback `claimed` → `pending`.
-- **Graceful shutdown:** `OnModuleDestroy` — đợi vòng poll hiện tại xong để giảm `claimed` kẹt.
-- **Collapse overdue:** sau downtime dài, có thể nhiều escalation pending cùng quá hạn — **expire** các bản cũ trong cùng chain, **giữ** bản có `escalation_level` cao nhất (chỉ khi `COUNT > 1`). **Verify SQL trên staging.**
+- Interval ~5s, batch ~50, `enqueueWithRollback`: if Redis fails → roll back `claimed` → `pending`.
+- **Graceful shutdown:** `OnModuleDestroy` — wait for the current poll loop to finish, to reduce stuck `claimed` rows.
+- **Collapse overdue:** after a long downtime, many pending escalations can be overdue at the same time. **Expire** the old ones in the same chain and **keep** the one with the highest `escalation_level` (only when `COUNT > 1`). **Verify the SQL on staging.**
 
 ```sql
 UPDATE reminder_schedule
@@ -343,43 +343,43 @@ WHERE id IN (
 
 ## 9. Reconciliation
 
-Cron ~1 phút (ngưỡng trong `REMINDER_CONFIG`):
+Cron runs every ~1 minute (thresholds in `REMINDER_CONFIG`):
 
-- Nhả lock `claimed` quá hạn
-- `queued` nhưng không còn job Bull
-- Initial `sent` thiếu escalation (chỉ tạo lại nếu user chưa act)
-- Chuỗi gãy (trainer active nhưng không có pending hợp lệ)
-- Gauge: pending, overdue, claimed, queue depth
+- Release `claimed` locks that are older than the threshold
+- `queued` rows with no Bull job left
+- Initial `sent` rows missing escalations (re-create them only if the user has not acted)
+- Broken chain (trainer active but no valid pending row)
+- Gauges: pending, overdue, claimed, queue depth
 
 ---
 
-## 10. Rollout (từ queue trực tiếp → DB-first)
+## 10. Rollout (from direct queue → DB-first)
 
-Hiện trạng code: `ReminderService` enqueue Bull delayed trực tiếp. Mục tiêu: **API chỉ ghi DB**, poller đẩy queue.
+Current code: `ReminderService` enqueues delayed Bull jobs directly. Goal: **the API only writes to the DB**, and the poller pushes to the queue.
 
-| Phase | Mô tả                                                                                                                              |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **A** | Deploy migration + repository + worker mới; poller **tắt** hoặc không chạy interval.                                               |
-| **B** | (Tùy chọn) Dual-write ngắn để so metric DB vs Bull — hoặc bỏ qua nếu big-bang sau drain.                                           |
-| **C** | Drain / chờ hết delayed job cũ (hoặc script xóa map sang DB); bật poller; env `REMINDER_SOURCE=db`; API **không** enqueue path cũ. |
-| **D** | Xóa code enqueue trực tiếp; gỡ flag; ghi rollback khẩn cấp (tắt poller) nếu cần.                                                   |
+| Phase | Description                                                                                                                                                                |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** | Deploy the migration, the repository and the new worker. The poller is **off** or does not run on an interval.                                                             |
+| **B** | (Optional) Short dual-write to compare DB metrics vs Bull — or skip it if we do a big-bang after the drain.                                                                |
+| **C** | Drain / wait until old delayed jobs finish (or a script maps them to the DB). Turn on the poller, set env `REMINDER_SOURCE=db`. The API does **not** enqueue the old path. |
+| **D** | Delete the direct-enqueue code, remove the flag, and document the emergency rollback (turn off the poller) if needed.                                                      |
 
-Trước khi bật poller: xử lý **in-flight Bull delayed** để tránh **double send** (old path + poller).
+Before turning on the poller: handle **in-flight Bull delayed jobs** to avoid a **double send** (old path + poller).
 
 ---
 
 ## 11. Edge cases & race
 
-- **Bulk cancel vs `sending`:** bulk không chạm `sending` → act-check bắt bằng `lastExamSubmittedAt`.
-- **Crash khi tạo escalation:** `createMany` một lần; reconciler bổ sung thiếu, idempotent.
-- **Chain limit:** chỉ đếm `reminderType = initial` (terminal), không nhân 3 với escalation.
-- **Template escalation:** khác initial / subject theo level (giảm spam perception).
+- **Bulk cancel vs `sending`:** bulk cancel does not touch `sending`, so the act-check catches it through `lastExamSubmittedAt`.
+- **Crash while creating escalations:** `createMany` runs once; the reconciler fills in missing rows, idempotently.
+- **Chain limit:** count only `reminderType = initial` (terminal rows). Do not multiply by 3 for escalations.
+- **Escalation templates:** the subject and content differ by level (this reduces spam perception).
 
 ---
 
 ## 12. Config, SLO & metrics
 
-### `ESCALATION_CONFIG` (gợi ý)
+### `ESCALATION_CONFIG` (suggestion)
 
 ```typescript
 export const ESCALATION_CONFIG = {
@@ -392,20 +392,20 @@ export const ESCALATION_CONFIG = {
 };
 ```
 
-### `REMINDER_CONFIG` (gợi ý)
+### `REMINDER_CONFIG` (suggestion)
 
 Chain (`maxCycles`, `initialDelayDays`), poller (`intervalMs`, `batchSize`, `lockTimeoutMs`), retry (`maxAttempts`, backoff, jitter), staleness, reconciliation thresholds.
 
-### SLO (mục tiêu)
+### SLO (targets)
 
-| SLO                      | Target           |
-| ------------------------ | ---------------- |
-| Độ trễ gửi (sau đến hạn) | p95 dưới 30s     |
-| Tỷ lệ gửi thành công     | từ 99.5% trở lên |
-| Duplicate                | dưới 0.01%       |
-| Phục hồi stuck           | dưới 5 phút      |
+| SLO                           | Target          |
+| ----------------------------- | --------------- |
+| Send latency (after due time) | p95 under 30s   |
+| Send success rate             | 99.5% or higher |
+| Duplicate                     | under 0.01%     |
+| Stuck recovery                | under 5 minutes |
 
-### Metrics (gợi ý)
+### Metrics (suggestion)
 
 `reminder_sent_total`, `reminder_failed_terminal_total`, `reminder_cancelled_total`, `reminder_escalation_skipped_total`, histogram latency, gauge `reminder_pending_count`, `reminder_queue_depth`.
 
@@ -413,21 +413,21 @@ Chain (`maxCycles`, `initialDelayDays`), poller (`intervalMs`, `batchSize`, `loc
 
 ## 13. Test checklist
 
-- [ ] Initial `sent` → 3 escalation trong **cùng transaction**
-- [ ] Escalation: `lastExamSubmittedAt > actedCheckAfter` → skip + cancel sibling
-- [ ] **`updatedAt` đổi nhưng `lastExamSubmittedAt` không** → act-check vẫn **false** (test quan trọng)
-- [ ] Race submit vs worker `sending` → act-check, không gửi
-- [ ] MC và fill-in-blank cùng gọi **shared** reminder-after-exam service
-- [ ] Reconciler: thiếu escalation sau crash — idempotent, không duplicate `dedupe_key`
-- [ ] Rollout: không double send giữa Bull delayed cũ và poller mới
-- [ ] `reminderDisabled` / xóa trainer → hủy pending
-- [ ] Chain chỉ đếm initial
+- [ ] Initial `sent` → 3 escalations in the **same transaction**
+- [ ] Escalation: `lastExamSubmittedAt > actedCheckAfter` → skip + cancel siblings
+- [ ] **`updatedAt` changes but `lastExamSubmittedAt` does not** → act-check still **false** (important test)
+- [ ] Race: submit vs worker `sending` → act-check, do not send
+- [ ] MC and fill-in-blank both call the **shared** reminder-after-exam service
+- [ ] Reconciler: missing escalations after a crash — idempotent, no duplicate `dedupe_key`
+- [ ] Rollout: no double send between old Bull delayed jobs and the new poller
+- [ ] `reminderDisabled` / trainer deleted → cancel pending
+- [ ] Chain counts only initial
 
 ---
 
-## 14. Ví dụ trạng thái DB
+## 14. Example DB states
 
-Sau khi initial đã gửi và tạo escalation:
+After the initial has been sent and the escalations created:
 
 ```text
 | id      | type       | lvl | status  | dueAt        | actedCheckAfter |
@@ -472,131 +472,131 @@ sequenceDiagram
 
 ---
 
-## Module liên quan (repo)
+## Related modules (repo)
 
-| Vùng                           | File                                                                                                                           |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| Trainer / exam                 | `src/modules/vocab-trainer/service/vocab-trainer.service.ts`, `src/modules/ai/processor/fill-in-blank-evaluation.processor.ts` |
-| Reminder API (tạm queue-first) | `src/modules/reminder/service/reminder.service.ts`, `src/modules/reminder/controller/reminder.controller.ts`                   |
-| Email worker                   | `src/modules/email/processor/email.processor.ts`                                                                               |
-| Mới (theo v3)                  | repository schedule, poller, reconciliation job, `ActedCheckRegistry`, dedupe util                                             |
+| Area                                 | File                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Trainer / exam                       | `src/modules/vocab-trainer/service/vocab-trainer.service.ts`, `src/modules/ai/processor/fill-in-blank-evaluation.processor.ts` |
+| Reminder API (temporary queue-first) | `src/modules/reminder/service/reminder.service.ts`, `src/modules/reminder/controller/reminder.controller.ts`                   |
+| Email worker                         | `src/modules/email/processor/email.processor.ts`                                                                               |
+| New (per v3)                         | repository schedule, poller, reconciliation job, `ActedCheckRegistry`, dedupe util                                             |
 
 ## Q & A
 
 ## Reminder Schedule
 
-**một `vocab_trainer` có thể có nhiều `reminder_schedule`** (theo thời gian), nhưng không “vô hạn” vì có `chainMax`.
+**One `vocab_trainer` can have many `reminder_schedule` rows** (over time), but the number is not unlimited, because of `chainMax`.
 
-## Khi submit tạo initial mới, initial cũ đang status gì?
+## When a submit creates a new initial, what is the status of the old initial?
 
-Tùy thời điểm user submit so với lịch nhắc:
+It depends on when the user submits compared with the reminder schedule:
 
-### Trường hợp 1: submit **trước khi** initial cũ kịp gửi
+### Case 1: submit **before** the old initial was sent
 
-Initial cũ thường đang ở một trong các status “active chưa gửi”:
+The old initial is usually in one of these active, not-yet-sent statuses:
 
-- `PENDING` (đến hạn chưa)
-- `CLAIMED` (poller vừa claim)
-- `QUEUED` (đã enqueue Bull)
+- `PENDING` (not yet due)
+- `CLAIMED` (the poller just claimed it)
+- `QUEUED` (already enqueued in Bull)
 
-Khi submit, code sẽ **cancel** các status active này → initial cũ thành:
+On submit, the code **cancels** these active statuses, so the old initial becomes:
 
-- **`CANCELLED`** (kèm `cancelReason = 'exam_submitted'`, `completedAt`, …)
+- **`CANCELLED`** (with `cancelReason = 'exam_submitted'`, `completedAt`, …)
 
-### Trường hợp 2: submit **sau khi** initial cũ đã gửi
+### Case 2: submit **after** the old initial was sent
 
-Initial cũ đã ở:
+The old initial is already in:
 
-- **`SENT`** (và đã có thể tạo escalation 1/2/3)
+- **`SENT`** (and escalations 1/2/3 may already exist)
 
-Khi submit mới, code chỉ cancel các active pending/claimed/queued (các escalation pending nếu còn) → chúng thành `CANCELLED`.  
-Còn initial `SENT` **giữ nguyên** (là lịch sử).
+When a new submit happens, the code only cancels the active pending/claimed/queued rows (any pending escalations still there). They become `CANCELLED`.  
+The `SENT` initial **stays as it is** (it is history).
 
-### Trường hợp 3: initial cũ bị lỗi/hết hạn
+### Case 3: the old initial failed or expired
 
-Initial cũ có thể ở:
+The old initial may be in:
 
-- `FAILED_TERMINAL` (fail vĩnh viễn)
-- `EXPIRED` (theo policy/reconciler)
+- `FAILED_TERMINAL` (permanent failure)
+- `EXPIRED` (by policy / reconciler)
 
-Các cái này cũng **không bị “cancel lại”**; nó là lịch sử.
+These are also **not cancelled again**. They stay as history.
 
-## Vậy 1 vocab trainer sẽ có rất nhiều reminder_schedule?
+## So will 1 vocab trainer have a lot of reminder_schedule rows?
 
-**Có thể có nhiều**, cấu trúc thường là:
+**Yes, it can have many.** The structure is usually:
 
-- Mỗi “cycle” (mỗi lần tạo initial) có **1 row INITIAL**
-- Nếu INITIAL `SENT` thì có thêm **tối đa 3 row ESCALATION** (level 1/2/3)
+- Each "cycle" (each time an initial is created) has **1 INITIAL row**
+- If the INITIAL is `SENT`, there are up to **3 more ESCALATION rows** (levels 1/2/3)
 
-Nên theo thời gian, trainer có thể có:  
-`(INITIAL #1 + escalations)`, rồi `INITIAL #2 + escalations`, … cho tới khi:
+So over time, a trainer can have:  
+`(INITIAL #1 + escalations)`, then `INITIAL #2 + escalations`, … until:
 
-- trainer bị xóa vì pass đủ 6 lần, hoặc
-- chạm `chainMax` (ngừng tạo initial mới)
+- the trainer is deleted because it passed 6 times, or
+- it reaches `chainMax` (no new initial is created)
 
-Điểm quan trọng: **một row `reminder_schedule` là một lần nhắc cụ thể**, không phải “một state duy nhất cho trainer”.
+The key point: **one `reminder_schedule` row is one specific reminder**, not "a single state for the trainer".
 
 ## RECONCILER
 
-**Reconciler** (trong repo bạn là `ReminderReconciliationService`) là một “**thợ sửa sổ**” chạy định kỳ, chuyên **dọn dẹp và tự sửa các trạng thái lệch** giữa **DB (source of truth)** và **queue/worker** khi hệ thống gặp crash, deploy, Redis lỗi, hoặc race.
+The **Reconciler** (in your repo this is `ReminderReconciliationService`) is a "**repair worker**" that runs periodically. It **cleans up and fixes states that do not match** between **the DB (source of truth)** and **the queue/worker**, after a crash, a deploy, a Redis error, or a race.
 
-Nếu ví hệ thống là giao hàng:
+If we compare the system to a delivery service:
 
-- **DB `reminder_schedule`** = “**sổ đơn hàng chuẩn**”
-- **Bull/Redis job** = “**phiếu chuyển cho shipper**”
-- **Worker** = “shipper đi giao”
-- **Reconciler** = “**đội kiểm soát**”: thấy đơn nào kẹt, mất phiếu, thiếu bước… thì **đẩy lại vào luồng đúng**.
+- **DB `reminder_schedule`** = "**the standard order book**"
+- **Bull/Redis job** = "**the dispatch slip for the shipper**"
+- **Worker** = "the shipper who delivers"
+- **Reconciler** = "**the control team**": when it sees an order stuck, a slip lost, or a missing step, it **pushes it back into the right flow**.
 
-## Reconciler làm gì trong thiết kế này?
+## What does the Reconciler do in this design?
 
-Trong code hiện tại (v3), nó làm các việc chính:
+In the current code (v3), it does these main jobs:
 
-1. **Thả các dòng `CLAIMED` bị kẹt (stale lock)**  
-   Nếu poller claim (`PENDING → CLAIMED`) rồi pod chết trước khi enqueue job → dòng sẽ kẹt ở `CLAIMED`.  
-   Reconciler thấy `lockedAt` quá lâu → reset về **`PENDING`** để poller claim lại.
+1. **Release stuck `CLAIMED` rows (stale lock)**  
+   If the poller claims (`PENDING → CLAIMED`) and the pod dies before it enqueues the job, the row gets stuck at `CLAIMED`.  
+   The reconciler sees a `lockedAt` that is too old and resets it to **`PENDING`** so the poller can claim it again.
 
-2. **Sửa `QUEUED` bị “mồ côi” (orphaned queued)**  
-   DB nói “đã `QUEUED`”, nhưng trong Bull lại **không có job** (Redis mất job / remove / restart).  
-   Reconciler check `getJob(jobId)` không thấy → reset về **`PENDING`** để enqueue lại.
+2. **Fix orphaned `QUEUED` rows**  
+   The DB says `QUEUED`, but Bull has **no job** (Redis lost the job, or the job was removed or restarted).  
+   The reconciler calls `getJob(jobId)`, finds nothing, and resets the row to **`PENDING`** to enqueue it again.
 
-3. **Backfill escalation bị thiếu**  
-   Initial đã `SENT` nhưng vì crash giữa chừng nên chưa tạo đủ escalation 1/2/3.  
-   Reconciler phát hiện thiếu children → tạo lại bằng `createMany(skipDuplicates)` để **không tạo trùng**.
+3. **Backfill missing escalations**  
+   The initial is `SENT`, but a crash in the middle means escalations 1/2/3 were not all created.  
+   The reconciler finds the missing children and creates them again with `createMany(skipDuplicates)`, so **no duplicates** are created.
 
-4. **Collapse overdue escalations (dọn trùng pending quá hạn)**  
-   Nếu vì lỗi nào đó có nhiều escalation pending quá hạn cho cùng initial, reconciler expire bớt (giữ cái level cao nhất).
+4. **Collapse overdue escalations (clean up duplicate overdue pending rows)**  
+   If an error left several overdue pending escalations for the same initial, the reconciler expires the extra ones and keeps the highest level.
 
-## Vì sao cần Reconciler?
+## Why do we need a Reconciler?
 
-Vì dù bạn có poller + worker chuẩn, trong hệ thống distributed luôn có tình huống “giữa đường rơi hàng”:
+Even with a good poller and worker, a distributed system always has cases where something gets dropped on the way:
 
-- Pod chết đúng lúc đang chuyển trạng thái
-- Redis mất job
-- Crash giữa lúc tạo batch escalation
-- Race khiến status/queue lệch nhau
+- The pod dies at the exact moment it changes state
+- Redis loses a job
+- A crash while creating a batch of escalations
+- A race that makes the status and the queue disagree
 
-**Reconciler là lớp “tự hồi phục”** để hệ thống đạt mục tiêu plan: **DB là source of truth**, queue mất thì **tự phục hồi**, không cần can thiệp tay.
+**The reconciler is the "self-healing" layer** that lets the system meet the goal of the plan: **the DB is the source of truth**. If the queue loses something, it **recovers by itself**, with no manual work.
 
-Nếu bạn muốn, mình có thể mô tả 1 flow “pod chết ở bước nào thì reconciler sửa thế nào” bằng timeline T0–T5 cho từng case.
+Possible addition: a T0–T5 timeline for each case, showing the step where the pod dies and how the reconciler fixes it.
 
 ## DEDUPKEY
 
-`dedupe_key` dùng để **chống tạo trùng “cùng một intent gửi”** trong các case bạn đang nói (một trainer có nhiều `reminder_schedule` theo thời gian).
+`dedupe_key` is used to **prevent duplicates of the "same send intent"** in the cases described above (one trainer with many `reminder_schedule` rows over time).
 
-## `dedupe_key` bảo vệ cái gì?
+## What does `dedupe_key` protect?
 
-Nó đảm bảo: **tại cùng một thời điểm, chỉ có 1 record “active”** cho cùng một intent gửi (initial cycle X, hoặc escalation level Y của initial đó).
+It guarantees that **at any one time, only 1 "active" record** exists for the same send intent (initial cycle X, or escalation level Y of that initial).
 
-DB enforce bằng **partial unique index**:
+The DB enforces this with a **partial unique index**:
 
 ```82:85:prisma/migrations/20260329133000_reminder_schedule_v3/migration.sql
 CREATE UNIQUE INDEX "reminder_schedule_dedupe_key_active_idx" ON "reminder_schedule" ("dedupe_key")
 WHERE "status" NOT IN ('CANCELLED', 'EXPIRED');
 ```
 
-## “Intent” được định nghĩa như thế nào?
+## How is "intent" defined?
 
-Dedupe key được chuẩn hóa theo util:
+The dedupe key is built by a util:
 
 ```1:9:src/modules/reminder/util/reminder-dedupe-key.util.ts
 export const buildReminderDedupeKey = {
@@ -610,47 +610,47 @@ export const buildReminderDedupeKey = {
 };
 ```
 
-- **Initial**: phụ thuộc `trainerId` + “cycle index”
-- **Escalation**: phụ thuộc “initial dedupe key” + `level`
+- **Initial**: depends on `trainerId` + the "cycle index"
+- **Escalation**: depends on the "initial dedupe key" + `level`
 
-## Nó giải quyết các case nào trong thực tế?
+## Which real cases does it solve?
 
-- **User submit gần nhau / race tạo initial**: 2 request cùng tính “cycle kế tiếp” → cả hai cố insert initial cùng `dedupe_key` → DB chặn trùng (1 thắng, 1 fail P2002) ⇒ không tạo 2 initial cho cùng cycle.
-- **Crash giữa chừng khi tạo escalation**: initial đã `SENT` nhưng app chết giữa việc tạo 3 escalation → reconciler/backfill tạo lại `createMany` ⇒ nhờ `dedupe_key` + `skipDuplicates`, không tạo escalation trùng.
-- **Poller/queue không phải nguồn chân lý**: Bull job có thể trùng/queue mất job; poller re-enqueue dựa DB. `dedupe_key` đảm bảo **DB record** không bị nhân đôi bởi replay logic ở tầng app.
+- **User submits close together / race while creating initials**: 2 requests both compute the "next cycle" and both try to insert an initial with the same `dedupe_key`. The DB blocks one (one wins, one fails with P2002), so no 2 initials are created for the same cycle.
+- **Crash in the middle of creating escalations**: the initial is `SENT`, but the app dies while creating the 3 escalations. The reconciler/backfill runs `createMany` again. With `dedupe_key` + `skipDuplicates`, no duplicate escalations are created.
+- **The poller/queue is not the source of truth**: a Bull job can be duplicated or lost, and the poller re-enqueues based on the DB. `dedupe_key` makes sure the **DB record** is not doubled by replay logic in the app layer.
 
-## Tại sao index “cho phép” trùng khi `CANCELLED` / `EXPIRED`?
+## Why does the index "allow" duplicates for `CANCELLED` / `EXPIRED`?
 
-Vì 2 trạng thái này được coi là **không còn active intent**:
+Because these 2 statuses are treated as **no longer an active intent**:
 
-- `CANCELLED`: intent bị hủy (user submit mới / acted / disable…)
-- `EXPIRED`: intent hết hạn (policy/collapse)
+- `CANCELLED`: the intent was cancelled (the user submitted a new exam, acted, or disabled reminders, …)
+- `EXPIRED`: the intent expired (by policy / collapse)
 
-→ Khi đã cancelled/expired, cho phép **tạo lại intent tương tự** nếu business muốn (ít nhất là không bị unique block).
+→ Once cancelled or expired, a similar intent may be **created again** if the business wants it. At least, the unique index does not block it.
 
-Tóm lại: so với các case “1 trainer có nhiều schedule”, `dedupe_key` là **khóa nghiệp vụ** để mỗi “slot gửi” chỉ có **1 bản ghi active**, giúp hệ thống idempotent khi có race/crash/reconcile.
+In short: compared with the "one trainer has many schedules" case, `dedupe_key` is the **business key** that makes sure each "send slot" has only **1 active row**. This keeps the system idempotent under race, crash and reconcile.
 
 ## TERMINAL
 
-“**Terminal**” trong state machine nghĩa là **trạng thái kết thúc (end state)**: khi một record đã vào đó thì **không còn bước xử lý tiếp theo** trong workflow bình thường nữa (không được poller claim, không gửi lại, không chuyển sang trạng thái khác trừ khi có “admin reset/replay” đặc biệt).
+"**Terminal**" in the state machine means an **end state**: once a record reaches it, there is **no next processing step** in the normal workflow. The poller does not claim it, it is not sent again, and it does not move to another status unless a special "admin reset/replay" is used.
 
-Trong thiết kế reminder này, các trạng thái kiểu terminal thường là:
+In this reminder design, the terminal statuses are usually:
 
-- **`SENT`**: đã gửi xong → kết thúc lifecycle của record.
-- **`FAILED_TERMINAL`**: thất bại vĩnh viễn → kết thúc (không retry nữa).
-- **`EXPIRED`**: hết hạn/chính sách không gửi nữa → kết thúc.
-- **`CANCELLED`**: bị hủy do nghiệp vụ → kết thúc.
+- **`SENT`**: sent successfully, so the record's lifecycle ends.
+- **`FAILED_TERMINAL`**: permanent failure, so it ends (no more retries).
+- **`EXPIRED`**: expired, or policy says do not send anymore, so it ends.
+- **`CANCELLED`**: cancelled by business logic, so it ends.
 
-Từ “terminal” dùng để phân biệt với các trạng thái **non-terminal** như `PENDING / CLAIMED / QUEUED / SENDING` (vẫn còn “đang xử lý / sẽ xử lý tiếp”).
+The word "terminal" is used to tell these apart from the **non-terminal** statuses such as `PENDING / CLAIMED / QUEUED / SENDING` (still "being processed / will be processed").
 
 ## TERMINAL INITIAL COUNT
 
-`terminalInitialCount` là **COUNT trong DB**, nên nó ra **0, 1, 2, 3…** (số nguyên tăng dần theo lịch sử). Vì vậy:
+`terminalInitialCount` is a **COUNT in the DB**, so it goes **0, 1, 2, 3…** (an integer that grows with history). So:
 
-- Nếu chưa có initial nào “terminal” ⇒ `terminalInitialCount = 0` ⇒ `chainIndex = 1`
-- Sau khi initial #1 đã `SENT` (hoặc `FAILED_TERMINAL`/`EXPIRED`) ⇒ lần sau đếm được `1` ⇒ `chainIndex = 2`
-- Sau khi có 2 initial terminal ⇒ đếm `2` ⇒ `chainIndex = 3`
+- If no terminal initial exists yet ⇒ `terminalInitialCount = 0` ⇒ `chainIndex = 1`
+- After initial #1 is `SENT` (or `FAILED_TERMINAL` / `EXPIRED`) ⇒ the next count is `1` ⇒ `chainIndex = 2`
+- After 2 terminal initials ⇒ count `2` ⇒ `chainIndex = 3`
 - …
 
-Nó chỉ “trông giống ngẫu nhiên” nếu bạn nghĩ `terminalInitialCount` không ổn định, nhưng thực tế nó là **đếm record** theo điều kiện cố định (entityId + reminderType + status nhóm terminal).  
-Race condition có thể làm **hai request cùng lúc** cùng thấy `terminalInitialCount = 0` (đều ra `chainIndex = 1`), nhưng đó là chủ đích để **dedupe_key trùng** và DB **chặn một cái**.
+It only looks "random" if you think `terminalInitialCount` is not stable. In fact it is a **count of records** under a fixed condition (entityId + reminderType + the terminal status group).  
+A race condition can make **two requests at the same time** both see `terminalInitialCount = 0` (both get `chainIndex = 1`). This is by design: the **dedupe_key** then collides, and the DB **blocks one of them**.

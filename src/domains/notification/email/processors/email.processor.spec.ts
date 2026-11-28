@@ -17,6 +17,7 @@ interface ReminderRow {
     dedupeKey: string;
     chainCount: number;
     chainMax: number;
+    cancelReason: string | null;
 }
 
 function reminderRow(overrides: Partial<ReminderRow> = {}): ReminderRow {
@@ -36,6 +37,7 @@ function reminderRow(overrides: Partial<ReminderRow> = {}): ReminderRow {
         dedupeKey: 'k1',
         chainCount: 1,
         chainMax: 3,
+        cancelReason: null,
         ...overrides,
     };
 }
@@ -46,7 +48,7 @@ function createFakes(
         markedSent?: number;
         sendError?: Error;
         acted?: boolean;
-        fsrs?: { send: boolean; data?: Record<string, string> };
+        fsrs?: { send: true; data?: Record<string, string> } | { send: false; reason: string };
         guard?: { send: true } | { send: false; reason: string };
     } = {},
 ) {
@@ -80,7 +82,7 @@ function createFakes(
         sendGuard as never,
     );
 
-    return { processor, reminders, emailService, inApp, sendGuard };
+    return { processor, reminders, emailService, inApp, sendGuard, logger };
 }
 
 const jobFor = (scheduleId: string) => ({ data: { scheduleId } }) as never;
@@ -96,7 +98,7 @@ describe('EmailProcessor.handleReminderScheduleEmail: bell row', () => {
         // Assert
         expect(emailService.sendReminderEmail).toHaveBeenCalledTimes(1);
         expect(inApp.notifyReminderSent).toHaveBeenCalledTimes(1);
-        expect(inApp.notifyReminderSent).toHaveBeenCalledWith(expect.objectContaining({ id: 's1', userId: 'u1' }), expect.objectContaining({ testName: 'Exam words' }));
+        expect(inApp.notifyReminderSent).toHaveBeenCalledWith(expect.objectContaining({ id: 's1', userId: 'u1' }));
         const sentOrder = emailService.sendReminderEmail.mock.invocationCallOrder[0] ?? 0;
         const bellOrder = inApp.notifyReminderSent.mock.invocationCallOrder[0] ?? 0;
         expect(sentOrder).toBeLessThan(bellOrder);
@@ -216,6 +218,136 @@ describe('EmailProcessor.handleReminderScheduleEmail: idempotency key', () => {
         // Assert
         const [, , , , idempotencyKey] = emailService.sendReminderEmail.mock.calls[0] ?? [];
         expect(idempotencyKey).toBeUndefined();
+    });
+});
+
+describe('EmailProcessor.handleReminderScheduleEmail: skipped reminders are logged', () => {
+    it('writes one info line with the schedule, the entity and the reason when the send guard skips a reminder', async () => {
+        // Arrange
+        const { processor, emailService, logger } = createFakes({ guard: { send: false, reason: 'trainer_gone' } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason trainer_gone/));
+    });
+
+    it('writes one info line when the FSRS prepare step skips a reminder', async () => {
+        // Arrange
+        const { processor, emailService, logger } = createFakes({ row: { template: 'fsrs_due_reminder' }, fsrs: { send: false, reason: 'reminder_disabled' } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason reminder_disabled/));
+    });
+
+    it('writes one info line when the user acted before the escalation was due', async () => {
+        // Arrange
+        const { processor, emailService, logger } = createFakes({
+            row: { reminderType: ReminderScheduleKind.ESCALATION, actedCheckAfter: new Date('2026-10-01T00:00:00.000Z') },
+            acted: true,
+        });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason user_acted_before_send/));
+    });
+
+    it('writes one info line with the reason when the schedule was cancelled before its job ran', async () => {
+        // Arrange
+        const { processor, emailService, logger } = createFakes({ row: { status: ReminderScheduleStatus.CANCELLED, cancelReason: 'exam_submitted' } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason exam_submitted/));
+    });
+
+    it('writes one info line with the status as the reason when an expired schedule has no cancel reason', async () => {
+        // Arrange
+        const { processor, emailService, logger } = createFakes({ row: { status: ReminderScheduleStatus.EXPIRED, cancelReason: null } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason expired/));
+    });
+
+    it('writes one info line with the reason when a cancel lands between the first read and the status change', async () => {
+        // Arrange
+        const { processor, emailService, logger, reminders } = createFakes();
+        const cancelled = reminderRow({ status: ReminderScheduleStatus.CANCELLED, cancelReason: 'exam_submitted' });
+        reminders.findById.mockResolvedValueOnce(reminderRow()).mockResolvedValueOnce(cancelled);
+        reminders.transitionStatus.mockResolvedValueOnce(false);
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason exam_submitted/));
+    });
+
+    it('writes one info line with the reason when a cancel lands before a pending schedule is queued', async () => {
+        // Arrange
+        const { processor, emailService, logger, reminders } = createFakes();
+        const pending = reminderRow({ status: ReminderScheduleStatus.PENDING });
+        const cancelled = reminderRow({ status: ReminderScheduleStatus.CANCELLED, cancelReason: 'trainer_gone' });
+        reminders.findById.mockResolvedValueOnce(pending).mockResolvedValueOnce(cancelled);
+        reminders.transitionStatus.mockResolvedValueOnce(false);
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/schedule s1.*entity t1.*reason trainer_gone/));
+    });
+
+    it('stays silent when another worker moved the schedule to SENDING first', async () => {
+        // Arrange
+        const { processor, emailService, logger, reminders } = createFakes();
+        const sending = reminderRow({ status: ReminderScheduleStatus.SENDING });
+        reminders.findById.mockResolvedValueOnce(reminderRow()).mockResolvedValueOnce(sending);
+        reminders.transitionStatus.mockResolvedValueOnce(false);
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).not.toHaveBeenCalled();
+    });
+
+    it('stays silent when the schedule was already sent', async () => {
+        // Arrange
+        const { processor, emailService, logger } = createFakes({ row: { status: ReminderScheduleStatus.SENT } });
+
+        // Act
+        await processor.handleReminderScheduleEmail(jobFor('s1'));
+
+        // Assert
+        expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+        expect(logger.info).not.toHaveBeenCalled();
     });
 });
 

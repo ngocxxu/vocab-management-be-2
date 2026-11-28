@@ -60,7 +60,7 @@ describe('FillInBlankEvaluationProcessor failure lifecycle', () => {
         const aiService = { evaluateAllFillInBlankAnswers: jest.fn().mockRejectedValue(opts.aiError ?? new Error('provider down')) };
         const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
         const trainerRepository = {
-            findVocabTrainerByIdMinimal: jest.fn().mockResolvedValue(opts.trainer === undefined ? baseTrainer : opts.trainer),
+            findVocabTrainerByIdForUserMinimal: jest.fn().mockResolvedValue(opts.trainer === undefined ? baseTrainer : opts.trainer),
             lockAndFindForUpdate: jest.fn().mockResolvedValue(opts.lockedTrainer === undefined ? baseTrainer : opts.lockedTrainer),
             inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
                 const result = await fn({});
@@ -322,6 +322,7 @@ describe('FillInBlankEvaluationProcessor counting', () => {
 
         // Assert
         expect(result).toEqual({ results: [], trainerDeleted: true });
+        expect(trainerRepository.findVocabTrainerByIdForUserMinimal).toHaveBeenCalledWith('t1', 'u1');
         expect(aiService.evaluateAllFillInBlankAnswers).not.toHaveBeenCalled();
         expect(trainerRepository.createVocabTrainerResultsMany).not.toHaveBeenCalled();
         expect(lock.releaseIfOwned).toHaveBeenCalledWith('u1', 'tok');
@@ -592,7 +593,7 @@ function buildProcessorFor(opts: { trainer?: Record<string, unknown> | null; loc
     }
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     const trainerRepository = {
-        findVocabTrainerByIdMinimal: jest.fn().mockResolvedValue(opts.trainer === undefined ? baseTrainer : opts.trainer),
+        findVocabTrainerByIdForUserMinimal: jest.fn().mockResolvedValue(opts.trainer === undefined ? baseTrainer : opts.trainer),
         lockAndFindForUpdate: jest.fn().mockResolvedValue(opts.lockedTrainer === undefined ? baseTrainer : opts.lockedTrainer),
         inTransaction: jest.fn(async (fn: (tx: object) => Promise<unknown>) => {
             const result = await fn({});

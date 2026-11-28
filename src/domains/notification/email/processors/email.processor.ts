@@ -54,7 +54,11 @@ export class EmailProcessor {
         }
 
         if (row.status !== ReminderScheduleStatus.QUEUED && row.status !== ReminderScheduleStatus.PENDING) {
-            if (row.status === ReminderScheduleStatus.SENT || row.status === ReminderScheduleStatus.CANCELLED || row.status === ReminderScheduleStatus.EXPIRED) {
+            if (row.status === ReminderScheduleStatus.CANCELLED || row.status === ReminderScheduleStatus.EXPIRED) {
+                this.logSkipped(row, row.cancelReason ?? row.status.toLowerCase());
+                return;
+            }
+            if (row.status === ReminderScheduleStatus.SENT) {
                 return;
             }
             this.logger.warn(`Reminder schedule ${scheduleId} unexpected status ${row.status}, skipping`);
@@ -64,12 +68,14 @@ export class EmailProcessor {
         if (row.status === ReminderScheduleStatus.PENDING) {
             const moved = await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.PENDING, ReminderScheduleStatus.QUEUED);
             if (!moved) {
+                await this.logIfCancelledSinceRead(scheduleId);
                 return;
             }
         }
 
         const casOk = await this.reminderScheduleRepository.transitionStatus(row.id, ReminderScheduleStatus.QUEUED, ReminderScheduleStatus.SENDING);
         if (!casOk) {
+            await this.logIfCancelledSinceRead(scheduleId);
             return;
         }
 
@@ -81,15 +87,17 @@ export class EmailProcessor {
         if (fresh.reminderType === ReminderScheduleKind.ESCALATION && fresh.actedCheckAfter) {
             const acted = await this.actedCheckRegistry.hasActedSince(fresh.entityType, fresh.entityId, fresh.actedCheckAfter);
             if (acted) {
+                const reason = 'user_acted_before_send';
                 if (fresh.initialReminderId) {
                     await this.reminderScheduleRepository.cancelSiblingEscalations(fresh.initialReminderId, fresh.id);
                 }
                 await this.reminderScheduleRepository.transitionStatus(fresh.id, ReminderScheduleStatus.SENDING, ReminderScheduleStatus.CANCELLED, {
                     cancelledAt: new Date(),
                     cancelledBy: 'system',
-                    cancelReason: 'user_acted_before_send',
+                    cancelReason: reason,
                     completedAt: new Date(),
                 });
+                this.logSkipped(fresh, reason);
                 return;
             }
         }
@@ -104,6 +112,7 @@ export class EmailProcessor {
                 cancelReason: guard.reason,
                 completedAt: cancelledAt,
             });
+            this.logSkipped(fresh, guard.reason);
             return;
         }
 
@@ -121,6 +130,7 @@ export class EmailProcessor {
                         cancelReason: prepared.reason,
                         completedAt: cancelledAt,
                     });
+                    this.logSkipped(fresh, prepared.reason);
                     await this.planNextFsrsReminder(fresh);
                     return;
                 }
@@ -159,11 +169,27 @@ export class EmailProcessor {
 
         // The bell row follows the real send, and only the worker that won the SENT update creates it.
         if (markedSent) {
-            await this.reminderInAppNotificationService.notifyReminderSent(fresh, data);
+            await this.reminderInAppNotificationService.notifyReminderSent(fresh);
         }
 
         if (isFsrsDue) {
             await this.planNextFsrsReminder(fresh);
+        }
+    }
+
+    /** One info line per skipped Reminder: schedule id, entity id and the reason it was cancelled instead of sent. */
+    private logSkipped(schedule: ReminderSchedule, reason: string): void {
+        this.logger.info(`Reminder skipped: schedule ${schedule.id}, entity ${schedule.entityId}, reason ${reason}`);
+    }
+
+    /** A cancel can land after the first read and before the status change. Log that case; stay silent when another worker took the row. */
+    private async logIfCancelledSinceRead(scheduleId: string): Promise<void> {
+        const current = await this.reminderScheduleRepository.findById(scheduleId);
+        if (!current) {
+            return;
+        }
+        if (current.status === ReminderScheduleStatus.CANCELLED || current.status === ReminderScheduleStatus.EXPIRED) {
+            this.logSkipped(current, current.cancelReason ?? current.status.toLowerCase());
         }
     }
 
