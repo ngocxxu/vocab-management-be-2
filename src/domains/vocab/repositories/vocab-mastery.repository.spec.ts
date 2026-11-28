@@ -15,7 +15,7 @@ describe('VocabMasteryRepository.findClassicTrainersByIds', () => {
         expect(prisma.vocabTrainer.findMany).not.toHaveBeenCalled();
     });
 
-    test('reads only the Classic trainers of the user among the given ids, with their question type', async () => {
+    test('reads only the Classic trainers of the user with reminders on, among the given ids, with their question type', async () => {
         // Arrange
         const rows = [{ id: 'trainer-1', questionType: 'FLIP_CARD' }];
         const prisma = { vocabTrainer: { findMany: jest.fn().mockResolvedValue(rows) } };
@@ -27,7 +27,7 @@ describe('VocabMasteryRepository.findClassicTrainersByIds', () => {
         // Assert
         expect(trainers).toEqual(rows);
         expect(prisma.vocabTrainer.findMany).toHaveBeenCalledWith({
-            where: { id: { in: ['trainer-1', 'trainer-2'] }, userId: 'user-1', mode: TrainerMode.CLASSIC },
+            where: { id: { in: ['trainer-1', 'trainer-2'] }, userId: 'user-1', mode: TrainerMode.CLASSIC, reminderDisabled: false },
             select: { id: true, questionType: true },
         });
     });

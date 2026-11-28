@@ -173,22 +173,25 @@ export class NotificationRepository extends BaseRepository {
     /**
      * Trainer ids of the Reminder Bells that are active and not expired. Read and deleted Bells count, since the exam is still due.
      * Two Bells of one trainer give one id. Only INITIAL and ESCALATION Bells count: FSRS due and kindless Bells are left out.
+     * Starts from the user's recipient rows (indexed by userId). It returns the same Bells as a query that starts from the notification.
      */
     public async findOpenReminderBellTrainerIds(userId: string): Promise<string[]> {
-        const rows = await this.prisma.notification.findMany({
+        const rows = await this.prisma.notificationRecipient.findMany({
             where: {
-                type: NotificationType.VOCAB_TRAINER,
-                action: NotificationAction.REMIND,
-                isActive: true,
-                expiresAt: { gt: new Date() },
-                notificationRecipients: { some: { userId } },
+                userId,
+                notification: {
+                    type: NotificationType.VOCAB_TRAINER,
+                    action: NotificationAction.REMIND,
+                    isActive: true,
+                    expiresAt: { gt: new Date() },
+                },
             },
-            select: { data: true },
+            select: { notification: { select: { data: true } } },
         });
 
         const trainerIds = new Set<string>();
         for (const row of rows) {
-            const trainerId = reminderBellTrainerId(row.data);
+            const trainerId = reminderBellTrainerId(row.notification.data);
             if (trainerId !== null) {
                 trainerIds.add(trainerId);
             }

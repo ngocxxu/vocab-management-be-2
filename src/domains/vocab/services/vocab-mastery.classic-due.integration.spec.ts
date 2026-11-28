@@ -208,4 +208,18 @@ describeWithDb('Classic exam due in the dashboard summary (real Postgres)', () =
         expect(summary.classicDueCount).toBe(0);
         expect(summary.classicDueTrainer).toBeNull();
     });
+
+    test('leaves out a Classic trainer with reminders turned off', async () => {
+        // Arrange
+        const trainerId = await createTrainer(TrainerMode.CLASSIC, QuestionType.FLIP_CARD, user.id);
+        await prisma.vocabTrainer.update({ where: { id: trainerId }, data: { reminderDisabled: true } });
+        await createBell(trainerId);
+
+        // Act
+        const summary = await masteryService.getSummary(user.id);
+
+        // Assert
+        expect(summary.classicDueCount).toBe(0);
+        expect(summary.classicDueTrainer).toBeNull();
+    });
 });

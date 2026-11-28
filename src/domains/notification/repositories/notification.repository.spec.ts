@@ -70,8 +70,9 @@ describe('NotificationRepository.createBroadcast', () => {
 });
 
 describe('NotificationRepository.findOpenReminderBellTrainerIds', () => {
-    const createRepositoryWithBells = (rows: Array<{ data: unknown }>) => {
-        const prisma = { notification: { findMany: jest.fn().mockResolvedValue(rows) } };
+    // The query starts from the user's recipient rows, so each Bell is wrapped as the notification of one recipient row.
+    const createRepositoryWithBells = (bells: Array<{ data: unknown }>) => {
+        const prisma = { notificationRecipient: { findMany: jest.fn().mockResolvedValue(bells.map((bell) => ({ notification: bell }))) } };
         const repository = new NotificationRepository(prisma as unknown as PrismaService);
 
         return { repository, prisma };
@@ -115,15 +116,17 @@ describe('NotificationRepository.findOpenReminderBellTrainerIds', () => {
 
         await repository.findOpenReminderBellTrainerIds('user-1');
 
-        expect(prisma.notification.findMany).toHaveBeenCalledWith({
+        expect(prisma.notificationRecipient.findMany).toHaveBeenCalledWith({
             where: {
-                type: NotificationType.VOCAB_TRAINER,
-                action: NotificationAction.REMIND,
-                isActive: true,
-                expiresAt: { gt: expect.any(Date) },
-                notificationRecipients: { some: { userId: 'user-1' } },
+                userId: 'user-1',
+                notification: {
+                    type: NotificationType.VOCAB_TRAINER,
+                    action: NotificationAction.REMIND,
+                    isActive: true,
+                    expiresAt: { gt: expect.any(Date) },
+                },
             },
-            select: { data: true },
+            select: { notification: { select: { data: true } } },
         });
     });
 });
